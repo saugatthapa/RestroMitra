@@ -2,7 +2,15 @@
 # set in the Netlify UI, so a fresh site connected to this repo (or a
 # teammate's site) gets identical settings without reconfiguring by hand.
 [build]
-  command = "npm run build"
+  # NODE_ENV=production is prefixed defensively: if the Netlify UI's
+  # Site configuration -> Environment variables has NODE_ENV set to
+  # anything else (e.g. "development"), that value reaches the build
+  # environment and can crash Next's /_global-error prerender step even
+  # though `next build` normally forces production mode internally. This
+  # prefix overrides it for this command only — it does NOT change what's
+  # set in the Netlify dashboard, so remove the dashboard variable too if
+  # one exists (Site configuration -> Environment variables -> NODE_ENV).
+  command = "NODE_ENV=production npm run build"
   publish = ".next"
 
 [build.environment]
