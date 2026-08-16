@@ -7,6 +7,8 @@ import {
   nextStatuses,
   type ReservationStatus,
 } from "@/lib/reservation-status";
+import { useDateSystem } from "@/lib/date-system";
+import { formatBsHint } from "@/lib/nepali-date";
 
 type Table = { id: string; name: string };
 
@@ -64,6 +66,7 @@ export function ReservationsBoard({
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
 
   async function load() {
     setLoading(true);
@@ -112,6 +115,9 @@ export function ReservationsBoard({
         <label className="text-sm">
           <span className="mb-1 block text-neutral-600">Date</span>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input !w-auto" />
+          {dateSystem === "BS" && (
+            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(date)}</span>
+          )}
         </label>
         <div className="ml-auto">
           <button onClick={() => setShowAdd((v) => !v)} className="btn-primary">
@@ -251,6 +257,7 @@ function AddReservationForm({
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -314,6 +321,9 @@ function AddReservationForm({
             onChange={(e) => setTime(e.target.value)}
             className="input"
           />
+          {dateSystem === "BS" && time && (
+            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(time.slice(0, 10))}</span>
+          )}
         </label>
         <label className="text-sm">
           <span className="mb-1 block text-neutral-600">Table (optional)</span>
@@ -359,6 +369,7 @@ function EditReservationRow({
   const [notes, setNotes] = useState(reservation.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
 
   async function save() {
     setSaving(true);
@@ -394,7 +405,17 @@ function EditReservationRow({
             onChange={(e) => setPartySize(e.target.value)}
             className="input"
           />
-          <input type="datetime-local" value={time} onChange={(e) => setTime(e.target.value)} className="input" />
+          <div>
+            <input
+              type="datetime-local"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="input"
+            />
+            {dateSystem === "BS" && time && (
+              <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(time.slice(0, 10))}</span>
+            )}
+          </div>
           <select value={tableId} onChange={(e) => setTableId(e.target.value)} className="input">
             <option value="">Not assigned</option>
             {tables.map((t) => (

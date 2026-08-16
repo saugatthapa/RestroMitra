@@ -8,6 +8,8 @@ import type { DailySeriesPoint } from "@/lib/reports-helpers";
 import { RevenueTrendChart } from "./RevenueTrendChart";
 import { HourlyHeatmap, type HourlyHeatmapCell } from "./HourlyHeatmap";
 import { IconStatTile, StatIcon } from "@/components/StatTile";
+import { useDateSystem, type DateSystem } from "@/lib/date-system";
+import { formatDate, formatBsHint } from "@/lib/nepali-date";
 
 // Chart chrome tokens, matching RevenueTrendChart's validated palette
 // (dataviz skill, palette.md) — used here for the small inline breakdown
@@ -70,7 +72,12 @@ function formatHour(hour: number | null) {
   return `${displayHour} ${period}`;
 }
 
-function formatShortDate(iso: string) {
+// Used both for the "compared against previous X–Y" summary text below and
+// (via RevenueTrendChart, which takes the same `system` param) the trend
+// chart's x-axis ticks, so the whole Reports screen follows one AD/BS
+// preference rather than the chart and the surrounding copy disagreeing.
+function formatShortDate(iso: string, system: DateSystem) {
+  if (system === "BS") return formatDate(`${iso}T00:00:00`, "BS");
   const d = new Date(`${iso}T00:00:00Z`);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
@@ -122,6 +129,7 @@ export function ReportsBoard({ slug }: { slug: string }) {
   const [data, setData] = useState<ReportSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
 
   useEffect(() => {
     let cancelled = false;
@@ -201,6 +209,9 @@ export function ReportsBoard({ slug }: { slug: string }) {
               }}
               className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
             />
+            {dateSystem === "BS" && (
+              <span className="text-xs text-neutral-400">{formatBsHint(from)}</span>
+            )}
           </label>
           <label className="flex items-center gap-1.5 text-neutral-600">
             To
@@ -215,6 +226,7 @@ export function ReportsBoard({ slug }: { slug: string }) {
               }}
               className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
             />
+            {dateSystem === "BS" && <span className="text-xs text-neutral-400">{formatBsHint(to)}</span>}
           </label>
         </div>
       </div>
@@ -232,9 +244,9 @@ export function ReportsBoard({ slug }: { slug: string }) {
           <>
             <p className="mb-3 text-xs text-neutral-400">
               Revenue, orders, avg. order value, and net profit are compared against the
-              previous {formatShortDate(data.comparison.previousRange.from)} –{" "}
-              {formatShortDate(data.comparison.previousRange.to)} (same length as the selected
-              range).
+              previous {formatShortDate(data.comparison.previousRange.from, dateSystem)} –{" "}
+              {formatShortDate(data.comparison.previousRange.to, dateSystem)} (same length as the
+              selected range).
             </p>
             {/* KPI stat tiles */}
             <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

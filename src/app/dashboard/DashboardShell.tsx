@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { apiGet, apiPost } from "@/lib/api-client";
 import { NavIcon } from "@/components/NavIcon";
 import { formatAdDate, formatBsDate } from "@/lib/nepali-date";
+import { DateSystemProvider, useDateSystemControl, type DateSystem } from "@/lib/date-system";
 
 // Nav is grouped (Overview / Front of house / Back office / Account) with an
 // icon per item, rather than one flat 16-item list — the flat list was the
@@ -28,8 +29,6 @@ type NavGroup = {
 };
 
 const SIDEBAR_COLLAPSED_KEY = "dhankipos:sidebar-collapsed";
-const DATE_SYSTEM_KEY = "dhankipos:date-system";
-type DateSystem = "AD" | "BS";
 
 function daysRemaining(trialEndsAt: string | null): number | null {
   if (!trialEndsAt) return null;
@@ -75,7 +74,33 @@ type HeaderStatus = {
   pendingReservationsCount: number;
 };
 
-export function DashboardShell({
+/**
+ * Wraps the whole dashboard tree in DateSystemProvider before anything else
+ * renders, so every screen under `children` — not just this header — can
+ * call `useDateSystem()` and get the same AD/BS preference the toggle
+ * below sets. The actual shell markup lives in DashboardShellContent,
+ * which reads that preference back out via `useDateSystemControl()`.
+ */
+export function DashboardShell(props: {
+  ownerName: string;
+  restaurantName: string;
+  role: string;
+  subscriptionStatus: string;
+  trialEndsAt: string | null;
+  slug: string;
+  logoUrl: string | null;
+  restaurants: { id: string; name: string }[];
+  activeRestaurantId: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <DateSystemProvider>
+      <DashboardShellContent {...props} />
+    </DateSystemProvider>
+  );
+}
+
+function DashboardShellContent({
   ownerName,
   restaurantName,
   role,
@@ -143,15 +168,11 @@ export function DashboardShell({
   // since which calendar someone reads dates in has nothing to do with
   // which restaurant they're looking at. Defaults to BS: this is a Nepali
   // restaurant product and staff here think in the Nepali calendar day to
-  // day, with AD as the toggle-away option rather than the default.
-  const [dateSystem, setDateSystem] = useState<DateSystem>(() => {
-    if (typeof window === "undefined") return "BS";
-    return window.localStorage.getItem(DATE_SYSTEM_KEY) === "AD" ? "AD" : "BS";
-  });
-
-  useEffect(() => {
-    window.localStorage.setItem(DATE_SYSTEM_KEY, dateSystem);
-  }, [dateSystem]);
+  // day, with AD as the toggle-away option rather than the default. Lives
+  // in DateSystemProvider (wrapped around this whole shell, including
+  // `children`) rather than local state, so every dashboard screen — not
+  // just this header — reads the same preference.
+  const { dateSystem, setDateSystem } = useDateSystemControl();
 
   // Live "N active" / "Kitchen Clear|Busy" header pills — same 5s polling
   // cadence OrdersBoard.tsx already uses, backed by a real query
@@ -684,11 +705,14 @@ function NotificationBell({
  * switch, styled like the notification bell's pill so the two read as one
  * family of header controls rather than one borrowed from elsewhere.
  *
- * This only reformats *today's date shown here*, in this toggle — it does
- * not (yet) change how dates render on Orders, Reports, Reservations, etc.
- * elsewhere in the app. Extending the preference to those screens is a
- * separate, larger change (each of those has its own date formatting
- * today) and wasn't part of what was asked for here.
+ * This drives the site-wide preference (DateSystemProvider, wrapping this
+ * whole shell): every dashboard screen that renders a record's date —
+ * Orders, Reports, Reservations, Expenses, Account Books, Customers,
+ * Staff, Inventory — calls `useDateSystem()` and `formatDate()` (see
+ * src/lib/nepali-date.ts) to follow this same toggle, not just this
+ * header's own label. Native `<input type="date">` filter/entry fields
+ * stay Gregorian (no browser ships a BS date picker), with a small BS
+ * equivalent hint shown alongside them when BS is active.
  */
 function DateSystemToggle({
   dateSystem,

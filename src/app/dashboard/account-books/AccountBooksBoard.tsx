@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiPost, ApiError } from "@/lib/api-client";
 import { formatNPR } from "@/lib/money";
+import { useDateSystem, type DateSystem } from "@/lib/date-system";
+import { formatDate, formatBsHint, formatBsMonthYear, formatBsYear, formatTimeOfDay } from "@/lib/nepali-date";
 import {
   LEDGER_CATEGORY_LABELS,
   LEDGER_DIRECTION_LABELS,
@@ -65,7 +67,14 @@ function shiftYear(iso: string, years: number): string {
   return `${Number(y) + years}-${m}-${day}`;
 }
 
-function formatDayLabel(iso: string): string {
+// Both label helpers take the active `system` so the day book, rollup
+// heading, and rollup row labels all follow the header's AD/BS toggle —
+// the underlying `iso` values stay Gregorian throughout (that's what the
+// ledger API groups by), only the display text changes.
+function formatDayLabel(iso: string, system: DateSystem): string {
+  if (system === "BS") {
+    return formatDate(`${iso}T00:00:00`, "BS");
+  }
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-NP", {
     weekday: "short",
     day: "numeric",
@@ -73,7 +82,14 @@ function formatDayLabel(iso: string): string {
   });
 }
 
-function formatMonthLabel(iso: string): string {
+function formatMonthLabel(iso: string, system: DateSystem): string {
+  if (system === "BS") {
+    // Approximation: BS months don't align with Gregorian month
+    // boundaries, so this shows the BS month/year the 1st of the
+    // Gregorian month falls in rather than re-bucketing the underlying
+    // rollup (which the API still groups by Gregorian month).
+    return formatBsMonthYear(iso);
+  }
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-NP", { month: "long", year: "numeric" });
 }
 
@@ -268,11 +284,12 @@ function DayBookView({
   onDateChange: (date: string) => void;
   onSettled: () => void;
 }) {
+  const dateSystem = useDateSystem();
   if (!book) return null;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button onClick={() => onNavigate(-1)} className="btn-secondary px-2 py-1 text-xs">
           ←
         </button>
@@ -282,6 +299,9 @@ function DayBookView({
           onChange={(e) => onDateChange(e.target.value)}
           className="input w-auto"
         />
+        {dateSystem === "BS" && (
+          <span className="text-xs text-neutral-400">{formatBsHint(anchorDate)}</span>
+        )}
         <button onClick={() => onNavigate(1)} className="btn-secondary px-2 py-1 text-xs">
           →
         </button>
@@ -308,7 +328,7 @@ function DayBookView({
             {book.entries.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-3 py-6 text-center text-neutral-400">
-                  No entries for {formatDayLabel(book.date)}.
+                  No entries for {formatDayLabel(book.date, dateSystem)}.
                 </td>
               </tr>
             )}
@@ -329,9 +349,7 @@ function EntryRow({ slug, entry, onSettled }: { slug: string; entry: LedgerEntry
   return (
     <>
       <tr className="border-t border-neutral-100">
-        <td className="px-3 py-2 text-neutral-500">
-          {new Date(entry.createdAt).toLocaleTimeString("en-NP", { hour: "2-digit", minute: "2-digit" })}
-        </td>
+        <td className="px-3 py-2 text-neutral-500">{formatTimeOfDay(entry.createdAt)}</td>
         <td className="px-3 py-2">{LEDGER_CATEGORY_LABELS[entry.category]}</td>
         <td className="px-3 py-2 text-neutral-700">{entry.description}</td>
         <td className="px-3 py-2 text-neutral-500">{entry.counterpartyName || "—"}</td>
@@ -459,8 +477,17 @@ function RollupView({
   onNavigate: (delta: number) => void;
   onDrillDown: (key: string) => void;
 }) {
+  const dateSystem = useDateSystem();
   if (!rollup) return null;
-  const heading = granularity === "month" ? formatMonthLabel(anchorDate) : anchorDate.slice(0, 4);
+  // Same approximation as formatMonthLabel: "year" here means the BS year
+  // Jan 1st of the Gregorian anchor year falls in, since the rollup itself
+  // is still grouped by Gregorian year on the API side.
+  const heading =
+    granularity === "month"
+      ? formatMonthLabel(anchorDate, dateSystem)
+      : dateSystem === "BS"
+        ? formatBsYear(`${anchorDate.slice(0, 4)}-01-01`)
+        : anchorDate.slice(0, 4);
 
   return (
     <div className="space-y-3">
@@ -502,7 +529,9 @@ function RollupView({
                 className="cursor-pointer border-t border-neutral-100 hover:bg-neutral-50"
               >
                 <td className="px-3 py-2 font-medium text-neutral-900">
-                  {granularity === "month" ? formatDayLabel(row.key) : formatMonthLabel(`${row.key}-01`)}
+                  {granularity === "month"
+                    ? formatDayLabel(row.key, dateSystem)
+                    : formatMonthLabel(`${row.key}-01`, dateSystem)}
                 </td>
                 <td className="px-3 py-2 text-right text-green-700">{formatNPR(row.creditInPaisa)}</td>
                 <td className="px-3 py-2 text-right text-red-700">{formatNPR(row.debitInPaisa)}</td>
@@ -569,10 +598,11 @@ function DueTrackingView({
 
 function DueRow({ slug, due, onSettled }: { slug: string; due: OutstandingDue; onSettled: () => void }) {
   const [showSettle, setShowSettle] = useState(false);
+  const dateSystem = useDateSystem();
   return (
     <>
       <tr className="border-t border-neutral-100">
-        <td className="px-3 py-2 text-neutral-500">{due.entryDate}</td>
+        <td className="px-3 py-2 text-neutral-500">{formatDate(`${due.entryDate}T00:00:00`, dateSystem)}</td>
         <td className="px-3 py-2">
           <span
             className={`rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -635,6 +665,7 @@ function AddEntryForm({
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -708,6 +739,9 @@ function AddEntryForm({
             onChange={(e) => setEntryDate(e.target.value)}
             className="input"
           />
+          {dateSystem === "BS" && (
+            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(entryDate)}</span>
+          )}
         </label>
         <label className="text-sm sm:col-span-2">
           <span className="mb-1 block text-neutral-600">Description</span>

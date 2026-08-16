@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client";
 import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/expense-categories";
+import { useDateSystem } from "@/lib/date-system";
+import { formatDate, formatBsHint } from "@/lib/nepali-date";
 
 type Expense = {
   id: string;
@@ -42,6 +44,7 @@ export function ExpensesBoard({
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
 
   async function load() {
     setLoading(true);
@@ -112,10 +115,16 @@ export function ExpensesBoard({
         <label className="text-sm">
           <span className="mb-1 block text-neutral-600">From</span>
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input !w-auto" />
+          {dateSystem === "BS" && from && (
+            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(from)}</span>
+          )}
         </label>
         <label className="text-sm">
           <span className="mb-1 block text-neutral-600">To</span>
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input !w-auto" />
+          {dateSystem === "BS" && to && (
+            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(to)}</span>
+          )}
         </label>
         <div className="ml-auto">
           <button onClick={() => setShowAdd((v) => !v)} className="btn-primary">
@@ -202,9 +211,12 @@ export function ExpensesBoard({
 }
 
 function ExpenseRow({ expense, onEdit }: { expense: Expense; onEdit: () => void }) {
+  const dateSystem = useDateSystem();
   return (
     <tr className={`border-t border-neutral-100 ${expense.isVoided ? "opacity-50" : ""}`}>
-      <td className="px-3 py-2 text-neutral-500">{expense.expenseDate}</td>
+      <td className="px-3 py-2 text-neutral-500">
+        {formatDate(`${expense.expenseDate}T00:00:00`, dateSystem)}
+      </td>
       <td className="px-3 py-2">{EXPENSE_CATEGORY_LABELS[expense.category]}</td>
       <td className="px-3 py-2 text-neutral-900">
         {expense.description}
@@ -229,6 +241,7 @@ function AddExpenseForm({ slug, onAdded }: { slug: string; onAdded: () => void }
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -288,6 +301,9 @@ function AddExpenseForm({ slug, onAdded }: { slug: string; onAdded: () => void }
             onChange={(e) => setExpenseDate(e.target.value)}
             className="input"
           />
+          {dateSystem === "BS" && (
+            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(expenseDate)}</span>
+          )}
         </label>
         <label className="text-sm sm:col-span-2">
           <span className="mb-1 block text-neutral-600">Description</span>
@@ -329,6 +345,7 @@ function EditExpenseRow({
   const [note, setNote] = useState(expense.note ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
 
   async function save() {
     setSaving(true);
@@ -388,12 +405,17 @@ function EditExpenseRow({
             onChange={(e) => setAmount(e.target.value)}
             className="input"
           />
-          <input
-            type="date"
-            value={expenseDate}
-            onChange={(e) => setExpenseDate(e.target.value)}
-            className="input"
-          />
+          <div>
+            <input
+              type="date"
+              value={expenseDate}
+              onChange={(e) => setExpenseDate(e.target.value)}
+              className="input"
+            />
+            {dateSystem === "BS" && (
+              <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(expenseDate)}</span>
+            )}
+          </div>
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}

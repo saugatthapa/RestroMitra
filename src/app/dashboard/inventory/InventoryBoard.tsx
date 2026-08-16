@@ -5,6 +5,8 @@ import { apiGet, apiPost, apiPut, apiPatch, ApiError } from "@/lib/api-client";
 import { formatNPR } from "@/lib/money";
 import { formatQuantity } from "@/lib/quantity";
 import { INVENTORY_UNITS, INVENTORY_UNIT_LABELS, type InventoryUnit } from "@/lib/inventory-units";
+import { useDateSystem } from "@/lib/date-system";
+import { formatDate } from "@/lib/nepali-date";
 
 type Supplier = {
   id: string;
@@ -584,6 +586,7 @@ function PurchasesTab({ slug, canViewProfit }: { slug: string; canViewProfit: bo
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const dateSystem = useDateSystem();
 
   async function load() {
     try {
@@ -644,7 +647,7 @@ function PurchasesTab({ slug, canViewProfit }: { slug: string; canViewProfit: bo
                 {p.supplier?.name ?? "No supplier"}
                 {p.invoiceNumber ? ` · Invoice ${p.invoiceNumber}` : ""}
               </p>
-              <p className="text-neutral-500">{new Date(p.createdAt).toLocaleString()}</p>
+              <p className="text-neutral-500">{formatDate(p.createdAt, dateSystem, { withTime: true })}</p>
             </div>
             <ul className="text-neutral-600">
               {p.items.map((line) => (

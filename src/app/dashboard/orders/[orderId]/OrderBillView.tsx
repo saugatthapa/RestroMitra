@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { apiGet, apiPatch, apiPost, ApiError } from "@/lib/api-client";
 import { openKotTicket } from "@/lib/kot-print-client";
 import { formatNPR, rupeesToPaisa, paisaToRupees, basisPointsToPercent } from "@/lib/money";
+import { useDateSystem } from "@/lib/date-system";
+import { formatDate } from "@/lib/nepali-date";
 import {
   ORDER_STATUS_LABELS,
   nextForwardStatus,
@@ -113,6 +115,7 @@ export function OrderBillView({
   const [busy, setBusy] = useState(false);
   const searchParams = useSearchParams();
   const paymentOutcome = searchParams.get("payment");
+  const dateSystem = useDateSystem();
 
   async function load() {
     try {
@@ -208,7 +211,7 @@ export function OrderBillView({
               {order.customerPhone ? ` · ${order.customerPhone}` : ""}
             </p>
             <p className="text-xs text-neutral-400">
-              Placed {new Date(order.placedAt).toLocaleString("en-NP")} · source: {order.source}
+              Placed {formatDate(order.placedAt, dateSystem, { withTime: true })} · source: {order.source}
             </p>
           </div>
           <div className="flex flex-col items-end gap-1.5">
@@ -364,7 +367,7 @@ export function OrderBillView({
                       {p.amountInPaisa < 0 ? "Refund" : "Payment"} · {PAYMENT_METHOD_LABELS[p.method]}
                     </p>
                     <p className="text-xs text-neutral-400">
-                      {new Date(p.createdAt).toLocaleString("en-NP")}
+                      {formatDate(p.createdAt, dateSystem, { withTime: true })}
                       {p.note ? ` · ${p.note}` : ""}
                       {p.tipInPaisa > 0 ? ` · tip ${formatNPR(p.tipInPaisa)}` : ""}
                     </p>
@@ -609,6 +612,7 @@ function RecordRefundForm({
   const [refundOfPaymentId, setRefundOfPaymentId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
 
   async function handleSubmit() {
     setSubmitting(true);
@@ -670,7 +674,7 @@ function RecordRefundForm({
             {payments.map((p) => (
               <option key={p.id} value={p.id}>
                 Refund against {PAYMENT_METHOD_LABELS[p.method]} payment of {formatNPR(p.amountInPaisa)} (
-                {new Date(p.createdAt).toLocaleDateString("en-NP")})
+                {formatDate(p.createdAt, dateSystem)})
               </option>
             ))}
           </select>

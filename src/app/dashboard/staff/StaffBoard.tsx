@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client";
 import { ASSIGNABLE_STAFF_ROLES, STAFF_ROLE_LABELS, type AssignableStaffRole } from "@/lib/staff-roles";
 import { computeDurationMinutes, formatDuration } from "@/lib/attendance";
+import { useDateSystem } from "@/lib/date-system";
+import { formatDate } from "@/lib/nepali-date";
 
 type StaffMember = {
   id: string; // user_roles id
@@ -376,6 +378,7 @@ function AttendanceTab({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const dateSystem = useDateSystem();
 
   async function load() {
     try {
@@ -476,10 +479,10 @@ function AttendanceTab({ slug }: { slug: string }) {
             {records.map((r) => (
               <tr key={r.id} className="border-t border-neutral-100">
                 {canViewAll && <td className="px-3 py-2 font-medium text-neutral-900">{r.fullName}</td>}
-                <td className="px-3 py-2">{new Date(r.clockInAt).toLocaleString()}</td>
+                <td className="px-3 py-2">{formatDate(r.clockInAt, dateSystem, { withTime: true })}</td>
                 <td className="px-3 py-2">
                   {r.clockOutAt ? (
-                    new Date(r.clockOutAt).toLocaleString()
+                    formatDate(r.clockOutAt, dateSystem, { withTime: true })
                   ) : (
                     <span className="font-medium text-green-700">Still clocked in</span>
                   )}

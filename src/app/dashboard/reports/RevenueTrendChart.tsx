@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { DailySeriesPoint } from "@/lib/reports-helpers";
+import { useDateSystem, type DateSystem } from "@/lib/date-system";
+import { formatDate } from "@/lib/nepali-date";
 
 // Validated categorical palette (dataviz skill, references/palette.md) —
 // slot 1 (blue) for revenue, slot 2 (orange) for expenses. This app ships
@@ -32,7 +34,8 @@ function formatTooltipRupees(paisa: number) {
   return `Rs ${(paisa / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 }
 
-function formatShortDate(iso: string) {
+function formatShortDate(iso: string, system: DateSystem) {
+  if (system === "BS") return formatDate(`${iso}T00:00:00`, "BS");
   const d = new Date(`${iso}T00:00:00Z`);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
@@ -47,7 +50,12 @@ function niceCeiling(value: number): number {
   return niceFraction * base;
 }
 
+// Reads the AD/BS toggle itself (rather than taking it as a prop) since
+// this chart is embedded from two places — ReportsBoard and the dashboard
+// overview page — and both already render under DashboardShell's
+// DateSystemProvider, so there's no server-component boundary to cross.
 export function RevenueTrendChart({ series }: { series: DailySeriesPoint[] }) {
+  const dateSystem = useDateSystem();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [showTable, setShowTable] = useState(false);
 
@@ -135,7 +143,7 @@ export function RevenueTrendChart({ series }: { series: DailySeriesPoint[] }) {
             <tbody>
               {series.map((p) => (
                 <tr key={p.date} className="border-t border-neutral-100">
-                  <td className="px-3 py-1.5">{p.date}</td>
+                  <td className="px-3 py-1.5">{formatDate(`${p.date}T00:00:00`, dateSystem)}</td>
                   <td className="px-3 py-1.5">{formatTooltipRupees(p.revenueInPaisa)}</td>
                   <td className="px-3 py-1.5">{formatTooltipRupees(p.expensesInPaisa)}</td>
                 </tr>
@@ -183,7 +191,7 @@ export function RevenueTrendChart({ series }: { series: DailySeriesPoint[] }) {
                   fontSize={11}
                   fill={AXIS_TEXT_COLOR}
                 >
-                  {formatShortDate(p.date)}
+                  {formatShortDate(p.date, dateSystem)}
                 </text>
               ) : null,
             )}
@@ -242,7 +250,7 @@ export function RevenueTrendChart({ series }: { series: DailySeriesPoint[] }) {
               }}
             >
               <p className="mb-1 font-medium" style={{ color: PRIMARY_TEXT_COLOR }}>
-                {formatShortDate(hovered.date)}
+                {formatShortDate(hovered.date, dateSystem)}
               </p>
               <p className="flex items-center gap-1.5">
                 <span className="inline-block h-0.5 w-3 rounded-full" style={{ backgroundColor: REVENUE_COLOR }} />

@@ -5,6 +5,8 @@ import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client";
 import { tierForPoints, pointsToNextTier, LOYALTY_TIERS } from "@/lib/loyalty-tiers";
 import { isBirthdayToday } from "@/lib/loyalty-birthday";
 import { VISIT_STREAK_MILESTONE_INTERVAL } from "@/lib/loyalty-streaks";
+import { useDateSystem } from "@/lib/date-system";
+import { formatBsHint } from "@/lib/nepali-date";
 
 type Customer = {
   id: string;
@@ -230,6 +232,7 @@ function AddCustomerForm({ slug, onAdded }: { slug: string; onAdded: () => void 
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -294,6 +297,9 @@ function AddCustomerForm({ slug, onAdded }: { slug: string; onAdded: () => void 
             onChange={(e) => setDateOfBirth(e.target.value)}
             className="input"
           />
+          {dateSystem === "BS" && dateOfBirth && (
+            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(dateOfBirth)}</span>
+          )}
         </label>
       </div>
       <button disabled={saving} className="btn-primary mt-3">
@@ -528,6 +534,7 @@ function BirthdayEditor({
   const [value, setValue] = useState(dateOfBirth ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
 
   useEffect(() => {
     setValue(dateOfBirth ?? "");
@@ -556,6 +563,9 @@ function BirthdayEditor({
           onChange={(e) => setValue(e.target.value)}
           className="input"
         />
+        {dateSystem === "BS" && value && (
+          <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(value)}</span>
+        )}
       </label>
       <button
         onClick={save}
