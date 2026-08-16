@@ -1,0 +1,234 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { apiGet, apiPost, ApiError } from "@/lib/api-client";
+import { PLANS, type PlanKey } from "@/lib/plans";
+import { SUBSCRIPTION_STATUS_LABELS, daysRemaining, type SubscriptionStatus } from "@/lib/subscription";
+
+type BillingInfo = {
+  subscriptionStatus: SubscriptionStatus;
+  trialEndsAt: string | null;
+  planKey: PlanKey | null;
+  access: { allowed: boolean; reason: string };
+  canManageSubscription: boolean;
+  events: {
+    id: string;
+    eventType: string;
+    fromStatus: string | null;
+    toStatus: string | null;
+    planKey: string | null;
+    note: string | null;
+    createdAt: string;
+  }[];
+};
+
+function formatRupees(paisa: number) {
+  return `Rs ${(paisa / 100).toLocaleString("en-IN")}`;
+}
+
+function formatEventType(eventType: string) {
+  return eventType.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
+
+function statusTone(status: SubscriptionStatus): { bg: string; text: string } {
+  switch (status) {
+    case "active":
+      return { bg: "bg-emerald-50", text: "text-emerald-700" };
+    case "trialing":
+      return { bg: "bg-orange-50", text: "text-orange-700" };
+    case "past_due":
+      return { bg: "bg-amber-50", text: "text-amber-700" };
+    default:
+      return { bg: "bg-red-50", text: "text-red-700" };
+  }
+}
+
+export function BillingBoard({ slug }: { slug: string }) {
+  const [data, setData] = useState<BillingInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [requestingPlan, setRequestingPlan] = useState<PlanKey | null>(null);
+  const [requestedPlans, setRequestedPlans] = useState<Set<PlanKey>>(new Set());
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await apiGet<BillingInfo>(`/api/restaurants/${slug}/billing`);
+      setData(res);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load billing status.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  async function requestPlan(planKey: PlanKey) {
+    setRequestingPlan(planKey);
+    try {
+      await apiPost(`/api/restaurants/${slug}/billing/upgrade-request`, { planKey });
+      setRequestedPlans((prev) => new Set(prev).add(planKey));
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not submit the request.");
+    } finally {
+      setRequestingPlan(null);
+    }
+  }
+
+  if (loading && !data) {
+    return <p className="text-sm text-neutral-400">Loading billing status…</p>;
+  }
+  if (error && !data) {
+    return <p className="text-sm text-red-600">{error}</p>;
+  }
+  if (!data) return null;
+
+  const days = daysRemaining(data.trialEndsAt ? new Date(data.trialEndsAt) : null);
+  const tone = statusTone(data.subscriptionStatus);
+  const blocked = !data.access.allowed;
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold text-neutral-900">Billing</h1>
+        <p className="text-sm text-neutral-500">Your plan and subscription status.</p>
+      </div>
+
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className={`mb-8 rounded-xl border border-neutral-200 p-5 ${tone.bg}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <span className={`text-sm font-semibold ${tone.text}`}>
+              {SUBSCRIPTION_STATUS_LABELS[data.subscriptionStatus]}
+            </span>
+            {data.subscriptionStatus === "trialing" && days !== null && (
+              <p className="mt-1 text-sm text-neutral-600">
+                {days > 0
+                  ? `${days} day${days === 1 ? "" : "s"} left in your free trial.`
+                  : "Your free trial has ended."}
+              </p>
+            )}
+            {data.subscriptionStatus === "active" && data.planKey && (
+              <p className="mt-1 text-sm text-neutral-600">
+                You&apos;re on the {PLANS.find((p) => p.key === data.planKey)?.name} plan.
+              </p>
+            )}
+            {data.subscriptionStatus === "past_due" && (
+              <p className="mt-1 text-sm text-neutral-600">
+                There&apos;s an issue with your last payment — you still have full access while
+                this is resolved.
+              </p>
+            )}
+            {data.subscriptionStatus === "cancelled" && (
+              <p className="mt-1 text-sm text-neutral-600">Your subscription was cancelled.</p>
+            )}
+          </div>
+        </div>
+        {blocked && (
+          <p className="mt-3 border-t border-neutral-200/60 pt-3 text-sm font-medium text-neutral-800">
+            Access to your dashboard is paused.{" "}
+            {data.canManageSubscription
+              ? "Choose a plan below to keep going."
+              : "Ask your restaurant owner to choose a plan below."}
+          </p>
+        )}
+      </div>
+
+      <h2 className="mb-4 text-sm font-semibold text-neutral-900">Plans</h2>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {PLANS.map((plan) => {
+          const isCurrent = data.planKey === plan.key && data.subscriptionStatus === "active";
+          const alreadyRequested = requestedPlans.has(plan.key);
+          return (
+            <div
+              key={plan.key}
+              className={`flex flex-col rounded-2xl border p-5 ${
+                plan.highlight ? "border-orange-300 shadow-sm" : "border-neutral-200"
+              }`}
+            >
+              {plan.highlight && (
+                <span className="mb-2 inline-block w-fit rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+                  Most popular
+                </span>
+              )}
+              <h3 className="text-base font-semibold text-neutral-900">{plan.name}</h3>
+              <p className="mt-1 text-2xl font-bold text-neutral-900">
+                {formatRupees(plan.priceInPaisaMonthly)}
+                <span className="text-sm font-normal text-neutral-500">/mo</span>
+              </p>
+              <p className="mt-2 text-xs text-neutral-500">{plan.tagline}</p>
+              <ul className="mt-4 flex-1 space-y-1.5 text-sm text-neutral-600">
+                {plan.features.map((f) => (
+                  <li key={f} className="flex items-start gap-1.5">
+                    <span className="mt-0.5 text-orange-500">✓</span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-5">
+                {isCurrent ? (
+                  <span className="btn-secondary w-full cursor-default">Current plan</span>
+                ) : !data.canManageSubscription ? (
+                  <span className="block text-center text-xs text-neutral-400">
+                    Only the owner can change plans
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => requestPlan(plan.key)}
+                    disabled={requestingPlan === plan.key || alreadyRequested}
+                    className="btn-primary w-full"
+                  >
+                    {alreadyRequested
+                      ? "Requested"
+                      : requestingPlan === plan.key
+                        ? "Requesting…"
+                        : "Request this plan"}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-xs text-neutral-400">
+        Requesting a plan lets us know what you want — we&apos;ll follow up to activate it.
+        Self-serve checkout is coming soon.
+      </p>
+
+      {data.events.length > 0 && (
+        <div className="mt-10">
+          <h2 className="mb-4 text-sm font-semibold text-neutral-900">Recent activity</h2>
+          <div className="divide-y divide-neutral-200 rounded-xl border border-neutral-200 bg-white">
+            {data.events.map((event) => (
+              <div key={event.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                <div>
+                  <p className="font-medium text-neutral-800">{formatEventType(event.eventType)}</p>
+                  {event.note && <p className="text-xs text-neutral-500">{event.note}</p>}
+                </div>
+                <span className="text-xs text-neutral-400">
+                  {new Date(event.createdAt).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

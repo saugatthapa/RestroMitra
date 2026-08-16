@@ -1,0 +1,77 @@
+import "server-only";
+import { eq, and } from "drizzle-orm";
+import { db } from "@/db";
+import { restaurants, userRoles, branches } from "@/db/schema";
+
+export type OwnedRestaurant = {
+  id: string;
+  slug: string;
+  name: string;
+  logoUrl: string | null;
+  // Phase 17 — printed at the top of every Kitchen Order Ticket; null falls
+  // back to `name` at render time (see kot.ts's buildKotHeaderText).
+  kotHeaderText: string | null;
+  role: string;
+  subscriptionStatus: string;
+  trialEndsAt: Date | null;
+  planKey: string | null;
+  onboardingCompletedAt: Date | null;
+};
+
+/** All restaurants this user has an active role grant on. */
+export async function getUserRestaurants(
+  userId: string,
+): Promise<OwnedRestaurant[]> {
+  const rows = await db
+    .select({
+      id: restaurants.id,
+      slug: restaurants.slug,
+      name: restaurants.name,
+      logoUrl: restaurants.logoUrl,
+      kotHeaderText: restaurants.kotHeaderText,
+      role: userRoles.role,
+      subscriptionStatus: restaurants.subscriptionStatus,
+      trialEndsAt: restaurants.trialEndsAt,
+      planKey: restaurants.planKey,
+      onboardingCompletedAt: restaurants.onboardingCompletedAt,
+    })
+    .from(userRoles)
+    .innerJoin(restaurants, eq(userRoles.restaurantId, restaurants.id))
+    .where(and(eq(userRoles.userId, userId), eq(userRoles.isActive, true)));
+
+  return rows;
+}
+
+export async function getRestaurantForUser(userId: string, restaurantId: string) {
+  const rows = await db
+    .select({
+      id: restaurants.id,
+      slug: restaurants.slug,
+      name: restaurants.name,
+      type: restaurants.type,
+      subscriptionStatus: restaurants.subscriptionStatus,
+      trialEndsAt: restaurants.trialEndsAt,
+      role: userRoles.role,
+    })
+    .from(userRoles)
+    .innerJoin(restaurants, eq(userRoles.restaurantId, restaurants.id))
+    .where(
+      and(
+        eq(userRoles.userId, userId),
+        eq(userRoles.restaurantId, restaurantId),
+        eq(userRoles.isActive, true),
+      ),
+    )
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+export async function getMainBranch(restaurantId: string) {
+  const rows = await db
+    .select()
+    .from(branches)
+    .where(and(eq(branches.restaurantId, restaurantId), eq(branches.isMain, true)))
+    .limit(1);
+  return rows[0] ?? null;
+}

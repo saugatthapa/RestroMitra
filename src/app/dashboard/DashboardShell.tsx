@@ -1,0 +1,520 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
+import { apiGet, apiPost } from "@/lib/api-client";
+import { NavIcon } from "@/components/NavIcon";
+
+// Nav is grouped (Overview / Front of house / Back office / Account) with an
+// icon per item, rather than one flat 16-item list — the flat list was the
+// thing that made our sidebar read as weaker than the reference dashboard
+// the user compared us against, which groups its own nav under section
+// headers. Restaurant-industry group names ("front of house" / "back
+// office") rather than the reference's generic ones, since this is a
+// restaurant product specifically.
+type NavItem = {
+  label: string;
+  href: string;
+  enabled: boolean;
+  icon: React.ReactNode;
+  badge?: string;
+};
+
+type NavGroup = {
+  title: string;
+  items: NavItem[];
+};
+
+const SIDEBAR_COLLAPSED_KEY = "dhankipos:sidebar-collapsed";
+
+function daysRemaining(trialEndsAt: string | null): number | null {
+  if (!trialEndsAt) return null;
+  const ms = new Date(trialEndsAt).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+}
+
+function initialsOf(name: string): string {
+  return (
+    name
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "?"
+  );
+}
+
+// A restaurant-branding touch — a colored monogram badge in the header,
+// standing in for a real uploaded logo (no logo-upload feature exists yet;
+// this is what "every restaurant gets its own visual identity in the
+// header" looks like without one). The color is a stable hash of the
+// restaurant's name, not random, so it's the same badge on every visit.
+const MONOGRAM_PALETTE = [
+  { bg: "#fdece3", fg: "#c2450f" },
+  { bg: "#e8f0fc", fg: "#2a78d6" },
+  { bg: "#e6f4ea", fg: "#1a7f37" },
+  { bg: "#f1e9fb", fg: "#7c3aed" },
+  { bg: "#e1f5f3", fg: "#0f766e" },
+  { bg: "#fef3e0", fg: "#b45309" },
+];
+
+function monogramStyle(name: string): { bg: string; fg: string } {
+  const sum = [...name].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  return MONOGRAM_PALETTE[sum % MONOGRAM_PALETTE.length];
+}
+
+type HeaderStatus = { activeOrders: number; kitchenBusy: boolean };
+
+export function DashboardShell({
+  ownerName,
+  restaurantName,
+  role,
+  subscriptionStatus,
+  trialEndsAt,
+  slug,
+  logoUrl,
+  restaurants,
+  activeRestaurantId,
+  children,
+}: {
+  ownerName: string;
+  restaurantName: string;
+  role: string;
+  subscriptionStatus: string;
+  trialEndsAt: string | null;
+  /** The active restaurant's slug — scopes the header's live-status poll. */
+  slug: string;
+  /** Set during onboarding (or later from Settings, once that exists) via
+   * a client-compressed data: URL — see src/lib/client-image.ts. Null for
+   * the common case of a restaurant that hasn't set one, in which case the
+   * sidebar falls back to a colored monogram so the brand slot is never
+   * empty. */
+  logoUrl: string | null;
+  /** Every restaurant this user has an active role grant on, for the
+   * header's restaurant switcher. A single-restaurant owner (the common
+   * case) never sees a switcher at all — no dropdown affordance with
+   * nothing to switch to. */
+  restaurants: { id: string; name: string }[];
+  activeRestaurantId: string;
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [switchingRestaurant, setSwitchingRestaurant] = useState(false);
+  const [headerStatus, setHeaderStatus] = useState<HeaderStatus | null>(null);
+  const days = daysRemaining(trialEndsAt);
+  // QA hardening pass: the sidebar below is `hidden md:flex` — on any
+  // screen narrower than 768px (every phone, and a portrait tablet under
+  // that width) it disappeared completely with NO fallback, leaving staff
+  // with zero way to navigate off whatever page they landed on except
+  // typing a URL by hand. This state drives a slide-in drawer (below) that
+  // reuses the exact same nav groups, opened via a hamburger button that
+  // only renders on those same narrow screens.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Desktop-only icon-rail collapse, persisted so a staff member's
+  // preference survives a reload. Same guarded-lazy-initializer pattern
+  // POSOrderBuilder.tsx already uses for its `isOnline` state, rather than
+  // reading localStorage inside a useEffect (which would mean calling
+  // setState synchronously from an effect — an anti-pattern the lint rules
+  // here specifically flag).
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+  }, [collapsed]);
+
+  // Live "N active" / "Kitchen Clear|Busy" header pills — same 5s polling
+  // cadence OrdersBoard.tsx already uses, backed by a real query
+  // (src/app/api/restaurants/[slug]/header-status) rather than a static
+  // demo value. A failed poll just leaves the pills showing their last
+  // good value (or hidden, before the first success) — never worth an
+  // error banner over a background refresh.
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const data = await apiGet<HeaderStatus>(`/api/restaurants/${slug}/header-status`);
+        if (!cancelled) setHeaderStatus(data);
+      } catch {
+        // ignore — see comment above
+      }
+    }
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [slug]);
+
+  const NAV_GROUPS: NavGroup[] = [
+    {
+      title: "Overview",
+      items: [
+        { label: "Dashboard", href: "/dashboard", enabled: true, icon: <NavIcon.Dashboard /> },
+        { label: "Reports", href: "/dashboard/reports", enabled: true, icon: <NavIcon.Reports /> },
+        { label: "AI Assistant", href: "/dashboard/assistant", enabled: true, icon: <NavIcon.Assistant /> },
+      ],
+    },
+    {
+      title: "Front of house",
+      items: [
+        { label: "Orders", href: "/dashboard/orders", enabled: true, icon: <NavIcon.Orders /> },
+        { label: "POS", href: "/dashboard/pos", enabled: true, icon: <NavIcon.Pos /> },
+        { label: "Kitchen (KDS)", href: "/dashboard/kds", enabled: true, icon: <NavIcon.Kitchen /> },
+        { label: "Tables & QR", href: "/dashboard/tables", enabled: true, icon: <NavIcon.Tables /> },
+        { label: "Reservations", href: "/dashboard/reservations", enabled: true, icon: <NavIcon.Reservations /> },
+      ],
+    },
+    {
+      title: "Back office",
+      items: [
+        { label: "Menu", href: "/dashboard/menu", enabled: true, icon: <NavIcon.Menu /> },
+        { label: "Inventory", href: "/dashboard/inventory", enabled: true, icon: <NavIcon.Inventory /> },
+        { label: "Staff", href: "/dashboard/staff", enabled: true, icon: <NavIcon.Staff /> },
+        { label: "Customers", href: "/dashboard/customers", enabled: true, icon: <NavIcon.Customers /> },
+        { label: "Expenses", href: "/dashboard/expenses", enabled: true, icon: <NavIcon.Expenses /> },
+        {
+          label: "Account Books",
+          href: "/dashboard/account-books",
+          enabled: true,
+          icon: <NavIcon.AccountBooks />,
+        },
+        { label: "Website", href: "/dashboard/website", enabled: true, icon: <NavIcon.Website /> },
+      ],
+    },
+    {
+      title: "Account",
+      items: [
+        { label: "Branches", href: "/dashboard/branches", enabled: true, icon: <NavIcon.Branches /> },
+        { label: "Billing", href: "/billing", enabled: true, icon: <NavIcon.Billing /> },
+        { label: "Settings", href: "#", enabled: false, icon: <NavIcon.Settings />, badge: "Coming soon" },
+      ],
+    },
+  ];
+
+  // Header page title — reuses NAV_GROUPS as the single source of truth
+  // for route -> label rather than a second hardcoded map, so the two can
+  // never drift apart. Falls back to a longest-prefix match for nested
+  // routes not in the nav itself (e.g. /dashboard/orders/[orderId]).
+  const flatNavItems = NAV_GROUPS.flatMap((group) => group.items);
+  const exactMatch = flatNavItems.find((item) => item.href === pathname);
+  const prefixMatch = flatNavItems
+    .filter((item) => item.href !== "#" && pathname.startsWith(`${item.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+  const pageTitle = exactMatch?.label ?? prefixMatch?.label ?? "Dashboard";
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await apiPost("/api/auth/logout", {});
+    } finally {
+      router.push("/login");
+      router.refresh();
+    }
+  }
+
+  async function handleSwitchRestaurant(event: React.ChangeEvent<HTMLSelectElement>) {
+    const nextId = event.target.value;
+    if (nextId === activeRestaurantId) return;
+    setSwitchingRestaurant(true);
+    try {
+      await apiPost("/api/session/active-restaurant", { restaurantId: nextId });
+    } catch {
+      setSwitchingRestaurant(false);
+      return;
+    }
+    // Caught live during QA: calling router.replace("/dashboard") and then
+    // router.refresh() back-to-back — when already sitting on /dashboard —
+    // fires two requests for the exact same route and the second cancels
+    // the first ("The destination stream closed early." in the server
+    // log), so the switch silently never showed the new restaurant's data.
+    // A genuine navigation to a *different* route already re-fetches
+    // fresh server data on its own (no refresh() needed); refresh() is
+    // only for staying put on the current route.
+    if (pathname === "/dashboard") {
+      router.refresh();
+      setSwitchingRestaurant(false);
+    } else {
+      router.push("/dashboard");
+    }
+  }
+
+  // `isCollapsed` is a separate parameter from the `collapsed` state (not
+  // just read from the closure) so the mobile drawer — which always calls
+  // this with `false` — can't be dragged into icon-only mode by a desktop
+  // rail preference persisted from a previous, wider session. The desktop
+  // aside is the only caller that ties it to the real `collapsed` state.
+  function navItems(onNavigate?: () => void, isCollapsed = collapsed) {
+    return (
+      <nav className="space-y-5">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.title}>
+            {!isCollapsed && (
+              <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                {group.title}
+              </p>
+            )}
+            <div className="space-y-0.5">
+              {group.items.map((item) => {
+                const isActive = item.enabled && pathname === item.href;
+                const className = `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                  isCollapsed ? "justify-center px-2" : "justify-between"
+                } ${
+                  isActive
+                    ? "bg-orange-50 font-medium text-orange-700"
+                    : item.enabled
+                      ? "font-medium text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900"
+                      : "cursor-default text-neutral-400"
+                }`;
+
+                const content = (
+                  <>
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center">{item.icon}</span>
+                      {!isCollapsed && <span className="truncate">{item.label}</span>}
+                    </span>
+                    {!isCollapsed && item.badge && (
+                      <span className="shrink-0 rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-400">
+                        {item.badge}
+                      </span>
+                    )}
+                  </>
+                );
+
+                if (item.enabled) {
+                  return (
+                    <Link
+                      key={item.label}
+                      href={item.href}
+                      className={className}
+                      onClick={onNavigate}
+                      title={isCollapsed ? item.label : undefined}
+                    >
+                      {content}
+                    </Link>
+                  );
+                }
+                return (
+                  <div key={item.label} className={className} title={isCollapsed ? item.label : undefined}>
+                    {content}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+    );
+  }
+
+  // The sidebar's top brand slot — the restaurant's own logo (if set) or a
+  // colored monogram, plus its name, with "Powered by DhankiPOS" as a small
+  // subtitle. This used to be a plain "DhankiPOS" wordmark; a restaurant
+  // owner living in this screen all day cares about *their own* brand, not
+  // the vendor's, so the tenant's identity now leads and the platform name
+  // is the small print — matching how the reference dashboard the user
+  // compared us against treats its own sidebar brand slot.
+  function brandBlock(isCollapsed = collapsed) {
+    const monogram = monogramStyle(restaurantName);
+    const logo = logoUrl ? (
+      // A per-tenant data: URL or arbitrary http(s) URL isn't a
+      // build-time-known asset next/image can optimize; menu item photos
+      // use the same plain <img>.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={logoUrl}
+        alt=""
+        className="h-9 w-9 shrink-0 rounded-full border border-neutral-100 object-cover"
+      />
+    ) : (
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
+        style={{ backgroundColor: monogram.bg, color: monogram.fg }}
+        aria-hidden="true"
+      >
+        {initialsOf(restaurantName)}
+      </span>
+    );
+
+    if (isCollapsed) return logo;
+
+    return (
+      <div className="flex min-w-0 items-center gap-2.5">
+        {logo}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-neutral-900">{restaurantName}</p>
+          <p className="truncate text-[11px] text-neutral-400">Powered by DhankiPOS</p>
+        </div>
+      </div>
+    );
+  }
+
+  function profileCard(isCollapsed = collapsed) {
+    const initials =
+      ownerName
+        .split(" ")
+        .filter(Boolean)
+        .map((part) => part[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase() || "?";
+
+    return (
+      <div
+        className={`mt-4 rounded-xl border border-neutral-100 bg-neutral-50 p-2.5 ${
+          isCollapsed ? "flex flex-col items-center gap-2" : "flex items-center gap-2.5"
+        }`}
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-600 text-xs font-semibold text-white">
+          {initials}
+        </span>
+        {!isCollapsed && (
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-neutral-900">{ownerName}</p>
+            <p className="truncate text-xs capitalize text-neutral-500">{role.replace("_", " ")}</p>
+          </div>
+        )}
+        <button
+          type="button"
+          aria-label="Log out"
+          title="Log out"
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="shrink-0 rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-50"
+        >
+          <NavIcon.Logout />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen bg-neutral-50">
+      <aside
+        className={`hidden shrink-0 flex-col border-r border-neutral-200 bg-white p-4 transition-[width] duration-200 md:flex ${
+          collapsed ? "w-[76px]" : "w-60"
+        }`}
+      >
+        <div className={`mb-6 flex items-center gap-2 ${collapsed ? "flex-col" : "justify-between"}`}>
+          {brandBlock()}
+          <button
+            type="button"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={() => setCollapsed((c) => !c)}
+            className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+          >
+            {collapsed ? <NavIcon.ChevronRight /> : <NavIcon.ChevronLeft />}
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">{navItems()}</div>
+        {profileCard()}
+      </aside>
+
+      {/* Mobile nav drawer — md:hidden on both the trigger (in the header
+          below) and this overlay, so it only ever exists below the 768px
+          breakpoint where the sidebar itself is hidden. */}
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <button
+            aria-label="Close menu"
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white p-4 shadow-xl">
+            <div className="mb-6 flex items-center justify-between px-2">
+              {brandBlock(false)}
+              <button
+                aria-label="Close menu"
+                onClick={() => setMobileNavOpen(false)}
+                className="rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">{navItems(() => setMobileNavOpen(false), false)}</div>
+            {profileCard(false)}
+          </div>
+        </div>
+      )}
+
+      <div className="flex min-h-screen flex-1 flex-col">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 py-3 md:px-6">
+          <div className="flex items-center gap-3">
+            <button
+              aria-label="Open menu"
+              onClick={() => setMobileNavOpen(true)}
+              className="-ml-1 rounded-lg p-1.5 text-neutral-600 hover:bg-neutral-100 md:hidden"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
+              </svg>
+            </button>
+            <div>
+              <p className="text-base font-semibold text-neutral-900">{pageTitle}</p>
+              <p className="text-xs text-neutral-500">{restaurantName}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {headerStatus && (
+              <>
+                <span className="hidden items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs font-medium text-neutral-600 sm:inline-flex">
+                  <span className="flex h-3.5 w-3.5 items-center justify-center">
+                    <NavIcon.Orders />
+                  </span>
+                  {headerStatus.activeOrders} active
+                </span>
+                <span
+                  className={`hidden items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium sm:inline-flex ${
+                    headerStatus.kitchenBusy
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-green-200 bg-green-50 text-green-700"
+                  }`}
+                >
+                  <span className="flex h-3.5 w-3.5 items-center justify-center">
+                    <NavIcon.Kitchen />
+                  </span>
+                  Kitchen {headerStatus.kitchenBusy ? "Busy" : "Clear"}
+                </span>
+              </>
+            )}
+            {restaurants.length > 1 && (
+              <div className="relative">
+                <select
+                  aria-label="Switch restaurant"
+                  value={activeRestaurantId}
+                  onChange={handleSwitchRestaurant}
+                  disabled={switchingRestaurant}
+                  className="appearance-none rounded-full border border-neutral-200 bg-white py-1.5 pl-3 pr-7 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                >
+                  {restaurants.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 rotate-90 items-center text-neutral-400">
+                  <NavIcon.ChevronRight />
+                </span>
+              </div>
+            )}
+            {subscriptionStatus === "trialing" && days !== null && (
+              <span className="hidden rounded-full bg-orange-50 px-3 py-1 text-xs font-medium text-orange-700 sm:inline-block">
+                {days} day{days === 1 ? "" : "s"} left in trial
+              </span>
+            )}
+          </div>
+        </header>
+
+        <main className="flex-1 p-4 md:p-6">{children}</main>
+      </div>
+    </div>
+  );
+}

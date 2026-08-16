@@ -36,6 +36,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local verification artifacts (Playwright screenshot tour output from
+# dev-time QA passes — not part of the shipped app)
+/screenshots
+/screenshots-*
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

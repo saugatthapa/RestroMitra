@@ -1,0 +1,84 @@
+import { NextResponse } from "next/server";
+import { and, count, desc, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { restaurants, userRoles, users, subscriptionEvents } from "@/db/schema";
+import { requirePlatformAdmin } from "@/lib/rbac/guard";
+import { toErrorResponse } from "@/lib/api-route-helpers";
+import { getPlanByKey } from "@/lib/plans";
+
+const EVENT_HISTORY_LIMIT = 50;
+
+export async function GET(
+  _request: Request,
+  ctx: RouteContext<"/api/admin/restaurants/[restaurantId]">,
+) {
+  try {
+    await requirePlatformAdmin();
+    const { restaurantId } = await ctx.params;
+
+    const [restaurant] = await db
+      .select()
+      .from(restaurants)
+      .where(eq(restaurants.id, restaurantId))
+      .limit(1);
+    if (!restaurant) {
+      return NextResponse.json({ error: "Restaurant not found." }, { status: 404 });
+    }
+
+    const [owner] = await db
+      .select({ fullName: users.fullName, phone: users.phone, email: users.email })
+      .from(userRoles)
+      .innerJoin(users, eq(userRoles.userId, users.id))
+      .where(and(eq(userRoles.restaurantId, restaurantId), eq(userRoles.role, "owner")))
+      .limit(1);
+
+    const [staffCountRow] = await db
+      .select({ n: count() })
+      .from(userRoles)
+      .where(
+        and(
+          eq(userRoles.restaurantId, restaurantId),
+          eq(userRoles.isActive, true),
+        ),
+      );
+
+    const events = await db
+      .select({
+        id: subscriptionEvents.id,
+        eventType: subscriptionEvents.eventType,
+        fromStatus: subscriptionEvents.fromStatus,
+        toStatus: subscriptionEvents.toStatus,
+        planKey: subscriptionEvents.planKey,
+        note: subscriptionEvents.note,
+        createdAt: subscriptionEvents.createdAt,
+        performedBy: users.fullName,
+      })
+      .from(subscriptionEvents)
+      .leftJoin(users, eq(subscriptionEvents.performedByUserId, users.id))
+      .where(eq(subscriptionEvents.restaurantId, restaurantId))
+      .orderBy(desc(subscriptionEvents.createdAt))
+      .limit(EVENT_HISTORY_LIMIT);
+
+    return NextResponse.json({
+      restaurant: {
+        id: restaurant.id,
+        slug: restaurant.slug,
+        name: restaurant.name,
+        type: restaurant.type,
+        city: restaurant.city,
+        district: restaurant.district,
+        subscriptionStatus: restaurant.subscriptionStatus,
+        trialEndsAt: restaurant.trialEndsAt,
+        planKey: restaurant.planKey,
+        plan: getPlanByKey(restaurant.planKey),
+        isActive: restaurant.isActive,
+        createdAt: restaurant.createdAt,
+      },
+      owner: owner ?? null,
+      staffCount: staffCountRow?.n ?? 0,
+      events,
+    });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}

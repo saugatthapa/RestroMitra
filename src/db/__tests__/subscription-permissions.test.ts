@@ -1,0 +1,203 @@
+/**
+ * Phase 10 integration test: proves (a) requireActiveSubscription correctly
+ * allows/blocks access purely from a restaurant's subscription_status/
+ * trial_ends_at, (b) the lazy self-healing reconciliation actually writes
+ * "expired" + a subscription_events row back to the DB exactly once when a
+ * trial is first discovered to be over — and does NOT re-write on a
+ * second call, (c) requirePlatformAdmin rejects a regular owner and
+ * accepts a real platform_admin, (d) requireRestaurantAccess's existing
+ * platform_admin bypass still grants access regardless of a tenant's
+ * subscription state, and (e) MANAGE_SUBSCRIPTION is owner-only (manager
+ * denied) — the same profit-adjacent trust tier as MANAGE_EXPENSES.
+ *
+ * Skipped (not failed) when DATABASE_URL isn't set, same as the other
+ * DB-backed integration tests in this project.
+ */
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { eq } from "drizzle-orm";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
+
+const hasDb = Boolean(process.env.DATABASE_URL);
+
+describe.skipIf(!hasDb)("Subscription access + platform admin (integration)", () => {
+  let db: typeof import("@/db").db;
+  let schema: typeof import("@/db/schema");
+  let guard: typeof import("@/lib/rbac/guard");
+  let subscriptionDb: typeof import("@/lib/subscription-db");
+
+  let ownerAId: string;
+  let managerAId: string;
+  let platformAdminId: string;
+  let restaurantExpiredId: string;
+  let restaurantActiveTrialId: string;
+  let restaurantCancelledId: string;
+
+  beforeAll(async () => {
+    db = (await import("@/db")).db;
+    schema = await import("@/db/schema");
+    guard = await import("@/lib/rbac/guard");
+    subscriptionDb = await import("@/lib/subscription-db");
+
+    const suffix = Math.random().toString(36).slice(2, 8);
+
+    const [ownerA] = await db
+      .insert(schema.users)
+      .values({ fullName: "TEST Sub Owner A", phone: `9771${suffix.slice(0, 6)}`, passwordHash: "x" })
+      .returning({ id: schema.users.id });
+    const [managerA] = await db
+      .insert(schema.users)
+      .values({ fullName: "TEST Sub Manager A", phone: `9772${suffix.slice(0, 6)}`, passwordHash: "x" })
+      .returning({ id: schema.users.id });
+    const [platformAdmin] = await db
+      .insert(schema.users)
+      .values({ fullName: "TEST Sub Platform Admin", phone: `9773${suffix.slice(0, 6)}`, passwordHash: "x" })
+      .returning({ id: schema.users.id });
+    ownerAId = ownerA.id;
+    managerAId = managerA.id;
+    platformAdminId = platformAdmin.id;
+
+    const pastTrial = new Date(Date.now() - 1000 * 60 * 60 * 24 * 5); // 5 days ago
+    const futureTrial = new Date(Date.now() + 1000 * 60 * 60 * 24 * 20); // 20 days out
+
+    const [restaurantExpired] = await db
+      .insert(schema.restaurants)
+      .values({
+        slug: `test-sub-expired-${suffix}`,
+        name: "TEST Sub Restaurant Expired",
+        subscriptionStatus: "trialing",
+        trialEndsAt: pastTrial,
+      })
+      .returning({ id: schema.restaurants.id });
+    const [restaurantActiveTrial] = await db
+      .insert(schema.restaurants)
+      .values({
+        slug: `test-sub-active-trial-${suffix}`,
+        name: "TEST Sub Restaurant Active Trial",
+        subscriptionStatus: "trialing",
+        trialEndsAt: futureTrial,
+      })
+      .returning({ id: schema.restaurants.id });
+    const [restaurantCancelled] = await db
+      .insert(schema.restaurants)
+      .values({
+        slug: `test-sub-cancelled-${suffix}`,
+        name: "TEST Sub Restaurant Cancelled",
+        subscriptionStatus: "cancelled",
+      })
+      .returning({ id: schema.restaurants.id });
+    restaurantExpiredId = restaurantExpired.id;
+    restaurantActiveTrialId = restaurantActiveTrial.id;
+    restaurantCancelledId = restaurantCancelled.id;
+
+    await db.insert(schema.userRoles).values([
+      { userId: ownerAId, restaurantId: restaurantExpiredId, role: "owner" },
+      { userId: managerAId, restaurantId: restaurantExpiredId, role: "manager" },
+      { userId: platformAdminId, restaurantId: null, role: "platform_admin" },
+    ]);
+  });
+
+  afterAll(async () => {
+    for (const restaurantId of [restaurantExpiredId, restaurantActiveTrialId, restaurantCancelledId]) {
+      await db.delete(schema.subscriptionEvents).where(eq(schema.subscriptionEvents.restaurantId, restaurantId));
+      await db.delete(schema.userRoles).where(eq(schema.userRoles.restaurantId, restaurantId));
+      await db.delete(schema.restaurants).where(eq(schema.restaurants.id, restaurantId));
+    }
+    await db.delete(schema.userRoles).where(eq(schema.userRoles.userId, platformAdminId));
+    await db.delete(schema.users).where(eq(schema.users.id, ownerAId));
+    await db.delete(schema.users).where(eq(schema.users.id, managerAId));
+    await db.delete(schema.users).where(eq(schema.users.id, platformAdminId));
+  });
+
+  it("requireActiveSubscription allows a restaurant still inside its trial window", async () => {
+    await expect(guard.requireActiveSubscription(restaurantActiveTrialId)).resolves.toBeUndefined();
+  });
+
+  it("requireActiveSubscription blocks a restaurant whose trial has lapsed, with reason trial_expired", async () => {
+    await expect(guard.requireActiveSubscription(restaurantExpiredId)).rejects.toMatchObject({
+      status: 402,
+      reason: "trial_expired",
+    });
+  });
+
+  it("the lapsed trial check wrote 'expired' back to the restaurant row exactly once, plus one trial_expired event", async () => {
+    const [row] = await db
+      .select({ subscriptionStatus: schema.restaurants.subscriptionStatus })
+      .from(schema.restaurants)
+      .where(eq(schema.restaurants.id, restaurantExpiredId));
+    expect(row.subscriptionStatus).toBe("expired");
+
+    const events = await db
+      .select()
+      .from(schema.subscriptionEvents)
+      .where(eq(schema.subscriptionEvents.restaurantId, restaurantExpiredId));
+    expect(events).toHaveLength(1);
+    expect(events[0].eventType).toBe("trial_expired");
+    expect(events[0].fromStatus).toBe("trialing");
+    expect(events[0].toStatus).toBe("expired");
+    expect(events[0].performedByUserId).toBeNull(); // system-generated, not a human action
+
+    // Calling it again must NOT insert a second event — the status is
+    // already "expired", so reconcileSubscriptionStatus takes the cheap
+    // read-only path this time.
+    await expect(guard.requireActiveSubscription(restaurantExpiredId)).rejects.toMatchObject({
+      status: 402,
+      reason: "expired",
+    });
+    const eventsAfterSecondCall = await db
+      .select()
+      .from(schema.subscriptionEvents)
+      .where(eq(schema.subscriptionEvents.restaurantId, restaurantExpiredId));
+    expect(eventsAfterSecondCall).toHaveLength(1);
+  });
+
+  it("requireActiveSubscription blocks a cancelled restaurant without needing any reconciliation write", async () => {
+    await expect(guard.requireActiveSubscription(restaurantCancelledId)).rejects.toMatchObject({
+      status: 402,
+      reason: "cancelled",
+    });
+    const events = await db
+      .select()
+      .from(schema.subscriptionEvents)
+      .where(eq(schema.subscriptionEvents.restaurantId, restaurantCancelledId));
+    expect(events).toHaveLength(0);
+  });
+
+  it("requirePlatformAdmin-equivalent check: isPlatformAdmin is false for a regular owner, true for the seeded platform admin", async () => {
+    await expect(guard.isPlatformAdmin(ownerAId)).resolves.toBe(false);
+    await expect(guard.isPlatformAdmin(platformAdminId)).resolves.toBe(true);
+  });
+
+  it("requireRestaurantAccess's existing platform_admin bypass grants access to an EXPIRED restaurant regardless of its subscription state", async () => {
+    // This is the bypass resolveRestaurantContext relies on: platform_admin
+    // access must never depend on the target tenant's own billing status.
+    await expect(guard.requireRestaurantAccess(platformAdminId, restaurantExpiredId)).resolves.toMatchObject({
+      role: "platform_admin",
+    });
+  });
+
+  it("MANAGE_SUBSCRIPTION is owner-only: manager is denied with a 403", async () => {
+    await expect(
+      guard.requirePermission(ownerAId, restaurantExpiredId, PERMISSIONS.MANAGE_SUBSCRIPTION),
+    ).resolves.toBeUndefined();
+    await expect(
+      guard.requirePermission(managerAId, restaurantExpiredId, PERMISSIONS.MANAGE_SUBSCRIPTION),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("reconcileSubscriptionStatus returns allowed:true for an active restaurant without touching the DB", async () => {
+    const [activeRestaurant] = await db
+      .insert(schema.restaurants)
+      .values({
+        slug: `test-sub-active-${Math.random().toString(36).slice(2, 8)}`,
+        name: "TEST Sub Restaurant Active",
+        subscriptionStatus: "active",
+        planKey: "growth",
+      })
+      .returning({ id: schema.restaurants.id });
+
+    const access = await subscriptionDb.reconcileSubscriptionStatus(activeRestaurant.id);
+    expect(access).toEqual({ allowed: true, reason: "active" });
+
+    await db.delete(schema.restaurants).where(eq(schema.restaurants.id, activeRestaurant.id));
+  });
+});

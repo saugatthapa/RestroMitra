@@ -1,0 +1,2 @@
+DROP INDEX "payment_gateway_transactions_restaurant_reference_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "payment_gateway_transactions_reference_unique" ON "payment_gateway_transactions" USING btree ("gateway_reference");

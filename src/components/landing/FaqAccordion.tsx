@@ -1,0 +1,49 @@
+"use client";
+
+import { useState } from "react";
+
+export type FaqItem = { question: string; answer: string };
+
+export function FaqAccordion({ items }: { items: FaqItem[] }) {
+  const [openIndex, setOpenIndex] = useState<number | null>(0);
+
+  return (
+    <div className="divide-y divide-neutral-200 rounded-2xl border border-neutral-200 bg-white">
+      {items.map((item, i) => {
+        const open = openIndex === i;
+        return (
+          <div key={item.question}>
+            <button
+              type="button"
+              onClick={() => setOpenIndex(open ? null : i)}
+              aria-expanded={open}
+              className="group flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-neutral-50"
+            >
+              <span className="text-sm font-medium text-neutral-900 transition-colors group-hover:text-orange-700 sm:text-base">
+                {item.question}
+              </span>
+              <span
+                className={`flex h-6 w-6 flex-none items-center justify-center rounded-full border border-neutral-300 text-neutral-500 transition-all duration-300 group-hover:border-orange-300 group-hover:text-orange-600 ${
+                  open ? "rotate-45 border-orange-300 text-orange-600" : "group-hover:scale-110"
+                }`}
+                aria-hidden="true"
+              >
+                <svg viewBox="0 0 12 12" fill="none" className="h-3 w-3">
+                  <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </span>
+            </button>
+            <div
+              className="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-out"
+              style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
+            >
+              <div className="min-h-0">
+                <p className="px-5 pb-4 text-sm leading-relaxed text-neutral-600">{item.answer}</p>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

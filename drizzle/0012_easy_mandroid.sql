@@ -1,0 +1,2 @@
+ALTER TABLE "orders" ADD COLUMN "client_request_id" varchar(100);--> statement-breakpoint
+CREATE UNIQUE INDEX "orders_restaurant_client_request_id_unique" ON "orders" USING btree ("restaurant_id","client_request_id") WHERE "orders"."client_request_id" IS NOT NULL;

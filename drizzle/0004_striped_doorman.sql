@@ -1,0 +1,3 @@
+ALTER TABLE "order_items" ADD COLUMN "kitchen_station_id" uuid;--> statement-breakpoint
+ALTER TABLE "order_items" ADD COLUMN "kitchen_station_name_snapshot" varchar(100);--> statement-breakpoint
+ALTER TABLE "order_items" ADD CONSTRAINT "order_items_kitchen_station_id_kitchen_stations_id_fk" FOREIGN KEY ("kitchen_station_id") REFERENCES "public"."kitchen_stations"("id") ON DELETE set null ON UPDATE no action;

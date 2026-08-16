@@ -8,19 +8,254 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* Phase 1 ships a single light theme across owner/staff dashboards, so we
+   deliberately do not follow prefers-color-scheme yet. Dark mode can be
+   revisited as a deliberate design pass later rather than an accidental
+   half-styled one. */
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-orange-700 hover:shadow-md active:translate-y-0 active:shadow-sm disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-sm;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-700 transition duration-200 hover:-translate-y-0.5 hover:border-neutral-400 hover:bg-neutral-50 hover:shadow-sm active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-none;
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * Landing page motion — Phase 9.5 (landing redesign). Kept as plain CSS
+ * (transform/opacity only, GPU-composited) rather than a JS animation
+ * library, so the marketing page stays fast on a mid-range phone over
+ * Nepali mobile data: no extra runtime bundle, and every animation here
+ * is driven by the browser's compositor, not layout-triggering
+ * properties. `prefers-reduced-motion` is honored globally below.
+ * --------------------------------------------------------------------- */
+
+@layer components {
+  /* Scroll-reveal: paired with src/components/landing/Reveal.tsx, which
+     toggles .reveal-visible via IntersectionObserver. */
+  .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition:
+      opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: opacity, transform;
+  }
+  .reveal-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Slow ambient drift for hero background blobs. */
+  .animate-blob {
+    animation: blob-float 16s ease-in-out infinite;
+  }
+  .animate-blob-delayed {
+    animation: blob-float 20s ease-in-out infinite;
+    animation-delay: -7s;
+  }
+
+  /* Gentle vertical bob for the floating hero mockup cards. */
+  .animate-float {
+    animation: card-float 6s ease-in-out infinite;
+  }
+  .animate-float-delayed {
+    animation: card-float 7s ease-in-out infinite;
+    animation-delay: -2.5s;
+  }
+  .animate-float-slow {
+    animation: card-float 8s ease-in-out infinite;
+    animation-delay: -4.5s;
+  }
+
+  /* One-shot entrance for hero content on first paint. */
+  .animate-hero-in {
+    animation: hero-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Diagonal shine sweep on primary CTA hover — a single pseudo-element,
+     no extra DOM. */
+  .btn-shine {
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-shine::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      115deg,
+      transparent 40%,
+      rgb(255 255 255 / 0.35) 50%,
+      transparent 60%
+    );
+    transform: translateX(-120%);
+    transition: transform 0.7s ease;
+  }
+  .btn-shine:hover::after {
+    transform: translateX(120%);
+  }
+
+  .animate-pulse-ring {
+    animation: pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Animated underline for header/footer nav links — grows from the left
+     on hover/focus, pure transform so it's compositor-only. */
+  .nav-link {
+    position: relative;
+  }
+  .nav-link::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -3px;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #ea580c, #f59e0b);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .nav-link:hover::after,
+  .nav-link:focus-visible::after {
+    transform: scaleX(1);
+  }
+
+  /* Feature cards: a soft gradient ring that fades in on hover, drawn with
+     a masked pseudo-element (no extra border-box repaint, opacity-only). */
+  .feature-card {
+    position: relative;
+  }
+  .feature-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1.5px;
+    background: linear-gradient(135deg, rgb(234 88 12 / 0.55), rgb(245 158 11 / 0.35), rgb(234 88 12 / 0));
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+  }
+  .feature-card:hover::before {
+    opacity: 1;
+  }
+
+  /* Floating hero mockup cards: pause their ambient bob and lift with a
+     warm shadow on hover, rather than fighting the keyframe's own
+     `transform` (scaling on the same property the animation drives would
+     just get overwritten every frame). */
+  .hero-float-card {
+    transition:
+      box-shadow 0.35s ease,
+      border-color 0.35s ease;
+  }
+  .hero-float-card:hover {
+    animation-play-state: paused;
+    z-index: 10;
+    border-color: rgb(251 146 60 / 0.55);
+    box-shadow: 0 25px 50px -12px rgb(234 88 12 / 0.25);
+  }
+}
+
+@keyframes blob-float {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(3%, -4%) scale(1.06);
+  }
+  66% {
+    transform: translate(-3%, 3%) scale(0.96);
+  }
+}
+
+@keyframes card-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes hero-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(234 88 12 / 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgb(234 88 12 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(234 88 12 / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .animate-blob,
+  .animate-blob-delayed,
+  .animate-float,
+  .animate-float-delayed,
+  .animate-float-slow,
+  .animate-hero-in,
+  .animate-pulse-ring {
+    animation: none;
+  }
+  .btn-shine::after {
+    display: none;
+  }
+  .nav-link::after {
+    transition: none;
+  }
+  .feature-card::before {
+    transition: none;
+  }
+  .hero-float-card {
+    transition: none;
+  }
 }
