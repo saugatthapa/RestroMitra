@@ -1,5 +1,5 @@
 /**
- * All inventory quantities in DhankiPOS are stored and computed as integer
+ * All inventory quantities in RestroMitra are stored and computed as integer
  * MILLIUNITS (a real quantity * 1000, i.e. 3 decimal places of precision)
  * — never as a float. Same reasoning as src/lib/money.ts uses for paisa:
  * floats cannot represent most decimal fractions exactly, which is exactly

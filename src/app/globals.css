@@ -120,6 +120,17 @@ body {
     animation: pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 
+  /* Hero dashboard mockup's revenue line, "drawn" once on first paint.
+     Paired with `pathLength={1}` on the <path> itself (see MockChart in
+     src/app/page.tsx) so the dasharray/dashoffset below are simple 0-1
+     fractions regardless of the path's actual pixel length. */
+  .animate-chart-draw {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: chart-draw 1.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: 0.6s;
+  }
+
   /* Animated underline for header/footer nav links — grows from the left
      on hover/focus, pure transform so it's compositor-only. */
   .nav-link {
@@ -231,6 +242,15 @@ body {
   }
 }
 
+@keyframes chart-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .reveal {
     opacity: 1;
@@ -245,6 +265,10 @@ body {
   .animate-hero-in,
   .animate-pulse-ring {
     animation: none;
+  }
+  .animate-chart-draw {
+    animation: none;
+    stroke-dashoffset: 0;
   }
   .btn-shine::after {
     display: none;

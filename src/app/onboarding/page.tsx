@@ -15,7 +15,7 @@ export default async function OnboardingPage() {
       <div className="mx-auto max-w-xl">
         <div className="mb-8">
           <span className="text-lg font-semibold tracking-tight text-neutral-900">
-            Dhanki<span className="text-orange-600">POS</span>
+            Restro<span className="text-orange-600">Mitra</span>
           </span>
         </div>
         <OnboardingWizard ownerName={session.user.fullName} />

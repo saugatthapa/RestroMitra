@@ -469,8 +469,8 @@ function DashboardShellContent({
   }
 
   // The sidebar's top brand slot — the restaurant's own logo (if set) or a
-  // colored monogram, plus its name, with "Powered by DhankiPOS" as a small
-  // subtitle. This used to be a plain "DhankiPOS" wordmark; a restaurant
+  // colored monogram, plus its name, with "Powered by RestroMitra" as a small
+  // subtitle. This used to be a plain "RestroMitra" wordmark; a restaurant
   // owner living in this screen all day cares about *their own* brand, not
   // the vendor's, so the tenant's identity now leads and the platform name
   // is the small print — matching how the reference dashboard the user
@@ -504,7 +504,7 @@ function DashboardShellContent({
         {logo}
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-neutral-900">{restaurantName}</p>
-          <p className="truncate text-[11px] text-neutral-400">Powered by DhankiPOS</p>
+          <p className="truncate text-[11px] text-neutral-400">Powered by RestroMitra</p>
         </div>
       </div>
     );

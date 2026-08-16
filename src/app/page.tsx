@@ -2,12 +2,17 @@ import Link from "next/link";
 import { Reveal } from "@/components/landing/Reveal";
 import { FaqAccordion, type FaqItem } from "@/components/landing/FaqAccordion";
 import { MobileNav } from "@/components/landing/MobileNav";
+import { LogoMark } from "@/components/Logo";
+import { NavIcon } from "@/components/NavIcon";
 
 // Deliberately no next/font/google pull here — a webfont is bytes and a
 // font-swap the system stack already defined in globals.css doesn't pay
 // at all. Zero download, zero layout shift, and it still reads as
 // intentional at these font-weights/tracking; the "fast, low latency"
-// goal wins over a marginally more distinctive typeface.
+// goal wins over a marginally more distinctive typeface. Same reasoning
+// extends to the hero dashboard mockup below: hand-built markup reusing
+// the app's own icon set, not a screenshot image asset — it never goes
+// stale as the real dashboard evolves and costs nothing to load.
 
 const NAV_LINKS = [
   { href: "#features", label: "Features" },
@@ -40,8 +45,8 @@ const FEATURES: Feature[] = [
     icon: <IconBox />,
   },
   {
-    title: "Staff & attendance",
-    desc: "Role-based logins for every position, with self-service clock-in/out and a live shift roster.",
+    title: "Staff, roles & permissions",
+    desc: "Invite your whole team with self-service clock-in/out — each role sees and can do only what it needs, automatically.",
     icon: <IconUsers />,
   },
   {
@@ -55,14 +60,39 @@ const FEATURES: Feature[] = [
     icon: <IconWallet />,
   },
   {
+    title: "Account books",
+    desc: "A day, month, and year cash book for money actually in and out — plus who still owes whom, at a glance.",
+    icon: <IconLedger />,
+  },
+  {
     title: "Reservations",
     desc: "A day-scoped booking book with its own status flow, from requested through seated to completed.",
     icon: <IconCalendar />,
   },
   {
     title: "Reports & analytics",
-    desc: "Revenue vs. expenses trends, top-selling items, and payment breakdowns for any date range, at a glance.",
+    desc: "Revenue vs. expenses trends, top-selling items, peak hours, and payment breakdowns for any date range, at a glance.",
     icon: <IconChart />,
+  },
+  {
+    title: "AI assistant",
+    desc: `Ask in plain language — "what sold best last week?" — and get an answer pulled straight from your own restaurant's data.`,
+    icon: <IconSparkle />,
+  },
+  {
+    title: "Multi-branch ready",
+    desc: "Run one location or a growing chain from the same login, with staff, tables, and reports scoped to each branch.",
+    icon: <IconBranch />,
+  },
+  {
+    title: "Your own free website",
+    desc: "A public page for your restaurant — menu, gallery, contact info, and a QR code — included, no extra builder needed.",
+    icon: <IconGlobe />,
+  },
+  {
+    title: "English ⇄ Nepali calendar",
+    desc: "Flip the whole dashboard between AD and Bikram Sambat dates with one tap — built for how Nepal actually reads a calendar.",
+    icon: <IconSwitch />,
   },
 ];
 
@@ -84,24 +114,31 @@ const STEPS = [
   },
 ];
 
-type CompareRow = { label: string; dhankipos: string; manual: string; generic: string };
+type CompareRow = { label: string; restromitra: string; manual: string; generic: string };
 
 const COMPARE_ROWS: CompareRow[] = [
-  { label: "Real-time kitchen display", dhankipos: "Included", manual: "—", generic: "Sometimes" },
-  { label: "QR self-ordering", dhankipos: "Included", manual: "—", generic: "Extra add-on" },
-  { label: "Recipe-based stock deduction", dhankipos: "Automatic", manual: "Manual counts", generic: "Rare" },
-  { label: "Role-based staff permissions", dhankipos: "Built in", manual: "—", generic: "Basic" },
-  { label: "Loyalty & customer CRM", dhankipos: "Included", manual: "—", generic: "Extra add-on" },
-  { label: "NPR paisa-accurate billing", dhankipos: "Exact", manual: "Error-prone", generic: "Varies" },
-  { label: "Built for Eastern Nepal", dhankipos: "Yes", manual: "—", generic: "Generic template" },
-  { label: "Setup time", dhankipos: "Minutes", manual: "N/A", generic: "Days to weeks" },
+  { label: "Real-time kitchen display", restromitra: "Included", manual: "—", generic: "Sometimes" },
+  { label: "QR self-ordering", restromitra: "Included", manual: "—", generic: "Extra add-on" },
+  { label: "Recipe-based stock deduction", restromitra: "Automatic", manual: "Manual counts", generic: "Rare" },
+  { label: "Role-based staff permissions", restromitra: "Built in", manual: "—", generic: "Basic" },
+  { label: "Loyalty & customer CRM", restromitra: "Included", manual: "—", generic: "Extra add-on" },
+  { label: "Multi-branch support", restromitra: "Included", manual: "—", generic: "Enterprise plans only" },
+  { label: "Your own restaurant website", restromitra: "Included, free", manual: "—", generic: "Extra add-on" },
+  { label: "NPR paisa-accurate billing", restromitra: "Exact", manual: "Error-prone", generic: "Varies" },
+  { label: "Built for Nepal", restromitra: "Yes", manual: "—", generic: "Generic template" },
+  { label: "Setup time", restromitra: "Minutes", manual: "N/A", generic: "Days to weeks" },
 ];
 
 const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Do I need to install anything or buy hardware?",
     answer:
-      "No. DhankiPOS runs entirely in your browser — on a phone, tablet, or computer you already own. There's nothing to install, and a receipt printer is optional, not required.",
+      "No. RestroMitra runs entirely in your browser — on a phone, tablet, or computer you already own. There's nothing to install, and a receipt printer is optional, not required.",
+  },
+  {
+    question: "Is RestroMitra only for restaurants in Itahari and Sunsari?",
+    answer:
+      "We're launching first in Itahari and Sunsari, Eastern Nepal — that's home, and where we're testing everything closely with real restaurants before scaling up. The platform itself already works for any restaurant, cafe, or momo shop anywhere in Nepal, and we're expanding city by city right behind the launch.",
   },
   {
     question: "How much does it cost after the trial?",
@@ -121,7 +158,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "What if I only run a small tea shop or momo cart?",
     answer:
-      "DhankiPOS scales down as easily as it scales up. Use just the POS and billing if that's all you need today, and turn on QR ordering, inventory, or reports whenever you're ready for them.",
+      "RestroMitra scales down as easily as it scales up. Use just the POS and billing if that's all you need today, and turn on QR ordering, inventory, or reports whenever you're ready for them.",
   },
   {
     question: "Can I cancel anytime?",
@@ -138,7 +175,7 @@ export default function LandingPage() {
           <Link href="/" className="group flex items-center gap-2">
             <LogoMark />
             <span className="text-lg font-bold tracking-tight text-neutral-900">
-              Dhanki<span className="text-orange-600">POS</span>
+              Restro<span className="text-orange-600">Mitra</span>
             </span>
           </Link>
 
@@ -180,9 +217,16 @@ export default function LandingPage() {
         </div>
 
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center text-center">
-          <span className="animate-hero-in mb-5 inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3.5 py-1.5 text-xs font-semibold text-orange-700">
+          <span className="animate-hero-in text-xs font-bold tracking-[0.2em] text-orange-600 uppercase">
+            Restaurant OS · Made in Nepal
+          </span>
+
+          <span
+            className="animate-hero-in mt-4 mb-5 inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3.5 py-1.5 text-xs font-semibold text-orange-700"
+            style={{ animationDelay: "40ms" }}
+          >
             <span className="animate-pulse-ring h-1.5 w-1.5 rounded-full bg-orange-500" />
-            Built for restaurants, cafes &amp; momo shops in Itahari &amp; Sunsari
+            Now live in Itahari &amp; Sunsari — expanding across Nepal
           </span>
 
           <h1
@@ -199,8 +243,9 @@ export default function LandingPage() {
             className="animate-hero-in mt-5 max-w-xl text-base text-neutral-600 sm:text-lg"
             style={{ animationDelay: "160ms" }}
           >
-            QR ordering, POS, kitchen display, inventory, staff, loyalty, and real-time
-            reports — one fast platform, not six disconnected tools stitched together.
+            QR ordering, POS, kitchen display, inventory, staff, loyalty, account books, an
+            AI assistant, and real-time reports — one fast platform, not six disconnected
+            tools stitched together.
           </p>
 
           <div
@@ -222,38 +267,7 @@ export default function LandingPage() {
             No credit card required · No hardware to buy · Cancel anytime
           </p>
 
-          {/* Floating product mockup */}
-          <div className="relative mt-16 h-[19rem] w-full max-w-3xl sm:mt-20 sm:h-[24rem]">
-            <div className="hero-float-card animate-float absolute top-0 left-1/2 w-[19rem] -translate-x-1/2 cursor-default rounded-2xl border border-neutral-200 bg-white p-4 shadow-2xl shadow-orange-900/10 sm:w-[26rem]">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-xs font-semibold text-neutral-500">Today&apos;s sales</span>
-                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                  Live
-                </span>
-              </div>
-              <p className="text-3xl font-extrabold text-neutral-900">Rs 42,860</p>
-              <MockSparkline />
-            </div>
-
-            <div className="hero-float-card animate-float-delayed absolute top-4 -left-2 w-40 cursor-default rounded-xl border border-neutral-200 bg-white p-3 shadow-xl shadow-neutral-900/10 sm:left-6">
-              <span className="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
-                Table 4
-              </span>
-              <p className="mt-1 text-sm font-semibold text-neutral-900">2× Chicken Momo</p>
-              <p className="text-sm text-neutral-500">1× Cold Drink</p>
-              <span className="mt-2 inline-block rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
-                Preparing
-              </span>
-            </div>
-
-            <div className="hero-float-card animate-float-slow absolute right-0 bottom-2 w-44 cursor-default rounded-xl border border-neutral-200 bg-white p-3 shadow-xl shadow-neutral-900/10 sm:right-4">
-              <span className="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
-                Loyalty
-              </span>
-              <p className="mt-1 text-sm font-semibold text-neutral-900">Sunita Rai</p>
-              <p className="text-xs text-neutral-500">1,240 pts · Gold tier</p>
-            </div>
-          </div>
+          <HeroDashboardMockup />
         </div>
       </section>
 
@@ -264,7 +278,7 @@ export default function LandingPage() {
             {[
               "30-day free trial",
               "No credit card required",
-              "Built for Eastern Nepal",
+              "Made in Nepal, for Nepal",
               "One connected system",
             ].map((item) => (
               <div
@@ -351,7 +365,7 @@ export default function LandingPage() {
           <p className="mt-4 text-neutral-600">
             Spreadsheets and register tape don&apos;t talk to your kitchen. Generic,
             one-size-fits-all POS software wasn&apos;t built with Nepal&apos;s restaurants in
-            mind. DhankiPOS was.
+            mind. RestroMitra was.
           </p>
         </Reveal>
 
@@ -361,7 +375,7 @@ export default function LandingPage() {
               <thead>
                 <tr className="bg-neutral-50 text-left text-xs font-semibold tracking-wide text-neutral-500 uppercase">
                   <th className="px-5 py-3.5">Capability</th>
-                  <th className="bg-orange-50 px-5 py-3.5 text-orange-700">DhankiPOS</th>
+                  <th className="bg-orange-50 px-5 py-3.5 text-orange-700">RestroMitra</th>
                   <th className="px-5 py-3.5">Paper &amp; spreadsheets</th>
                   <th className="px-5 py-3.5">Generic POS software</th>
                 </tr>
@@ -376,7 +390,7 @@ export default function LandingPage() {
                   >
                     <td className="px-5 py-3.5 font-medium text-neutral-800">{row.label}</td>
                     <td className="bg-orange-50/60 px-5 py-3.5 font-semibold text-orange-700">
-                      {row.dhankipos}
+                      {row.restromitra}
                     </td>
                     <td className="px-5 py-3.5 text-neutral-500">{row.manual}</td>
                     <td className="px-5 py-3.5 text-neutral-500">{row.generic}</td>
@@ -442,12 +456,12 @@ export default function LandingPage() {
             <Link href="/" className="group flex items-center gap-2">
               <LogoMark />
               <span className="text-base font-bold tracking-tight text-neutral-900">
-                Dhanki<span className="text-orange-600">POS</span>
+                Restro<span className="text-orange-600">Mitra</span>
               </span>
             </Link>
             <p className="mt-2 max-w-xs text-center text-xs text-neutral-400 sm:text-left">
-              An independent restaurant management platform, built for Itahari, Sunsari,
-              and Eastern Nepal.
+              An independent restaurant management platform, launching first in Itahari and
+              Sunsari — built for restaurants across Nepal.
             </p>
           </div>
 
@@ -469,10 +483,183 @@ export default function LandingPage() {
           </nav>
         </div>
         <p className="mt-8 text-center text-xs text-neutral-400">
-          © {new Date().getFullYear()} DhankiPOS. All rights reserved.
+          © {new Date().getFullYear()} RestroMitra. All rights reserved.
         </p>
       </footer>
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------------
+ * Hero dashboard mockup — a miniature of the real dashboard chrome (same
+ * sidebar icons, header pill, and stat-tile shapes DashboardShell/StatTile
+ * use), not a screenshot: it never goes stale as the real UI evolves, and
+ * it's a handful of DOM nodes rather than an image download. Three
+ * floating live-data chips sit on top of the frame, each pausing its
+ * gentle bob on hover — the same `hero-float-card` treatment the previous,
+ * card-only version of this mockup used.
+ * --------------------------------------------------------------------- */
+
+function HeroDashboardMockup() {
+  const sidebarIcons: { icon: React.ReactNode; active?: boolean }[] = [
+    { icon: <NavIcon.Dashboard />, active: true },
+    { icon: <NavIcon.Orders /> },
+    { icon: <NavIcon.Pos /> },
+    { icon: <NavIcon.Reports /> },
+    { icon: <NavIcon.Menu /> },
+  ];
+
+  return (
+    <div className="relative mt-16 w-full max-w-3xl sm:mt-20 md:max-w-4xl">
+      {/* Main dashboard frame */}
+      <div className="hero-float-card animate-float-slow relative mx-auto overflow-hidden rounded-2xl border border-neutral-200 bg-white text-left shadow-2xl shadow-orange-900/10">
+        <div className="flex items-center gap-1.5 border-b border-neutral-100 bg-neutral-50/80 px-4 py-2.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-red-300" />
+          <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
+          <span className="h-2.5 w-2.5 rounded-full bg-green-300" />
+          <span className="ml-2 truncate text-[11px] font-medium text-neutral-400">
+            RestroMitra — Dashboard
+          </span>
+          <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-ring" />
+            Live
+          </span>
+        </div>
+
+        <div className="flex">
+          <div className="hidden w-14 flex-none flex-col items-center gap-4 border-r border-neutral-100 bg-neutral-50/60 py-5 sm:flex">
+            {sidebarIcons.map((item, i) => (
+              <span
+                key={i}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg ${
+                  item.active ? "bg-orange-100 text-orange-600" : "text-neutral-400"
+                }`}
+              >
+                {item.icon}
+              </span>
+            ))}
+          </div>
+
+          <div className="min-w-0 flex-1 p-4 sm:p-5">
+            <div className="flex items-center justify-between rounded-lg border border-neutral-100 px-3 py-2">
+              <span className="text-xs font-semibold text-neutral-700 sm:text-sm">Cafe Pink Floyd</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-600 px-2.5 py-1 text-[10px] font-semibold text-white sm:text-xs">
+                <span className="flex h-3 w-3 items-center justify-center">
+                  <NavIcon.Pos />
+                </span>
+                Open POS
+              </span>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+              <MockStat label="Today's sales" value="Rs 42,860" color="blue" />
+              <MockStat label="Orders" value="38" color="orange" />
+              <MockStat label="Net profit" value="Rs 18,240" color="green" />
+              <MockStat label="Peak hour" value="7 PM" color="amber" />
+            </div>
+
+            <div className="mt-3 rounded-xl border border-neutral-100 p-3">
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide">
+                  This week&apos;s revenue
+                </span>
+              </div>
+              <MockChart />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Floating live-data chips — each anchored to a corner and pulled
+          mostly clear of the frame (only its own rounded corner tucks
+          underneath), so the chip never sits on top of readable dashboard
+          content. Same placement idea as the reference layout this hero
+          is modeled on: a "Revenue today" chip riding the top-left corner,
+          a real-time order chip riding the bottom-right. */}
+      <div className="hero-float-card animate-float absolute -top-12 -left-3 w-[10.5rem] cursor-default rounded-xl border border-neutral-200 bg-white p-3 shadow-xl shadow-neutral-900/10 sm:-top-14 sm:-left-10 sm:w-48">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
+            Revenue today
+          </span>
+          <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700">
+            Live
+          </span>
+        </div>
+        <p className="mt-1 text-lg font-extrabold text-neutral-900 sm:text-xl">Rs 52,840</p>
+      </div>
+
+      <div className="hero-float-card animate-float-delayed absolute -bottom-14 -right-3 w-40 cursor-default rounded-xl border border-neutral-200 bg-white p-3 shadow-xl shadow-neutral-900/10 sm:-bottom-16 sm:-right-10 sm:w-48">
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-1.5 py-0.5 text-[9px] font-semibold text-red-600">
+          <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-ring" />
+          Real-time
+        </span>
+        <p className="mt-1.5 text-sm font-semibold text-neutral-900">New order · Table 9</p>
+        <p className="text-xs text-neutral-500">2× Chicken Momo, 1× Cold Drink</p>
+      </div>
+
+      <div className="hero-float-card animate-float-slow absolute top-[38%] -left-3 hidden w-40 -translate-y-1/2 cursor-default rounded-xl border border-neutral-200 bg-white p-3 shadow-xl shadow-neutral-900/10 md:-left-32 md:block md:w-44">
+        <span className="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">Loyalty</span>
+        <p className="mt-1 text-sm font-semibold text-neutral-900">Sunita Rai</p>
+        <p className="text-xs text-neutral-500">1,240 pts · Gold tier</p>
+      </div>
+    </div>
+  );
+}
+
+const STAT_COLORS = {
+  blue: { bg: "bg-blue-50", text: "text-blue-600" },
+  orange: { bg: "bg-orange-50", text: "text-orange-600" },
+  green: { bg: "bg-emerald-50", text: "text-emerald-600" },
+  amber: { bg: "bg-amber-50", text: "text-amber-600" },
+} as const;
+
+function MockStat({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color: keyof typeof STAT_COLORS;
+}) {
+  const c = STAT_COLORS[color];
+  return (
+    <div className={`rounded-lg ${c.bg} px-2.5 py-2`}>
+      <p className={`text-sm font-bold sm:text-base ${c.text}`}>{value}</p>
+      <p className="mt-0.5 truncate text-[9px] font-medium text-neutral-500 sm:text-[10px]">{label}</p>
+    </div>
+  );
+}
+
+// A "drawn on load" revenue line — pathLength="1" normalizes the path to a
+// 0-1 length regardless of its actual geometry, so the CSS keyframe (see
+// .animate-chart-draw in globals.css) can animate strokeDashoffset in
+// simple fractional units instead of hand-measuring pixel path length.
+function MockChart() {
+  return (
+    <svg viewBox="0 0 280 64" fill="none" className="h-16 w-full">
+      <path
+        d="M0 48 L28 42 L56 50 L84 32 L112 36 L140 20 L168 28 L196 14 L224 22 L252 8 L280 16"
+        stroke="#ea580c"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+        pathLength={1}
+        className="animate-chart-draw"
+      />
+      <path
+        d="M0 48 L28 42 L56 50 L84 32 L112 36 L140 20 L168 28 L196 14 L224 22 L252 8 L280 16 L280 64 L0 64 Z"
+        fill="url(#hero-chart-fill)"
+        opacity="0.45"
+      />
+      <defs>
+        <linearGradient id="hero-chart-fill" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#fb923c" stopOpacity="0.35" />
+          <stop offset="1" stopColor="#fb923c" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+    </svg>
   );
 }
 
@@ -481,22 +668,6 @@ export default function LandingPage() {
  * dependency, same "keep the marketing bundle light" reasoning as the
  * CSS-only animations above.
  * --------------------------------------------------------------------- */
-
-function LogoMark() {
-  return (
-    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-600 text-white shadow-sm transition-transform duration-500 ease-out group-hover:rotate-6 group-hover:scale-105">
-      <svg viewBox="0 0 24 24" fill="none" className="h-4.5 w-4.5">
-        <path
-          d="M6 3v7a2 2 0 0 0 2 2v9M6 3v6M8 3v6M10 3v6M10 3v18M18 3c-2.2 0-4 2.2-4 6s1.8 6 4 6v9"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
-  );
-}
 
 function ArrowRight({ color }: { color?: string }) {
   return (
@@ -521,32 +692,6 @@ function CheckCircle() {
     >
       <circle cx="10" cy="10" r="9" stroke="currentColor" strokeWidth="1.4" />
       <path d="M6.5 10.2l2.2 2.2 4.8-4.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function MockSparkline() {
-  return (
-    <svg viewBox="0 0 240 56" fill="none" className="mt-3 h-14 w-full">
-      <path
-        d="M0 42 L24 38 L48 44 L72 28 L96 32 L120 18 L144 24 L168 12 L192 20 L216 8 L240 14"
-        stroke="#ea580c"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-      <path
-        d="M0 42 L24 38 L48 44 L72 28 L96 32 L120 18 L144 24 L168 12 L192 20 L216 8 L240 14 L240 56 L0 56 Z"
-        fill="url(#sparkline-fill)"
-        opacity="0.5"
-      />
-      <defs>
-        <linearGradient id="sparkline-fill" x1="0" y1="0" x2="0" y2="56" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#fb923c" stopOpacity="0.35" />
-          <stop offset="1" stopColor="#fb923c" stopOpacity="0" />
-        </linearGradient>
-      </defs>
     </svg>
   );
 }
@@ -621,6 +766,19 @@ function IconWallet() {
     </svg>
   );
 }
+function IconLedger() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+      <path
+        d="M12 6.5c-1.6-1.2-3.6-1.8-5.5-1.8-1 0-2 .15-2.9.45v13.6c.9-.3 1.9-.45 2.9-.45 1.9 0 3.9.6 5.5 1.8m0-13.6c1.6-1.2 3.6-1.8 5.5-1.8 1 0 2 .15 2.9.45v13.6c-.9-.3-1.9-.45-2.9-.45-1.9 0-3.9.6-5.5 1.8m0-13.6v13.6"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 function IconCalendar() {
   return (
     <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
@@ -635,6 +793,54 @@ function IconChart() {
     <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
       <path d="M4 20V10M11 20V4M18 20v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M3 20h19" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconSparkle() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+      <path
+        d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <path d="M19 15l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2z" fill="currentColor" />
+    </svg>
+  );
+}
+function IconBranch() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+      <circle cx="12" cy="4.5" r="2.3" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="5.5" cy="18.5" r="2.3" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="18.5" cy="18.5" r="2.3" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M12 6.8v3.2M12 10c0 2-2.4 3.6-4.8 5.6M12 10c0 2 2.4 3.6 4.8 5.6"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+function IconGlobe() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M3 12h18M12 3c2.5 2.5 3.8 5.8 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.8-3.8-9S9.5 5.5 12 3z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+    </svg>
+  );
+}
+function IconSwitch() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+      <path d="M4 8h13M17 8l-3-3M17 8l-3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M20 16H7M7 16l3-3M7 16l3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "DhankiPOS — Restaurant Management for Itahari & Sunsari",
+  title: "RestroMitra — The Restaurant Operating System for Nepal",
   description:
-    "All-in-one restaurant management platform for restaurants, cafes, and momo shops in Itahari, Sunsari, and Eastern Nepal: POS, QR ordering, kitchen display, inventory, and more.",
+    "The all-in-one restaurant operating system built for Nepal: POS, QR ordering, kitchen display, inventory, staff & branches, loyalty, account books, an AI assistant, and your own free website — one connected platform, in English or the Nepali calendar. Launching first in Itahari & Sunsari, expanding across Nepal.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

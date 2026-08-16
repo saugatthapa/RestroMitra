@@ -106,7 +106,7 @@ export function maxStaffForRestaurant(restaurant: { planKey: string | null }): n
 
 /**
  * Trial default for branches: 2, not 1 — generous enough that a restaurant
- * actually evaluating whether DhankiPOS fits a multi-location business can
+ * actually evaluating whether RestroMitra fits a multi-location business can
  * try that during the trial itself, rather than being forced to commit to
  * a paid plan before finding out. (Contrast with TRIAL_MAX_STAFF's "10" —
  * same spirit of not gating evaluation, just a smaller number because

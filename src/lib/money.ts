@@ -1,5 +1,5 @@
 /**
- * All money in DhankiPOS is stored and computed as integer paisa
+ * All money in RestroMitra is stored and computed as integer paisa
  * (1/100 NPR) — never as a float. Floats cannot represent most decimal
  * fractions exactly (0.1 + 0.2 !== 0.3 in IEEE-754), which is exactly the
  * kind of error that must never happen in a bill total. Integers under

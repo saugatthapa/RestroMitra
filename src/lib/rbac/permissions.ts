@@ -1,5 +1,5 @@
 /**
- * Central permission catalog for DhankiPOS.
+ * Central permission catalog for RestroMitra.
  *
  * This is the single source of truth for every granular permission string
  * used across the app. API routes and server actions must check against

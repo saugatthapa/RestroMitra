@@ -219,7 +219,7 @@ export default async function PublicWebsitePage({
       </section>
 
       <footer className={`px-6 py-6 text-center text-xs ${classes.subtext}`}>
-        Powered by DhankiPOS
+        Powered by RestroMitra
       </footer>
     </div>
   );

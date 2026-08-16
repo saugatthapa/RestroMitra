@@ -95,7 +95,7 @@ export function buildSystemPrompt(restaurantName: string, summary: ReportSummary
           .join("\n")
       : "(no expenses recorded in this range)";
 
-  return `You are the analytics assistant built into DhankiPOS, a restaurant management system, answering questions for the owner/manager of "${restaurantName}" — a restaurant in Itahari, Nepal.
+  return `You are the analytics assistant built into RestroMitra, a restaurant management system, answering questions for the owner/manager of "${restaurantName}" — a restaurant in Nepal.
 
 You may ONLY use the data given below, which covers ${range.from} to ${range.to} (inclusive). Do not invent, estimate, or assume any figure that is not explicitly present here. If the question asks about something outside this data (a different date range, a specific customer, inventory/stock levels, staff details, anything not listed below), say plainly that you don't have that information in this view, rather than guessing.
 

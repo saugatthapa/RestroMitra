@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AuthMarketingPanel } from "@/components/auth/AuthMarketingPanel";
+import { LogoMark } from "@/components/Logo";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -15,8 +16,11 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             >
               ← Back
             </Link>
-            <Link href="/" className="text-lg font-semibold tracking-tight text-neutral-900">
-              Dhanki<span className="text-orange-600">POS</span>
+            <Link href="/" className="group flex items-center gap-2">
+              <LogoMark className="h-7 w-7" />
+              <span className="text-lg font-semibold tracking-tight text-neutral-900">
+                Restro<span className="text-orange-600">Mitra</span>
+              </span>
             </Link>
           </div>
           {children}

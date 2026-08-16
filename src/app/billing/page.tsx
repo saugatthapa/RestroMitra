@@ -32,7 +32,7 @@ export default async function BillingPage() {
       <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3 md:px-6">
         <div className="flex items-center gap-3">
           <span className="text-lg font-semibold tracking-tight text-neutral-900">
-            Dhanki<span className="text-orange-600">POS</span>
+            Restro<span className="text-orange-600">Mitra</span>
           </span>
           <span className="hidden text-sm text-neutral-400 sm:inline">/ Billing</span>
         </div>

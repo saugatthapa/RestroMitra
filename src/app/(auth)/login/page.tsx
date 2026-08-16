@@ -85,7 +85,7 @@ function LoginForm() {
         </form>
 
         <p className="mt-6 text-center text-sm text-neutral-500">
-          New to DhankiPOS?{" "}
+          New to RestroMitra?{" "}
           <Link href="/register" className="font-medium text-orange-600 hover:text-orange-700">
             Create an account
           </Link>

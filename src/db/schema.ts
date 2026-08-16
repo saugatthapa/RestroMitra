@@ -16,7 +16,7 @@ import {
 import { relations, sql } from "drizzle-orm";
 
 /**
- * DhankiPOS — Phase 1 schema
+ * RestroMitra — Phase 1 schema
  * Foundation: users, restaurants, branches, roles, permissions, sessions.
  *
  * Multi-tenancy rule (enforced in application code, not just here):

@@ -356,7 +356,7 @@ function AddStaffForm({
         </label>
       </div>
       <p className="mt-2 text-xs text-neutral-400">
-        If this phone number already has a DhankiPOS account, they&apos;re just granted a role here —
+        If this phone number already has a RestroMitra account, they&apos;re just granted a role here —
         name and password are ignored. Otherwise a new account is created with the name and password
         above.
       </p>
