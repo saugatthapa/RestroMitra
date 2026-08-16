@@ -38,6 +38,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# netlify (local CLI link state — site ID etc., not something to commit)
+.netlify
+
 # local verification artifacts (Playwright screenshot tour output from
 # dev-time QA passes — not part of the shipped app)
 /screenshots

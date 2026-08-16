@@ -611,6 +611,37 @@ easiest path since it auto-detects Next.js and needs no custom build config.
    onboarding — this exercises the DB connection, session cookies, and RBAC seed data
    end to end. If registration works, the deploy is healthy.
 
+### Deploying to Netlify
+
+Netlify works too, via the official `@netlify/plugin-nextjs` runtime (auto-installed —
+no manual plugin setup needed). `netlify.toml` at the repo root already pins the build
+command and publish directory, so importing the repo needs no manual configuration
+beyond env vars.
+
+1. **Push this repo to GitHub**, then go to
+   [app.netlify.com](https://app.netlify.com) → **Add new site → Import an existing
+   project**, and pick the repo. Netlify reads `netlify.toml` and detects Next.js
+   automatically.
+
+2. **Provision Postgres and set environment variables** — identical to the Vercel
+   steps above (same env var table, same pooled-vs-direct URL split). Set them under
+   **Site configuration → Environment variables**.
+
+3. **Deploy, then run migrations and verify** — same as Vercel steps 4–6 above.
+   Netlify doesn't run `db:migrate` for you either.
+
+**A note on the build command:** `npm run build` runs `next build --webpack` rather
+than plain `next build`. Next.js 16's default production build tool (Turbopack) has an
+open upstream bug where it can non-deterministically crash while prerendering with
+`Cannot read properties of null (reading 'useContext')` — it's worker-count-sensitive,
+so it can build cleanly on one machine and fail on another with different concurrency
+(this is exactly what happened testing this app on Netlify's build workers, while an
+identical `next build` succeeded elsewhere). Forcing webpack for the build step sidesteps
+it entirely; `next dev` is unaffected and still uses Turbopack. See
+[vercel/next.js#95741](https://github.com/vercel/next.js/issues/95741) and
+[vercel/next.js#86178](https://github.com/vercel/next.js/issues/86178) — worth
+revisiting `--webpack` once that's fixed upstream.
+
 ### Notes specific to a serverless host
 
 - `src/proxy.ts` (Next.js 16 renamed `middleware.ts` → `proxy.ts`) only checks for a

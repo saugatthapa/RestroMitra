@@ -1,0 +1,9 @@
+# Pins the build config in the repo instead of relying only on whatever's
+# set in the Netlify UI, so a fresh site connected to this repo (or a
+# teammate's site) gets identical settings without reconfiguring by hand.
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
