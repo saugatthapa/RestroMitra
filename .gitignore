@@ -30,8 +30,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — everything except the placeholder-only template, which is
+# meant to be committed as the reference for what to set in Vercel/locally
 .env*
+!.env.example
 
 # vercel
 .vercel
