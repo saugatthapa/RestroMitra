@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { apiGet, apiPost } from "@/lib/api-client";
 import { NavIcon } from "@/components/NavIcon";
+import { formatAdDate, formatBsDate } from "@/lib/nepali-date";
 
 // Nav is grouped (Overview / Front of house / Back office / Account) with an
 // icon per item, rather than one flat 16-item list — the flat list was the
@@ -27,6 +28,8 @@ type NavGroup = {
 };
 
 const SIDEBAR_COLLAPSED_KEY = "dhankipos:sidebar-collapsed";
+const DATE_SYSTEM_KEY = "dhankipos:date-system";
+type DateSystem = "AD" | "BS";
 
 function daysRemaining(trialEndsAt: string | null): number | null {
   if (!trialEndsAt) return null;
@@ -134,6 +137,21 @@ export function DashboardShell({
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
   }, [collapsed]);
+
+  // AD/BS calendar toggle — a per-device preference (like the sidebar
+  // collapse state above), not per-restaurant or per-user in the database,
+  // since which calendar someone reads dates in has nothing to do with
+  // which restaurant they're looking at. Defaults to BS: this is a Nepali
+  // restaurant product and staff here think in the Nepali calendar day to
+  // day, with AD as the toggle-away option rather than the default.
+  const [dateSystem, setDateSystem] = useState<DateSystem>(() => {
+    if (typeof window === "undefined") return "BS";
+    return window.localStorage.getItem(DATE_SYSTEM_KEY) === "AD" ? "AD" : "BS";
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(DATE_SYSTEM_KEY, dateSystem);
+  }, [dateSystem]);
 
   // Live "N active" / "Kitchen Clear|Busy" header pills — same 5s polling
   // cadence OrdersBoard.tsx already uses, backed by a real query
@@ -523,6 +541,8 @@ export function DashboardShell({
               </span>
             )}
 
+            <DateSystemToggle dateSystem={dateSystem} onChange={setDateSystem} />
+
             <div className="mx-1 hidden h-6 w-px bg-neutral-200 sm:block" aria-hidden="true" />
 
             <NotificationBell
@@ -653,6 +673,56 @@ function NotificationBell({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Header AD/BS calendar toggle — today's date, switchable between the
+ * Nepali (Bikram Sambat) and Gregorian calendars. A `nepali-date-converter`-
+ * backed label (see src/lib/nepali-date.ts) next to a two-way segmented
+ * switch, styled like the notification bell's pill so the two read as one
+ * family of header controls rather than one borrowed from elsewhere.
+ *
+ * This only reformats *today's date shown here*, in this toggle — it does
+ * not (yet) change how dates render on Orders, Reports, Reservations, etc.
+ * elsewhere in the app. Extending the preference to those screens is a
+ * separate, larger change (each of those has its own date formatting
+ * today) and wasn't part of what was asked for here.
+ */
+function DateSystemToggle({
+  dateSystem,
+  onChange,
+}: {
+  dateSystem: DateSystem;
+  onChange: (next: DateSystem) => void;
+}) {
+  const today = new Date();
+  const label = dateSystem === "BS" ? formatBsDate(today) : formatAdDate(today);
+
+  return (
+    <div className="hidden items-center gap-2 rounded-full border border-neutral-200 bg-white py-1 pl-1 pr-3 text-xs font-medium text-neutral-600 sm:flex">
+      <div className="flex items-center rounded-full bg-neutral-100 p-0.5" role="group" aria-label="Calendar system">
+        {(["BS", "AD"] as const).map((system) => (
+          <button
+            key={system}
+            type="button"
+            onClick={() => onChange(system)}
+            aria-pressed={dateSystem === system}
+            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ${
+              dateSystem === system
+                ? "bg-white text-orange-700 shadow-sm"
+                : "text-neutral-400 hover:text-neutral-600"
+            }`}
+          >
+            {system}
+          </button>
+        ))}
+      </div>
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-neutral-400" aria-hidden="true">
+        <NavIcon.Calendar />
+      </span>
+      <span className="whitespace-nowrap">{label}</span>
     </div>
   );
 }

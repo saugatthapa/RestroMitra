@@ -168,4 +168,10 @@ export const NavIcon = {
       <path d="M12 8v5M12 16h.01" />
     </svg>
   ),
+  Calendar: () => (
+    <svg {...iconProps}>
+      <rect x="4" y="5" width="16" height="15" rx="2" />
+      <path d="M4 10h16M8 3v4M16 3v4" />
+    </svg>
+  ),
 };
