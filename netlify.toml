@@ -5,5 +5,11 @@
   command = "npm run build"
   publish = ".next"
 
+[build.environment]
+  # Pinned to a version actually verified locally (many builds, clean every
+  # time) rather than letting Netlify pick its own default/latest — Netlify
+  # was defaulting to Node 24.19.0, an untested combination with Next 16.
+  NODE_VERSION = "22"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
