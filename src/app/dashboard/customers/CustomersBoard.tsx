@@ -343,7 +343,6 @@ function CustomerDetail({
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, customerId]);
@@ -531,7 +530,6 @@ function BirthdayEditor({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setValue(dateOfBirth ?? "");
   }, [dateOfBirth]);
 

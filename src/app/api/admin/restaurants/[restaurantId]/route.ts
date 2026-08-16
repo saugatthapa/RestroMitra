@@ -10,7 +10,7 @@ const EVENT_HISTORY_LIMIT = 50;
 
 export async function GET(
   _request: Request,
-  ctx: RouteContext<"/api/admin/restaurants/[restaurantId]">,
+  ctx: { params: Promise<{ restaurantId: string }> },
 ) {
   try {
     await requirePlatformAdmin();

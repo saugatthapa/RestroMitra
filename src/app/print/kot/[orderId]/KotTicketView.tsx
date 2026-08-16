@@ -63,7 +63,6 @@ export function KotTicketView({
 
   useEffect(() => {
     if (!order || hasAutoPrinted) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHasAutoPrinted(true);
     // A short delay lets the browser finish painting the ticket before the
     // print dialog steals focus — printing mid-layout can clip content on

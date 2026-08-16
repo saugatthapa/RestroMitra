@@ -29,7 +29,7 @@ async function getOwnedTable(restaurantId: string, tableId: string) {
  */
 export async function GET(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/tables/[tableId]">,
+  ctx: { params: Promise<{ slug: string; tableId: string }> },
 ) {
   try {
     const { slug, tableId } = await ctx.params;
@@ -69,7 +69,7 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/tables/[tableId]">,
+  ctx: { params: Promise<{ slug: string; tableId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
@@ -117,7 +117,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/tables/[tableId]">,
+  ctx: { params: Promise<{ slug: string; tableId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

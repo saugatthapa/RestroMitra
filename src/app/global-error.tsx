@@ -3,25 +3,26 @@
 /**
  * Root-level error boundary — catches anything an error.tsx further down
  * the tree didn't (including errors in the root layout itself). Without
- * this file, Next.js auto-generates its own default global-error page —
- * and that auto-generated page is what was crashing the Netlify build
- * (see next.config.ts's comment on experimental.cpus for the full
- * investigation). Providing our own removes Next's default from the
- * picture entirely: deliberately minimal, no imports beyond React, no
- * Tailwind classes (per Next's docs, global-error renders its own
- * document and the app's compiled CSS isn't guaranteed to be loaded here),
- * just inline styles in the brand color.
+ * this file, Next.js auto-generates its own default global-error page.
+ * On Next 16 that auto-generated page was crashing the Netlify build
+ * outright (see the README's "Deploying to Netlify" section for the full
+ * investigation, which is ultimately why this app is pinned to Next 15).
+ * Kept even after the downgrade since every production Next app should
+ * have one: deliberately minimal, no imports beyond React, no Tailwind
+ * classes (per Next's docs, global-error renders its own document and the
+ * app's compiled CSS isn't guaranteed to be loaded here), just inline
+ * styles in the brand color.
  *
  * Must be a Client Component and must render its own <html>/<body> — this
- * fully replaces the root layout when it activates. `retry` is this Next
- * version's prop name (older Next docs call it `reset`).
+ * fully replaces the root layout when it activates. `reset` is Next 15's
+ * prop name (Next 16 renamed it to `retry`).
  */
 export default function GlobalError({
   error,
-  retry,
+  reset,
 }: {
   error: Error & { digest?: string };
-  retry: () => void;
+  reset: () => void;
 }) {
   return (
     <html lang="en">
@@ -53,7 +54,7 @@ export default function GlobalError({
           </p>
           <button
             type="button"
-            onClick={() => retry()}
+            onClick={() => reset()}
             style={{
               backgroundColor: "#ea580c",
               color: "#fff",

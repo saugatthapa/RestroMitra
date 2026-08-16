@@ -26,7 +26,7 @@ const CUSTOMER_LIST_LIMIT = 200;
  */
 export async function GET(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/customers">,
+  ctx: { params: Promise<{ slug: string }> },
 ) {
   try {
     const { slug } = await ctx.params;
@@ -76,7 +76,7 @@ export async function GET(
  */
 export async function POST(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/customers">,
+  ctx: { params: Promise<{ slug: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

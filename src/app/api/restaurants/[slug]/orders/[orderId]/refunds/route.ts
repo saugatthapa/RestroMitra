@@ -33,7 +33,7 @@ import { requireBranchAccess } from "@/lib/rbac/guard";
  */
 export async function POST(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/orders/[orderId]/refunds">,
+  ctx: { params: Promise<{ slug: string; orderId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

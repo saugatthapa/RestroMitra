@@ -19,7 +19,7 @@ import { markTableSeated, releaseTableIfSoleReservation } from "@/lib/tables";
  */
 export async function PATCH(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/reservations/[reservationId]/status">,
+  ctx: { params: Promise<{ slug: string; reservationId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

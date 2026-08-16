@@ -116,7 +116,6 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
 
   useEffect(() => {
     // Mount-time fetch plus polling — same pattern as OrdersBoard.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     const poll = setInterval(load, 5000);
     const tick = setInterval(() => forceTick((n) => n + 1), 30_000);

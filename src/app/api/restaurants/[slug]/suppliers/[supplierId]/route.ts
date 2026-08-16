@@ -22,7 +22,7 @@ async function getOwnedSupplier(restaurantId: string, supplierId: string) {
 // referenced by historical purchases and inventory items' preferredSupplierId.
 export async function PATCH(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/suppliers/[supplierId]">,
+  ctx: { params: Promise<{ slug: string; supplierId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

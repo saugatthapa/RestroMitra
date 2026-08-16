@@ -24,7 +24,7 @@ async function getOwnedItem(restaurantId: string, itemId: string) {
 
 export async function PATCH(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/menu-items/[itemId]">,
+  ctx: { params: Promise<{ slug: string; itemId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
@@ -102,7 +102,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/menu-items/[itemId]">,
+  ctx: { params: Promise<{ slug: string; itemId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

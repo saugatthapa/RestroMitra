@@ -112,7 +112,6 @@ function ItemsTab({ slug, canViewProfit }: { slug: string; canViewProfit: boolea
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
@@ -444,7 +443,6 @@ function SuppliersTab({ slug }: { slug: string }) {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
@@ -606,7 +604,6 @@ function PurchasesTab({ slug, canViewProfit }: { slug: string; canViewProfit: bo
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
@@ -839,7 +836,6 @@ function RecipesTab({ slug, canViewProfit }: { slug: string; canViewProfit: bool
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
@@ -863,7 +859,6 @@ function RecipesTab({ slug, canViewProfit }: { slug: string; canViewProfit: bool
 
   useEffect(() => {
     if (selectedMenuItemId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadRecipe(selectedMenuItemId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

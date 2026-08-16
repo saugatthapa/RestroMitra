@@ -110,7 +110,6 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
 
   useEffect(() => {
     // Mount-time fetch — load() only changes identity when slug changes.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 
@@ -123,7 +122,6 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
 
   useEffect(() => {
     if (!floors.includes(activeFloor)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveFloor(floors[0]);
     }
   }, [floors, activeFloor]);

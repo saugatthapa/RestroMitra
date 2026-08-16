@@ -52,7 +52,6 @@ export function TablesManager({ slug }: { slug: string }) {
     // Mount-time (and slug/branch-filter-change-time) data fetch, not a
     // cascading-render loop — loadTables() only re-runs when one of its
     // own dependencies actually changes.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTables(branchFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, branchFilter]);

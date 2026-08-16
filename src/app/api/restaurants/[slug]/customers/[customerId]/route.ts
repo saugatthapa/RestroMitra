@@ -20,7 +20,7 @@ const RECENT_LEDGER_LIMIT = 50;
  */
 export async function GET(
   _request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/customers/[customerId]">,
+  ctx: { params: Promise<{ slug: string; customerId: string }> },
 ) {
   try {
     const { slug, customerId } = await ctx.params;
@@ -84,7 +84,7 @@ export async function GET(
  */
 export async function PATCH(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/customers/[customerId]">,
+  ctx: { params: Promise<{ slug: string; customerId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

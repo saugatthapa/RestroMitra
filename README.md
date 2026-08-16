@@ -211,7 +211,7 @@ one restaurant cannot access another's data.
 
 ## Tech stack
 
-- **Next.js 16** (App Router, TypeScript, Turbopack)
+- **Next.js 15** (App Router, TypeScript)
 - **Drizzle ORM** + **postgres.js**, targeting **PostgreSQL** (developed against
   Supabase's hosted Postgres; also works against any Postgres instance)
 - **Tailwind CSS v4**
@@ -494,8 +494,7 @@ src/
                                        given) and askAssistant() (Anthropic Messages
                                        API call with an injectable fetchImpl)
     restaurant.ts, slug.ts, audit.ts, rate-limit.ts, api-client.ts, request.ts
-  proxy.ts                          — optimistic auth redirect (Next 16 renamed
-                                       "middleware" to "proxy"); NOT the source of
+  middleware.ts                     — optimistic auth redirect; NOT the source of
                                        truth for authorization — that's guard.ts
 ```
 
@@ -630,23 +629,24 @@ beyond env vars.
 3. **Deploy, then run migrations and verify** — same as Vercel steps 4–6 above.
    Netlify doesn't run `db:migrate` for you either.
 
-**A note on the build command:** `npm run build` runs `next build --webpack` rather
-than plain `next build`. Next.js 16's default production build tool (Turbopack) has an
-open upstream bug where it can non-deterministically crash while prerendering with
-`Cannot read properties of null (reading 'useContext')` — it's worker-count-sensitive,
-so it can build cleanly on one machine and fail on another with different concurrency
-(this is exactly what happened testing this app on Netlify's build workers, while an
-identical `next build` succeeded elsewhere). Forcing webpack for the build step sidesteps
-it entirely; `next dev` is unaffected and still uses Turbopack. See
-[vercel/next.js#95741](https://github.com/vercel/next.js/issues/95741) and
-[vercel/next.js#86178](https://github.com/vercel/next.js/issues/86178) — worth
-revisiting `--webpack` once that's fixed upstream.
+**Why this app is pinned to Next.js 15, not 16:** it was originally built against
+Next 16, but Next 16.3.1's production build has an open upstream bug where static-page
+generation can crash while prerendering with `Cannot read properties of null (reading
+'useContext')` — confirmed to fail consistently on Netlify's build machines across
+several independent build configurations (Turbopack and webpack, 1 worker and default
+concurrency, Node 22.22 and 22.23), none of which fixed it, and never reproducible in
+local testing. See [vercel/next.js#95741](https://github.com/vercel/next.js/issues/95741),
+[vercel/next.js#86178](https://github.com/vercel/next.js/issues/86178), and
+[vercel/next.js#84994](https://github.com/vercel/next.js/issues/84994) for the upstream
+reports. Next 15.5.x doesn't have this bug. Worth revisiting the Next 16 upgrade once
+that's resolved upstream — the app itself has no Next-16-only code left (route handlers
+use inline `Promise<{...}>` param types rather than Next 16's generated `RouteContext`
+helper, and `middleware.ts` uses its Next-15-era name and export).
 
 ### Notes specific to a serverless host
 
-- `src/proxy.ts` (Next.js 16 renamed `middleware.ts` → `proxy.ts`) only checks for a
-  session cookie's presence for redirect purposes; it does no DB work, so it's cheap
-  to run on every request at the edge.
+- `src/middleware.ts` only checks for a session cookie's presence for redirect
+  purposes; it does no DB work, so it's cheap to run on every request at the edge.
 - The `postgres` driver is configured with `prepare: false` (see `src/db/index.ts`)
   specifically so it works against Supabase's transaction-mode pooler — don't remove
   that if you swap the connection string for an unpooled one, or re-add it if you

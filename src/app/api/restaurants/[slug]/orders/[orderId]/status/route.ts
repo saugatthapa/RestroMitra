@@ -37,7 +37,7 @@ import { syncTableStatusFromOrders } from "@/lib/tables";
  */
 export async function PATCH(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/orders/[orderId]/status">,
+  ctx: { params: Promise<{ slug: string; orderId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

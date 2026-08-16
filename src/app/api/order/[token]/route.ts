@@ -23,7 +23,7 @@ import { assertTableAcceptsOrders, syncTableStatusFromOrders } from "@/lib/table
  */
 export async function POST(
   request: Request,
-  ctx: RouteContext<"/api/order/[token]">,
+  ctx: { params: Promise<{ token: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

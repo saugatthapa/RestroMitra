@@ -23,7 +23,7 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
  */
 export async function PATCH(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/tables/[tableId]/status">,
+  ctx: { params: Promise<{ slug: string; tableId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

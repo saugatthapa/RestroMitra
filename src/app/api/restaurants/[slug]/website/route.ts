@@ -14,7 +14,7 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
  * getOrCreateWebsiteConfig) so the dashboard editor always has something
  * to render.
  */
-export async function GET(_request: Request, ctx: RouteContext<"/api/restaurants/[slug]/website">) {
+export async function GET(_request: Request, ctx: { params: Promise<{ slug: string }> }) {
   try {
     const { slug } = await ctx.params;
     const { restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_RESTAURANT_SETTINGS);
@@ -29,7 +29,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/restaurants
 }
 
 /** Applies a partial update to the website config — see updateWebsiteSchema for accepted fields. */
-export async function PATCH(request: Request, ctx: RouteContext<"/api/restaurants/[slug]/website">) {
+export async function PATCH(request: Request, ctx: { params: Promise<{ slug: string }> }) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }

@@ -26,7 +26,7 @@ import { initiateKhaltiPayment, KhaltiApiError } from "@/lib/payment-gateways/kh
  */
 export async function POST(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/orders/[orderId]/payments/gateway/[gateway]/initiate">,
+  ctx: { params: Promise<{ slug: string; orderId: string; gateway: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

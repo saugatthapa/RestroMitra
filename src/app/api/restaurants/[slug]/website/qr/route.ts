@@ -12,7 +12,7 @@ import { renderQrPng } from "@/lib/qr";
  * live public URL regardless of publish state (letting an owner preview
  * the code before actually publishing).
  */
-export async function GET(_request: Request, ctx: RouteContext<"/api/restaurants/[slug]/website/qr">) {
+export async function GET(_request: Request, ctx: { params: Promise<{ slug: string }> }) {
   try {
     const { slug } = await ctx.params;
     await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_RESTAURANT_SETTINGS);

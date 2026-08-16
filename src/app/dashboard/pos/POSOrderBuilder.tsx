@@ -259,7 +259,6 @@ export function POSOrderBuilder({
       }
     }
     load();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshQueue();
     return () => {
       cancelled = true;
@@ -278,7 +277,6 @@ export function POSOrderBuilder({
       // Sync search UI state back to "empty" once the query is too short to
       // search on — same "sync-from-effect is the actual intent here"
       // reasoning as the refreshQueue() call above.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCustomerSearchResults([]);
       setCustomerSearching(false);
       return;

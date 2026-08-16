@@ -33,7 +33,7 @@ function daysAgoIso(days: number) {
  */
 export async function GET(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/reports/summary">,
+  ctx: { params: Promise<{ slug: string }> },
 ) {
   try {
     const { slug } = await ctx.params;

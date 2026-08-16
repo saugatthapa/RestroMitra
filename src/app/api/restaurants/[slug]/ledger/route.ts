@@ -22,7 +22,7 @@ const LEDGER_LIST_LIMIT = 500;
  * the flat list (also used for the "outstanding dues" tab via
  * ?dueStatus=outstanding, unscoped by date).
  */
-export async function GET(request: Request, ctx: RouteContext<"/api/restaurants/[slug]/ledger">) {
+export async function GET(request: Request, ctx: { params: Promise<{ slug: string }> }) {
   try {
     const { slug } = await ctx.params;
     const { restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_ACCOUNT_BOOKS);
@@ -68,7 +68,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/restaurants/
 }
 
 /** Creates a manual ledger entry — see MANUAL_LEDGER_CATEGORIES for what's allowed here. */
-export async function POST(request: Request, ctx: RouteContext<"/api/restaurants/[slug]/ledger">) {
+export async function POST(request: Request, ctx: { params: Promise<{ slug: string }> }) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }

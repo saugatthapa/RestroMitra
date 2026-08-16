@@ -90,7 +90,6 @@ function RosterTab({ slug, canManageStaff }: { slug: string; canManageStaff: boo
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
@@ -394,7 +393,6 @@ function AttendanceTab({ slug }: { slug: string }) {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);

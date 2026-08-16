@@ -88,7 +88,6 @@ export function MenuManager({ slug, canEditPrice }: { slug: string; canEditPrice
   useEffect(() => {
     // Mount-time (and slug-change-time) data fetch, not a cascading-render
     // loop — loadAll() only runs again if `slug` itself changes.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);

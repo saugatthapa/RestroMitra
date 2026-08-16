@@ -89,7 +89,6 @@ export function OrdersBoard({
   useEffect(() => {
     // Mount-time fetch plus polling — Phase 4's "realtime" is polling, not
     // push-based (no websocket/SSE infra yet); see PHASE_4_NOTES.md.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadOrders();
     const poll = setInterval(loadOrders, 5000);
     const tick = setInterval(() => forceTick((n) => n + 1), 30_000);

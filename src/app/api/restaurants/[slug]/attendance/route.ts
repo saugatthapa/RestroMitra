@@ -15,7 +15,7 @@ import { hasPermission, requireBranchAccess } from "@/lib/rbac/guard";
  */
 export async function GET(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/attendance">,
+  ctx: { params: Promise<{ slug: string }> },
 ) {
   try {
     const { slug } = await ctx.params;

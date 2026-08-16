@@ -4,8 +4,9 @@ import { randomBytes, createHash } from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { sessions, users } from "@/db/schema";
+import { SESSION_COOKIE_NAME } from "./session-cookie";
 
-export const SESSION_COOKIE_NAME = "dhankipos_session";
+export { SESSION_COOKIE_NAME };
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 function hashToken(token: string): string {

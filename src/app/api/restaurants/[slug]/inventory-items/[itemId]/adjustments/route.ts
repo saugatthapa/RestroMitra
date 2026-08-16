@@ -17,7 +17,7 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
  */
 export async function GET(
   _request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/inventory-items/[itemId]/adjustments">,
+  ctx: { params: Promise<{ slug: string; itemId: string }> },
 ) {
   try {
     const { slug, itemId } = await ctx.params;
@@ -47,7 +47,7 @@ export async function GET(
  */
 export async function POST(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/inventory-items/[itemId]/adjustments">,
+  ctx: { params: Promise<{ slug: string; itemId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

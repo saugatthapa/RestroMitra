@@ -26,7 +26,7 @@ import { lookupKhaltiPayment, KHALTI_COMPLETED_STATUS } from "@/lib/payment-gate
  */
 export async function GET(
   request: Request,
-  ctx: RouteContext<"/api/payments/gateway/[gateway]/callback">,
+  ctx: { params: Promise<{ gateway: string }> },
 ) {
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const { gateway: rawGateway } = await ctx.params;

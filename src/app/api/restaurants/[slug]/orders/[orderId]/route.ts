@@ -12,7 +12,7 @@ import { db } from "@/db";
  */
 export async function GET(
   _request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/orders/[orderId]">,
+  ctx: { params: Promise<{ slug: string; orderId: string }> },
 ) {
   try {
     const { slug, orderId } = await ctx.params;

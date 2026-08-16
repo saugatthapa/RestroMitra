@@ -7,7 +7,7 @@ import { buildOrderUrl, renderQrPng } from "@/lib/qr";
 
 export async function GET(
   _request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/tables/[tableId]/qr">,
+  ctx: { params: Promise<{ slug: string; tableId: string }> },
 ) {
   try {
     const { slug, tableId } = await ctx.params;

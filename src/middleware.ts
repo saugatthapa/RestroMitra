@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { SESSION_COOKIE_NAME } from "@/lib/auth/session";
+import { SESSION_COOKIE_NAME } from "@/lib/auth/session-cookie";
 
 /**
  * Optimistic routing only — this checks for the *presence* of a session
@@ -9,7 +9,7 @@ import { SESSION_COOKIE_NAME } from "@/lib/auth/session";
  * or route handler itself. Never rely on this file for actual access
  * control; see src/lib/rbac/guard.ts for that.
  */
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const hasSessionCookie = Boolean(
     request.cookies.get(SESSION_COOKIE_NAME)?.value,
   );

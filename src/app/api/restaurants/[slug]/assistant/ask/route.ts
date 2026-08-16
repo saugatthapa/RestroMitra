@@ -38,7 +38,7 @@ function daysAgoIso(days: number) {
  */
 export async function POST(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/assistant/ask">,
+  ctx: { params: Promise<{ slug: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

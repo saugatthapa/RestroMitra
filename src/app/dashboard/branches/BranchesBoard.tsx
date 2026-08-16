@@ -36,7 +36,6 @@ export function BranchesBoard({ slug }: { slug: string }) {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);

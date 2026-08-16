@@ -12,7 +12,7 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 
 export async function POST(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/menu-items/[itemId]/addons">,
+  ctx: { params: Promise<{ slug: string; itemId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

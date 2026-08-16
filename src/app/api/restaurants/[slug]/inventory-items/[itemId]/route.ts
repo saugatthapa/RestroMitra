@@ -26,7 +26,7 @@ async function getOwnedItem(restaurantId: string, itemId: string) {
 // adjustments, order-driven deductions), never a direct field edit.
 export async function PATCH(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/inventory-items/[itemId]">,
+  ctx: { params: Promise<{ slug: string; itemId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

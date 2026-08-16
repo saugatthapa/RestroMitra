@@ -29,7 +29,7 @@ async function getOwnedGrant(restaurantId: string, userRoleId: string) {
  */
 export async function PATCH(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/staff/[userRoleId]">,
+  ctx: { params: Promise<{ slug: string; userRoleId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

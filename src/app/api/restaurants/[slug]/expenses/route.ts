@@ -24,7 +24,7 @@ const EXPENSE_LIST_LIMIT = 500;
  */
 export async function GET(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/expenses">,
+  ctx: { params: Promise<{ slug: string }> },
 ) {
   try {
     const { slug } = await ctx.params;
@@ -63,7 +63,7 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/expenses">,
+  ctx: { params: Promise<{ slug: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

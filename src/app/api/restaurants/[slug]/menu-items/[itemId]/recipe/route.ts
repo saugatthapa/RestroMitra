@@ -34,7 +34,7 @@ async function getOwnedMenuItem(restaurantId: string, itemId: string) {
  */
 export async function GET(
   _request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/menu-items/[itemId]/recipe">,
+  ctx: { params: Promise<{ slug: string; itemId: string }> },
 ) {
   try {
     const { slug, itemId } = await ctx.params;
@@ -94,7 +94,7 @@ export async function GET(
  */
 export async function PUT(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/menu-items/[itemId]/recipe">,
+  ctx: { params: Promise<{ slug: string; itemId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

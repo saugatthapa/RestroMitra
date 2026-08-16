@@ -21,7 +21,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
  */
 export async function GET(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/ledger/summary">,
+  ctx: { params: Promise<{ slug: string }> },
 ) {
   try {
     const { slug } = await ctx.params;

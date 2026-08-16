@@ -28,7 +28,6 @@ export function KotSettingsPanel({ slug }: { slug: string }) {
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     apiGet<{ restaurantName: string; kotHeaderText: string | null }>(`${base(slug)}/kot-settings`)
       .then((res) => {

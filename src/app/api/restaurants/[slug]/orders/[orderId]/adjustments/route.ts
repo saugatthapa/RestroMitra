@@ -36,7 +36,7 @@ import { requireBranchAccess } from "@/lib/rbac/guard";
  */
 export async function PATCH(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/orders/[orderId]/adjustments">,
+  ctx: { params: Promise<{ slug: string; orderId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

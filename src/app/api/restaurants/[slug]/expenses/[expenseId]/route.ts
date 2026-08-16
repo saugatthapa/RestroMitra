@@ -23,7 +23,7 @@ async function getOwnedExpense(restaurantId: string, expenseId: string) {
 // — a wrong expense is still an audit trail of what was entered and when.
 export async function PATCH(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/expenses/[expenseId]">,
+  ctx: { params: Promise<{ slug: string; expenseId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

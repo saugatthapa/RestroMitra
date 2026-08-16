@@ -19,7 +19,7 @@ async function getOwnedCategory(restaurantId: string, categoryId: string) {
 
 export async function PATCH(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/categories/[categoryId]">,
+  ctx: { params: Promise<{ slug: string; categoryId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
@@ -66,7 +66,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/categories/[categoryId]">,
+  ctx: { params: Promise<{ slug: string; categoryId: string }> },
 ) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });

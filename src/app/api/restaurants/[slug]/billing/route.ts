@@ -24,7 +24,7 @@ const EVENT_HISTORY_LIMIT = 20;
  */
 export async function GET(
   _request: Request,
-  ctx: RouteContext<"/api/restaurants/[slug]/billing">,
+  ctx: { params: Promise<{ slug: string }> },
 ) {
   try {
     const { slug } = await ctx.params;
