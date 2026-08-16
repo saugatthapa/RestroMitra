@@ -554,7 +554,72 @@ src/
 
 ## Deploying
 
-Not yet deployed anywhere. When ready: any Next.js-compatible host (Vercel, Railway, a
-VPS with Node + PM2, etc.) works, since there's no Prisma-style native binary tying it
-to a specific platform. Point `DATABASE_URL`/`DIRECT_URL` at your production Supabase
-(or other Postgres) instance and set a strong random `AUTH_SECRET`.
+Any Next.js-compatible host (Vercel, Railway, a VPS with Node + PM2, etc.) works —
+there's no Prisma-style native binary tying it to a specific platform. Vercel is the
+easiest path since it auto-detects Next.js and needs no custom build config.
+
+### Deploying to Vercel
+
+1. **Push this repo to GitHub** (already done if you're reading this from the repo),
+   then go to [vercel.com/new](https://vercel.com/new) and import it. Vercel
+   auto-detects the Next.js framework, build command (`next build`), and output — no
+   `vercel.json` needed.
+
+2. **Provision a production Postgres database** — Supabase's free tier is the easiest
+   (see "Getting started" above for the exact steps). Any Postgres works; Supabase is
+   just pre-wired into these docs' pooled/direct URL split, which matters for a
+   serverless host like Vercel (see next point).
+
+3. **Set environment variables** in the Vercel project's **Settings → Environment
+   Variables**, for all three environments (Production/Preview/Development), before
+   the first deploy — several routes read `DATABASE_URL` at module load time, so a
+   build without it configured will fail outright, not just misbehave at runtime.
+   Copy every key from `.env.example`; the ones that matter most:
+
+   | Variable | Required | Notes |
+   |---|---|---|
+   | `DATABASE_URL` | Yes | The **pooled** (transaction-mode, port 6543 on Supabase) connection string — Vercel's serverless functions open a fresh connection per invocation, so an unpooled URL here will exhaust Postgres' connection limit under real traffic. |
+   | `DIRECT_URL` | Yes, for migrations | The **direct/session** (port 5432) connection string. Not read by the running app, only by `npm run db:migrate` / `drizzle-kit generate` — see step 5. |
+   | `AUTH_SECRET` | Yes | `openssl rand -base64 48`. Use a different value than any local/dev secret. |
+   | `APP_URL` | Yes | Your production URL, e.g. `https://restromitra.vercel.app` or a custom domain — used to build absolute links (QR codes, the public website builder's `/site/[slug]` links). |
+   | `NODE_ENV` | No | Vercel sets this itself; no need to set it manually. |
+   | `KHALTI_SECRET_KEY`, `ESEWA_*` | Only if using payment gateways | Leave unset to disable that gateway rather than deploying with a placeholder — see `.env.example`'s comments. |
+   | `GROQ_API_KEY` or `ANTHROPIC_API_KEY` (+ `AI_PROVIDER`) | Only if using the AI assistant | The `/dashboard/assistant` page degrades gracefully without one; it doesn't break the rest of the app. |
+
+4. **Deploy.** Vercel builds and deploys on push automatically once connected. The
+   first deploy will fail if step 3 was skipped — check the build logs for a
+   `DATABASE_URL is not set` error, which means an env var is missing on that specific
+   environment (Production vs Preview are configured separately).
+
+5. **Run migrations against production** — Vercel does not run `npm run db:migrate`
+   for you as part of a deploy (there's no post-build hook wired up for it). Run it
+   from your own machine, pointed at the production database, once per schema change:
+
+   ```bash
+   DATABASE_URL="<production pooled URL>" DIRECT_URL="<production direct URL>" \
+     npm run db:migrate
+   ```
+
+   Then seed the permission catalog once, the first time only (idempotent — safe to
+   re-run, but unnecessary after the first time):
+
+   ```bash
+   DATABASE_URL="<production pooled URL>" npm run db:seed
+   ```
+
+6. **Verify.** Visit the deployed URL, register an account, and walk through
+   onboarding — this exercises the DB connection, session cookies, and RBAC seed data
+   end to end. If registration works, the deploy is healthy.
+
+### Notes specific to a serverless host
+
+- `src/proxy.ts` (Next.js 16 renamed `middleware.ts` → `proxy.ts`) only checks for a
+  session cookie's presence for redirect purposes; it does no DB work, so it's cheap
+  to run on every request at the edge.
+- The `postgres` driver is configured with `prepare: false` (see `src/db/index.ts`)
+  specifically so it works against Supabase's transaction-mode pooler — don't remove
+  that if you swap the connection string for an unpooled one, or re-add it if you
+  swap to a pooler that needs it.
+- Image uploads (menu item photos, restaurant logo, website builder hero/gallery
+  images) are client-compressed into `data:` URLs and stored directly in Postgres
+  columns — there's no object-storage/CDN dependency to configure for a first deploy.
