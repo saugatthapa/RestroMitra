@@ -1,15 +1,9 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { getUserRestaurants } from "@/lib/restaurant";
-import { PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, type PermissionKey } from "@/lib/rbac/permissions";
+import { PERMISSIONS, roleHasPermission } from "@/lib/rbac/permissions";
 import { KDSBoard } from "./KDSBoard";
 import { KotSettingsPanel } from "./KotSettingsPanel";
-
-function roleHasPermission(role: string, permission: PermissionKey): boolean {
-  if (role === "platform_admin" || role === "owner") return true;
-  const granted = DEFAULT_ROLE_PERMISSIONS[role as keyof typeof DEFAULT_ROLE_PERMISSIONS];
-  return granted?.includes(permission) ?? false;
-}
 
 export default async function KDSPage() {
   const session = await getSession();

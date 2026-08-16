@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { getUserRestaurants } from "@/lib/restaurant";
+import { PERMISSIONS, roleHasPermission } from "@/lib/rbac/permissions";
 import { MenuManager } from "./MenuManager";
 
 export default async function MenuPage() {
@@ -12,6 +13,16 @@ export default async function MenuPage() {
 
   const active =
     restaurants.find((r) => r.id === session.activeRestaurantId) ?? restaurants[0];
+
+  // A role without EDIT_MENU shouldn't reach this management board at all
+  // — the sidebar already hides the nav link (DashboardShell); this
+  // redirect is what actually enforces it against a direct URL hit. (The
+  // live menu customers/POS order from is a separate read path, unaffected
+  // by this — this page is specifically the categories/items/prices CRUD
+  // board.)
+  if (!roleHasPermission(active.role, PERMISSIONS.EDIT_MENU)) {
+    redirect("/dashboard");
+  }
 
   return (
     <div>

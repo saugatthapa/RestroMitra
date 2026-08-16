@@ -7,6 +7,7 @@ import { apiGet, apiPost } from "@/lib/api-client";
 import { NavIcon } from "@/components/NavIcon";
 import { formatAdDate, formatBsDate } from "@/lib/nepali-date";
 import { DateSystemProvider, useDateSystemControl, type DateSystem } from "@/lib/date-system";
+import { PERMISSIONS, roleHasPermission, type PermissionKey } from "@/lib/rbac/permissions";
 
 // Nav is grouped (Overview / Front of house / Back office / Account) with an
 // icon per item, rather than one flat 16-item list — the flat list was the
@@ -21,6 +22,14 @@ type NavItem = {
   enabled: boolean;
   icon: React.ReactNode;
   badge?: string;
+  /** The permission a role needs to see this item at all — e.g. a waiter
+   * has neither VIEW_REPORTS nor MANAGE_STAFF, so Reports and Staff never
+   * render in their sidebar (the destination pages redirect away too, if
+   * reached directly by URL — this is the visibility half of that same
+   * gate). Omitted for items every logged-in role can see (Dashboard,
+   * Orders, KDS — screens the whole floor legitimately glances at even
+   * without permission to change anything on them). */
+  permission?: PermissionKey;
 };
 
 type NavGroup = {
@@ -198,57 +207,157 @@ function DashboardShellContent({
     };
   }, [slug]);
 
-  const NAV_GROUPS: NavGroup[] = [
+  const ALL_NAV_GROUPS: NavGroup[] = [
     {
       title: "Overview",
       items: [
         { label: "Dashboard", href: "/dashboard", enabled: true, icon: <NavIcon.Dashboard /> },
-        { label: "Reports", href: "/dashboard/reports", enabled: true, icon: <NavIcon.Reports /> },
-        { label: "AI Assistant", href: "/dashboard/assistant", enabled: true, icon: <NavIcon.Assistant /> },
+        {
+          label: "Reports",
+          href: "/dashboard/reports",
+          enabled: true,
+          icon: <NavIcon.Reports />,
+          permission: PERMISSIONS.VIEW_REPORTS,
+        },
+        {
+          label: "AI Assistant",
+          href: "/dashboard/assistant",
+          enabled: true,
+          icon: <NavIcon.Assistant />,
+          permission: PERMISSIONS.VIEW_REPORTS,
+        },
       ],
     },
     {
       title: "Front of house",
       items: [
         { label: "Orders", href: "/dashboard/orders", enabled: true, icon: <NavIcon.Orders /> },
-        { label: "POS", href: "/dashboard/pos", enabled: true, icon: <NavIcon.Pos /> },
+        {
+          label: "POS",
+          href: "/dashboard/pos",
+          enabled: true,
+          icon: <NavIcon.Pos />,
+          permission: PERMISSIONS.CREATE_ORDER,
+        },
         { label: "Kitchen (KDS)", href: "/dashboard/kds", enabled: true, icon: <NavIcon.Kitchen /> },
-        { label: "Tables & QR", href: "/dashboard/tables", enabled: true, icon: <NavIcon.Tables /> },
-        { label: "Reservations", href: "/dashboard/reservations", enabled: true, icon: <NavIcon.Reservations /> },
+        {
+          label: "Tables & QR",
+          href: "/dashboard/tables",
+          enabled: true,
+          icon: <NavIcon.Tables />,
+          permission: PERMISSIONS.MANAGE_TABLES,
+        },
+        {
+          label: "Reservations",
+          href: "/dashboard/reservations",
+          enabled: true,
+          icon: <NavIcon.Reservations />,
+          permission: PERMISSIONS.MANAGE_RESERVATIONS,
+        },
       ],
     },
     {
       title: "Back office",
       items: [
-        { label: "Menu", href: "/dashboard/menu", enabled: true, icon: <NavIcon.Menu /> },
-        { label: "Inventory", href: "/dashboard/inventory", enabled: true, icon: <NavIcon.Inventory /> },
-        { label: "Staff", href: "/dashboard/staff", enabled: true, icon: <NavIcon.Staff /> },
-        { label: "Customers", href: "/dashboard/customers", enabled: true, icon: <NavIcon.Customers /> },
-        { label: "Expenses", href: "/dashboard/expenses", enabled: true, icon: <NavIcon.Expenses /> },
+        {
+          label: "Menu",
+          href: "/dashboard/menu",
+          enabled: true,
+          icon: <NavIcon.Menu />,
+          permission: PERMISSIONS.EDIT_MENU,
+        },
+        {
+          label: "Inventory",
+          href: "/dashboard/inventory",
+          enabled: true,
+          icon: <NavIcon.Inventory />,
+          permission: PERMISSIONS.MANAGE_INVENTORY,
+        },
+        {
+          label: "Staff",
+          href: "/dashboard/staff",
+          enabled: true,
+          icon: <NavIcon.Staff />,
+          permission: PERMISSIONS.MANAGE_STAFF,
+        },
+        {
+          label: "Customers",
+          href: "/dashboard/customers",
+          enabled: true,
+          icon: <NavIcon.Customers />,
+          permission: PERMISSIONS.MANAGE_CUSTOMERS,
+        },
+        {
+          label: "Expenses",
+          href: "/dashboard/expenses",
+          enabled: true,
+          icon: <NavIcon.Expenses />,
+          permission: PERMISSIONS.MANAGE_EXPENSES,
+        },
         {
           label: "Account Books",
           href: "/dashboard/account-books",
           enabled: true,
           icon: <NavIcon.AccountBooks />,
+          permission: PERMISSIONS.MANAGE_ACCOUNT_BOOKS,
         },
-        { label: "Website", href: "/dashboard/website", enabled: true, icon: <NavIcon.Website /> },
+        {
+          label: "Website",
+          href: "/dashboard/website",
+          enabled: true,
+          icon: <NavIcon.Website />,
+          permission: PERMISSIONS.MANAGE_RESTAURANT_SETTINGS,
+        },
       ],
     },
     {
       title: "Account",
       items: [
-        { label: "Branches", href: "/dashboard/branches", enabled: true, icon: <NavIcon.Branches /> },
-        { label: "Billing", href: "/billing", enabled: true, icon: <NavIcon.Billing /> },
-        { label: "Settings", href: "#", enabled: false, icon: <NavIcon.Settings />, badge: "Coming soon" },
+        {
+          label: "Branches",
+          href: "/dashboard/branches",
+          enabled: true,
+          icon: <NavIcon.Branches />,
+          permission: PERMISSIONS.MANAGE_BRANCHES,
+        },
+        {
+          label: "Billing",
+          href: "/billing",
+          enabled: true,
+          icon: <NavIcon.Billing />,
+          permission: PERMISSIONS.MANAGE_SUBSCRIPTION,
+        },
+        {
+          label: "Settings",
+          href: "#",
+          enabled: false,
+          icon: <NavIcon.Settings />,
+          badge: "Coming soon",
+          permission: PERMISSIONS.MANAGE_RESTAURANT_SETTINGS,
+        },
       ],
     },
   ];
 
-  // Header page title — reuses NAV_GROUPS as the single source of truth
-  // for route -> label rather than a second hardcoded map, so the two can
-  // never drift apart. Falls back to a longest-prefix match for nested
-  // routes not in the nav itself (e.g. /dashboard/orders/[orderId]).
-  const flatNavItems = NAV_GROUPS.flatMap((group) => group.items);
+  // Every item above carries the exact permission its own destination page
+  // gates on server-side (see each /dashboard/*/page.tsx) — filtering here
+  // is the visibility half of that same rule, so a role that can't reach a
+  // page also never sees a dead-end link to it. A group that ends up with
+  // no visible items (e.g. "Account" for a waiter) is dropped entirely
+  // rather than rendering an empty section header.
+  const NAV_GROUPS: NavGroup[] = ALL_NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.permission || roleHasPermission(role, item.permission)),
+  })).filter((group) => group.items.length > 0);
+
+  // Header page title — reuses ALL_NAV_GROUPS (not the role-filtered
+  // NAV_GROUPS) as the single source of truth for route -> label, so a
+  // page a role can't see in the sidebar still gets the right title in the
+  // rare case it's reached some other way (e.g. a bookmarked URL, before
+  // the destination page's own redirect kicks in). Falls back to a
+  // longest-prefix match for nested routes not in the nav itself (e.g.
+  // /dashboard/orders/[orderId]).
+  const flatNavItems = ALL_NAV_GROUPS.flatMap((group) => group.items);
   const exactMatch = flatNavItems.find((item) => item.href === pathname);
   const prefixMatch = flatNavItems
     .filter((item) => item.href !== "#" && pathname.startsWith(`${item.href}/`))

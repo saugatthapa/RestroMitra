@@ -10,6 +10,7 @@ import { isLowStock } from "@/lib/inventory";
 import { IconStatTile, StatIcon } from "@/components/StatTile";
 import { getReportSummary } from "@/lib/reports";
 import { RevenueTrendChart } from "@/app/dashboard/reports/RevenueTrendChart";
+import { PERMISSIONS, roleHasPermission } from "@/lib/rbac/permissions";
 
 export default async function DashboardPage() {
   const session = await getSession();
@@ -21,6 +22,17 @@ export default async function DashboardPage() {
   const active =
     restaurants.find((r) => r.id === session.activeRestaurantId) ?? restaurants[0];
 
+  // This landing page used to show today's revenue and the whole monthly
+  // performance block (revenue, net profit, the trend chart) to *every*
+  // role — a waiter or kitchen_staff account, with neither VIEW_SALES nor
+  // VIEW_REPORTS, could see the restaurant's money figures just by logging
+  // in, even though the dedicated Reports page (and its sidebar link)
+  // already correctly hide behind those same permissions. Gating those two
+  // blocks here too, and skipping the underlying queries entirely rather
+  // than fetching money data that never renders.
+  const canViewSales = roleHasPermission(active.role, PERMISSIONS.VIEW_SALES);
+  const canViewReports = roleHasPermission(active.role, PERMISSIONS.VIEW_REPORTS);
+
   // "Today" here is a UTC calendar day, not the restaurant's own timezone
   // (restaurants.timezone exists but isn't threaded through yet) — same
   // simplification used throughout reports.ts (see dayBounds() there).
@@ -28,16 +40,20 @@ export default async function DashboardPage() {
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
 
-  const [salesRow] = await db
-    .select({ totalInPaisa: sql<string>`coalesce(sum(${orders.totalInPaisa}), 0)` })
-    .from(orders)
-    .where(
-      and(
-        eq(orders.restaurantId, active.id),
-        eq(orders.status, "completed"),
-        gte(orders.placedAt, todayStart),
-      ),
-    );
+  const salesRow = canViewSales
+    ? (
+        await db
+          .select({ totalInPaisa: sql<string>`coalesce(sum(${orders.totalInPaisa}), 0)` })
+          .from(orders)
+          .where(
+            and(
+              eq(orders.restaurantId, active.id),
+              eq(orders.status, "completed"),
+              gte(orders.placedAt, todayStart),
+            ),
+          )
+      )[0]
+    : undefined;
 
   const [ordersRow] = await db
     .select({ count: sql<string>`count(*)` })
@@ -71,21 +87,26 @@ export default async function DashboardPage() {
   // Month-to-date snapshot — same UTC-calendar-day convention as the rest
   // of this page and of reports.ts. Reuses the exact getReportSummary()
   // that powers the Reports page, so the numbers here and there can never
-  // drift apart.
+  // drift apart. Skipped entirely for a role without VIEW_REPORTS — same
+  // reasoning as salesRow above.
   const monthToDateRange = {
     from: `${todayStart.getUTCFullYear()}-${String(todayStart.getUTCMonth() + 1).padStart(2, "0")}-01`,
     to: todayStart.toISOString().slice(0, 10),
   };
-  const monthly = await getReportSummary(active.id, monthToDateRange);
+  const monthly = canViewReports ? await getReportSummary(active.id, monthToDateRange) : null;
 
   const statCards = [
-    {
-      label: "Today's sales",
-      value: formatNPR(Number(salesRow?.totalInPaisa ?? 0)),
-      note: "Completed orders today",
-      icon: <StatIcon.Rupee />,
-      color: "blue" as const,
-    },
+    ...(canViewSales
+      ? [
+          {
+            label: "Today's sales",
+            value: formatNPR(Number(salesRow?.totalInPaisa ?? 0)),
+            note: "Completed orders today",
+            icon: <StatIcon.Rupee />,
+            color: "blue" as const,
+          },
+        ]
+      : []),
     {
       label: "Orders today",
       value: String(ordersRow?.count ?? 0),
@@ -120,13 +141,22 @@ export default async function DashboardPage() {
           Orders placed by customers show up on the{" "}
           <span className="font-medium text-neutral-700">Orders</span> board in real time
           (polling every few seconds) — move them through confirmed → preparing → ready →
-          served → completed from there. Head to{" "}
-          <span className="font-medium text-neutral-700">Reports</span> for revenue trends,
-          top items, and peak-hour analytics.
+          served → completed from there.
+          {canViewReports && (
+            <>
+              {" "}
+              Head to <span className="font-medium text-neutral-700">Reports</span> for revenue
+              trends, top items, and peak-hour analytics.
+            </>
+          )}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div
+        className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${
+          statCards.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"
+        }`}
+      >
         {statCards.map((card) => (
           <IconStatTile
             key={card.label}
@@ -140,58 +170,64 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      <div>
-        <div className="mb-3 flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold text-neutral-900">This month&apos;s performance</h2>
-          <Link href="/dashboard/reports" className="text-xs font-medium text-orange-700 hover:underline">
-            Full reports →
-          </Link>
-        </div>
+      {/* Money figures (revenue, profit, the trend chart) are Reports-tier
+          data — only rendered, and only queried above, for a role with
+          VIEW_REPORTS. Everyone else's dashboard ends at the operational
+          stat tiles above. */}
+      {canViewReports && monthly && (
+        <div>
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold text-neutral-900">This month&apos;s performance</h2>
+            <Link href="/dashboard/reports" className="text-xs font-medium text-orange-700 hover:underline">
+              Full reports →
+            </Link>
+          </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <IconStatTile
-            label="Revenue"
-            value={formatNPR(monthly.sales.revenueInPaisa)}
-            icon={<StatIcon.Rupee />}
-            color="blue"
-            delta={{ percent: monthly.comparison.revenueChangePercent }}
-          />
-          <IconStatTile
-            label="Net profit"
-            value={formatNPR(monthly.netProfitInPaisa)}
-            icon={<StatIcon.TrendUp />}
-            color={monthly.netProfitInPaisa < 0 ? "red" : "green"}
-            tone={monthly.netProfitInPaisa < 0 ? "negative" : "neutral"}
-            delta={{ percent: monthly.comparison.netProfitChangePercent }}
-          />
-          <IconStatTile
-            label="Peak hour"
-            value={
-              monthly.peakHour.peakOrdersHour === null
-                ? "—"
-                : formatHour(monthly.peakHour.peakOrdersHour)
-            }
-            note={
-              monthly.peakHour.peakOrdersHour === null
-                ? "No completed orders yet"
-                : `${monthly.peakHour.peakOrdersCount} orders`
-            }
-            icon={<StatIcon.Clock />}
-            color="amber"
-          />
-          <IconStatTile
-            label="Completion rate"
-            value={`${monthly.completion.completionRatePercent}%`}
-            note="Paid, non-cancelled orders"
-            icon={<StatIcon.CheckCircle />}
-            color={monthly.completion.completionRatePercent >= 90 ? "green" : "amber"}
-          />
-        </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <IconStatTile
+              label="Revenue"
+              value={formatNPR(monthly.sales.revenueInPaisa)}
+              icon={<StatIcon.Rupee />}
+              color="blue"
+              delta={{ percent: monthly.comparison.revenueChangePercent }}
+            />
+            <IconStatTile
+              label="Net profit"
+              value={formatNPR(monthly.netProfitInPaisa)}
+              icon={<StatIcon.TrendUp />}
+              color={monthly.netProfitInPaisa < 0 ? "red" : "green"}
+              tone={monthly.netProfitInPaisa < 0 ? "negative" : "neutral"}
+              delta={{ percent: monthly.comparison.netProfitChangePercent }}
+            />
+            <IconStatTile
+              label="Peak hour"
+              value={
+                monthly.peakHour.peakOrdersHour === null
+                  ? "—"
+                  : formatHour(monthly.peakHour.peakOrdersHour)
+              }
+              note={
+                monthly.peakHour.peakOrdersHour === null
+                  ? "No completed orders yet"
+                  : `${monthly.peakHour.peakOrdersCount} orders`
+              }
+              icon={<StatIcon.Clock />}
+              color="amber"
+            />
+            <IconStatTile
+              label="Completion rate"
+              value={`${monthly.completion.completionRatePercent}%`}
+              note="Paid, non-cancelled orders"
+              icon={<StatIcon.CheckCircle />}
+              color={monthly.completion.completionRatePercent >= 90 ? "green" : "amber"}
+            />
+          </div>
 
-        <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
-          <RevenueTrendChart series={monthly.dailySeries} />
+          <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+            <RevenueTrendChart series={monthly.dailySeries} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -1,14 +1,8 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { getUserRestaurants } from "@/lib/restaurant";
-import { PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, type PermissionKey } from "@/lib/rbac/permissions";
+import { PERMISSIONS, roleHasPermission } from "@/lib/rbac/permissions";
 import { AccountBooksBoard } from "./AccountBooksBoard";
-
-function roleHasPermission(role: string, permission: PermissionKey): boolean {
-  if (role === "platform_admin" || role === "owner") return true;
-  const granted = DEFAULT_ROLE_PERMISSIONS[role as keyof typeof DEFAULT_ROLE_PERMISSIONS];
-  return granted?.includes(permission) ?? false;
-}
 
 export default async function AccountBooksPage() {
   const session = await getSession();
@@ -19,6 +13,13 @@ export default async function AccountBooksPage() {
 
   const active =
     restaurants.find((r) => r.id === session.activeRestaurantId) ?? restaurants[0];
+
+  // A role without MANAGE_ACCOUNT_BOOKS shouldn't reach this page at all —
+  // the sidebar already hides the nav link (DashboardShell); this redirect
+  // is what actually enforces it against a direct URL hit.
+  if (!roleHasPermission(active.role, PERMISSIONS.MANAGE_ACCOUNT_BOOKS)) {
+    redirect("/dashboard");
+  }
 
   return (
     <div>

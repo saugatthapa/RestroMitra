@@ -1,14 +1,8 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { getUserRestaurants } from "@/lib/restaurant";
-import { PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, type PermissionKey } from "@/lib/rbac/permissions";
+import { PERMISSIONS, roleHasPermission } from "@/lib/rbac/permissions";
 import { StaffBoard } from "./StaffBoard";
-
-function roleHasPermission(role: string, permission: PermissionKey): boolean {
-  if (role === "platform_admin" || role === "owner") return true;
-  const granted = DEFAULT_ROLE_PERMISSIONS[role as keyof typeof DEFAULT_ROLE_PERMISSIONS];
-  return granted?.includes(permission) ?? false;
-}
 
 export default async function StaffPage() {
   const session = await getSession();
@@ -19,6 +13,16 @@ export default async function StaffPage() {
 
   const active =
     restaurants.find((r) => r.id === session.activeRestaurantId) ?? restaurants[0];
+
+  // Staff roster/attendance is management-only data (contact info, pay-
+  // adjacent attendance records) — a role without MANAGE_STAFF shouldn't
+  // reach this page at all, not just see a read-only version of it. The
+  // sidebar (DashboardShell) already hides the nav link for these roles;
+  // this redirect is what actually enforces it if someone hits the URL
+  // directly.
+  if (!roleHasPermission(active.role, PERMISSIONS.MANAGE_STAFF)) {
+    redirect("/dashboard");
+  }
 
   return (
     <div>

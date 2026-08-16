@@ -142,3 +142,21 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
   kitchen_staff: [PERMISSIONS.VIEW_KDS, PERMISSIONS.UPDATE_KDS_STATUS],
   inventory_manager: [PERMISSIONS.MANAGE_INVENTORY, PERMISSIONS.VIEW_PROFIT],
 };
+
+/**
+ * Checks whether `role` has `permission`, against the default role→
+ * permission matrix above. Owner and platform_admin bypass the matrix
+ * entirely (same rule as the API layer's `guard.ts`), since they operate
+ * with full tenant/platform access regardless of what's in the table.
+ *
+ * This used to be redefined identically at the top of every
+ * `/dashboard/*` page.tsx that needed a permission check — one shared copy
+ * now, imported everywhere (including client components like
+ * DashboardShell, since this module has no `"server-only"` import and is
+ * just plain data + a pure function).
+ */
+export function roleHasPermission(role: string, permission: PermissionKey): boolean {
+  if (role === "platform_admin" || role === "owner") return true;
+  const granted = DEFAULT_ROLE_PERMISSIONS[role as keyof typeof DEFAULT_ROLE_PERMISSIONS];
+  return granted?.includes(permission) ?? false;
+}
