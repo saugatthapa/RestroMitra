@@ -149,4 +149,23 @@ export const NavIcon = {
       <path d="M16 17l5-5-5-5M21 12H9" />
     </svg>
   ),
+  Bell: () => (
+    <svg {...iconProps}>
+      <path d="M6 8a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6.5H4c.5-1 2-2.5 2-6.5Z" />
+      <path d="M10 19a2 2 0 0 0 4 0" />
+    </svg>
+  ),
+  ExternalLink: () => (
+    <svg {...iconProps}>
+      <path d="M14 4h6v6" />
+      <path d="M20 4 10 14" />
+      <path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" />
+    </svg>
+  ),
+  AlertCircle: () => (
+    <svg {...iconProps}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v5M12 16h.01" />
+    </svg>
+  ),
 };

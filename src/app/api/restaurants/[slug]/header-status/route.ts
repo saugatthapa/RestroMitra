@@ -1,18 +1,25 @@
 import { NextResponse } from "next/server";
 import { and, eq, notInArray } from "drizzle-orm";
 import { db } from "@/db";
-import { orders } from "@/db/schema";
+import { orders, inventoryItems, reservations } from "@/db/schema";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
+import { isLowStock } from "@/lib/inventory";
 
 /**
- * Powers the two live status pills in the dashboard header (DashboardShell)
- * — "N active" (orders currently somewhere between placed and completed)
- * and a Kitchen Clear/Busy indicator (anything actually in the "preparing"
- * status right now). Polled client-side every few seconds, same cadence as
+ * Powers the dashboard header's live pills and notification bell
+ * (DashboardShell) — polled client-side every few seconds, same cadence as
  * the Orders board's own polling, so the header stays live without a full
- * page reload — this is the functional gap behind the reference
- * dashboard's "Active 0" / "Kitchen Clear" pills; ours is backed by a real
- * query rather than a static demo value.
+ * page reload.
+ *
+ * - `activeOrders`/`kitchenBusy`: the "N active" / Kitchen Clear|Busy pills
+ *   (orders currently somewhere between placed and completed; "busy" means
+ *   at least one is actually in "preparing" right now).
+ * - `lowStockCount`/`pendingReservationsCount`: what the notification bell
+ *   surfaces — real "needs attention" counts, not a decorative static
+ *   badge. Reuses the exact `isLowStock()` helper the Inventory page uses
+ *   so the two can never disagree on what "low" means, and counts
+ *   reservations still in "requested" status the same way the
+ *   Reservations board treats them (awaiting staff confirmation).
  */
 export async function GET(
   request: Request,
@@ -22,20 +29,40 @@ export async function GET(
     const { slug } = await ctx.params;
     const { restaurantId } = await resolveRestaurantContext(slug);
 
-    const rows = await db
-      .select({ status: orders.status })
-      .from(orders)
-      .where(
-        and(
-          eq(orders.restaurantId, restaurantId),
-          notInArray(orders.status, ["completed", "cancelled"]),
+    const [orderRows, inventoryRows, pendingReservationsRow] = await Promise.all([
+      db
+        .select({ status: orders.status })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.restaurantId, restaurantId),
+            notInArray(orders.status, ["completed", "cancelled"]),
+          ),
         ),
-      );
+      db
+        .select({
+          currentStockMilliunits: inventoryItems.currentStockMilliunits,
+          reorderLevelMilliunits: inventoryItems.reorderLevelMilliunits,
+        })
+        .from(inventoryItems)
+        .where(and(eq(inventoryItems.restaurantId, restaurantId), eq(inventoryItems.isActive, true))),
+      db
+        .select({ id: reservations.id })
+        .from(reservations)
+        .where(and(eq(reservations.restaurantId, restaurantId), eq(reservations.status, "requested"))),
+    ]);
 
-    const activeOrders = rows.length;
-    const kitchenBusy = rows.some((row) => row.status === "preparing");
+    const activeOrders = orderRows.length;
+    const kitchenBusy = orderRows.some((row) => row.status === "preparing");
+    const lowStockCount = inventoryRows.filter(isLowStock).length;
+    const pendingReservationsCount = pendingReservationsRow.length;
 
-    return NextResponse.json({ activeOrders, kitchenBusy });
+    return NextResponse.json({
+      activeOrders,
+      kitchenBusy,
+      lowStockCount,
+      pendingReservationsCount,
+    });
   } catch (err) {
     return toErrorResponse(err);
   }

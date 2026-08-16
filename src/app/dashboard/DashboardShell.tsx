@@ -65,7 +65,12 @@ function monogramStyle(name: string): { bg: string; fg: string } {
   return MONOGRAM_PALETTE[sum % MONOGRAM_PALETTE.length];
 }
 
-type HeaderStatus = { activeOrders: number; kitchenBusy: boolean };
+type HeaderStatus = {
+  activeOrders: number;
+  kitchenBusy: boolean;
+  lowStockCount: number;
+  pendingReservationsCount: number;
+};
 
 export function DashboardShell({
   ownerName,
@@ -105,6 +110,7 @@ export function DashboardShell({
   const [loggingOut, setLoggingOut] = useState(false);
   const [switchingRestaurant, setSwitchingRestaurant] = useState(false);
   const [headerStatus, setHeaderStatus] = useState<HeaderStatus | null>(null);
+  const [notifOpen, setNotifOpen] = useState(false);
   const days = daysRemaining(trialEndsAt);
   // QA hardening pass: the sidebar below is `hidden md:flex` — on any
   // screen narrower than 768px (every phone, and a portrait tablet under
@@ -462,17 +468,23 @@ export function DashboardShell({
               <p className="text-xs text-neutral-500">{restaurantName}</p>
             </div>
           </div>
+
+          {/* Two visually distinct clusters, separated by a divider on wide
+              screens: live status info on the left, quick actions
+              (notifications, Open POS) on the right — the grouping itself
+              is the "clear section" the reference dashboard was missing
+              when it was just one long row of same-weight pills. */}
           <div className="flex flex-wrap items-center gap-2">
             {headerStatus && (
-              <>
-                <span className="hidden items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs font-medium text-neutral-600 sm:inline-flex">
+              <div className="hidden items-center gap-2 sm:flex">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs font-medium text-neutral-600">
                   <span className="flex h-3.5 w-3.5 items-center justify-center">
                     <NavIcon.Orders />
                   </span>
                   {headerStatus.activeOrders} active
                 </span>
                 <span
-                  className={`hidden items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium sm:inline-flex ${
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${
                     headerStatus.kitchenBusy
                       ? "border-amber-200 bg-amber-50 text-amber-700"
                       : "border-green-200 bg-green-50 text-green-700"
@@ -483,7 +495,7 @@ export function DashboardShell({
                   </span>
                   Kitchen {headerStatus.kitchenBusy ? "Busy" : "Clear"}
                 </span>
-              </>
+              </div>
             )}
             {restaurants.length > 1 && (
               <div className="relative">
@@ -510,11 +522,137 @@ export function DashboardShell({
                 {days} day{days === 1 ? "" : "s"} left in trial
               </span>
             )}
+
+            <div className="mx-1 hidden h-6 w-px bg-neutral-200 sm:block" aria-hidden="true" />
+
+            <NotificationBell
+              status={headerStatus}
+              open={notifOpen}
+              onToggle={() => setNotifOpen((o) => !o)}
+              onClose={() => setNotifOpen(false)}
+            />
+
+            <Link
+              href="/dashboard/pos"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full bg-orange-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 sm:px-4"
+            >
+              <span className="flex h-3.5 w-3.5 items-center justify-center">
+                <NavIcon.Pos />
+              </span>
+              <span className="hidden sm:inline">Open POS</span>
+              <span className="flex h-3 w-3 items-center justify-center">
+                <NavIcon.ExternalLink />
+              </span>
+            </Link>
           </div>
         </header>
 
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The header's notification bell — deliberately backed by real "needs
+ * attention" signals (low-stock items, reservations awaiting confirmation)
+ * rather than a decorative static badge, since those counts already exist
+ * elsewhere (Inventory, Reservations) and cost nothing extra to surface
+ * here — see header-status/route.ts. Closes on an outside click via the
+ * same fixed full-screen overlay button pattern the mobile nav drawer uses
+ * above, rather than a separate click-outside hook.
+ */
+function NotificationBell({
+  status,
+  open,
+  onToggle,
+  onClose,
+}: {
+  status: HeaderStatus | null;
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+}) {
+  const lowStock = status?.lowStockCount ?? 0;
+  const pendingReservations = status?.pendingReservationsCount ?? 0;
+  const alertCount = lowStock + pendingReservations;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="Notifications"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="relative rounded-full border border-neutral-200 bg-white p-2 text-neutral-500 transition-colors hover:bg-neutral-50 hover:text-neutral-700"
+      >
+        <span className="flex h-4 w-4 items-center justify-center">
+          <NavIcon.Bell />
+        </span>
+        {alertCount > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white">
+            {alertCount > 9 ? "9+" : alertCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          <button
+            aria-label="Close notifications"
+            className="fixed inset-0 z-40 cursor-default"
+            onClick={onClose}
+          />
+          <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border border-neutral-200 bg-white p-2 shadow-lg">
+            <p className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-400">
+              Needs attention
+            </p>
+            {alertCount === 0 ? (
+              <p className="px-2 py-3 text-sm text-neutral-500">You&apos;re all caught up.</p>
+            ) : (
+              <div className="space-y-1">
+                {lowStock > 0 && (
+                  <Link
+                    href="/dashboard/inventory"
+                    onClick={onClose}
+                    className="flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm hover:bg-neutral-50"
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+                      <NavIcon.AlertCircle />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block font-medium text-neutral-900">
+                        {lowStock} item{lowStock === 1 ? "" : "s"} low on stock
+                      </span>
+                      <span className="block text-xs text-neutral-500">At or below reorder level</span>
+                    </span>
+                  </Link>
+                )}
+                {pendingReservations > 0 && (
+                  <Link
+                    href="/dashboard/reservations"
+                    onClick={onClose}
+                    className="flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm hover:bg-neutral-50"
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                      <NavIcon.Reservations />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block font-medium text-neutral-900">
+                        {pendingReservations} reservation{pendingReservations === 1 ? "" : "s"} awaiting
+                        confirmation
+                      </span>
+                      <span className="block text-xs text-neutral-500">Requested, not yet confirmed</span>
+                    </span>
+                  </Link>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
