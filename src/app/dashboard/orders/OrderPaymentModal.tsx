@@ -5,6 +5,7 @@ import { apiGet, apiPatch, apiPost, ApiError } from "@/lib/api-client";
 import { formatNPR, rupeesToPaisa } from "@/lib/money";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/payments";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { GatewayPaymentButtons } from "./GatewayPaymentButtons";
 
 type Billing = { remainingDueInPaisa: number };
 
@@ -136,6 +137,11 @@ export function OrderPaymentModal({
             <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
               {formatNPR(remainingDueInPaisa)} due
             </p>
+
+            <div className="mb-4">
+              <GatewayPaymentButtons slug={slug} orderId={orderId} />
+              <p className="my-3 text-center text-xs text-neutral-400">or record it manually</p>
+            </div>
 
             <div className="space-y-2">
               <div className="flex gap-2">

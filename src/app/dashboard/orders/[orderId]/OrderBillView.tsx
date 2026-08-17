@@ -22,6 +22,7 @@ import {
   type PaymentStatus,
 } from "@/lib/payments";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { GatewayPaymentButtons } from "../GatewayPaymentButtons";
 
 type OrderItemAddon = { id: string; nameSnapshot: string; priceInPaisaSnapshot: number };
 type OrderItem = {
@@ -440,76 +441,6 @@ export function OrderBillView({
           }}
         />
       )}
-    </div>
-  );
-}
-
-type GatewayInitiateResponse =
-  | { gateway: "esewa"; formUrl: string; fields: Record<string, string> }
-  | { gateway: "khalti"; paymentUrl: string };
-
-/** Builds and auto-submits a hidden POST form — eSewa's flow expects a
- * browser form submission (not a fetch redirect) to its hosted page. */
-function submitEsewaForm(formUrl: string, fields: Record<string, string>) {
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = formUrl;
-  for (const [name, value] of Object.entries(fields)) {
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = name;
-    input.value = value;
-    form.appendChild(input);
-  }
-  document.body.appendChild(form);
-  form.submit();
-}
-
-function GatewayPaymentButtons({ slug, orderId }: { slug: string; orderId: string }) {
-  const [pending, setPending] = useState<"esewa" | "khalti" | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function start(gateway: "esewa" | "khalti") {
-    setPending(gateway);
-    setError(null);
-    try {
-      const res = await apiPost<GatewayInitiateResponse>(
-        `${base(slug)}/orders/${orderId}/payments/gateway/${gateway}/initiate`,
-        {},
-      );
-      if (res.gateway === "esewa") {
-        submitEsewaForm(res.formUrl, res.fields);
-      } else {
-        window.location.href = res.paymentUrl;
-      }
-      // Intentionally leave `pending` set — the browser is about to
-      // navigate away, so there's no "success" state to reset to.
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not start the payment.");
-      setPending(null);
-    }
-  }
-
-  return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-5">
-      <p className="mb-3 text-sm font-semibold text-neutral-900">Pay with a wallet</p>
-      <div className="flex gap-2">
-        <button
-          onClick={() => start("esewa")}
-          disabled={pending !== null}
-          className="btn-secondary flex-1 disabled:opacity-50"
-        >
-          {pending === "esewa" ? "Redirecting…" : "Pay via eSewa"}
-        </button>
-        <button
-          onClick={() => start("khalti")}
-          disabled={pending !== null}
-          className="btn-secondary flex-1 disabled:opacity-50"
-        >
-          {pending === "khalti" ? "Redirecting…" : "Pay via Khalti"}
-        </button>
-      </div>
-      {error && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
     </div>
   );
 }
