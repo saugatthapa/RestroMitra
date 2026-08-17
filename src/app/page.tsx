@@ -2,7 +2,6 @@ import Link from "next/link";
 import { Reveal } from "@/components/landing/Reveal";
 import { FaqAccordion, type FaqItem } from "@/components/landing/FaqAccordion";
 import { MobileNav } from "@/components/landing/MobileNav";
-import { LogoMark } from "@/components/Logo";
 import { NavIcon } from "@/components/NavIcon";
 
 // Deliberately no next/font/google pull here — a webfont is bytes and a
@@ -172,11 +171,13 @@ export default function LandingPage() {
       {/* ---------------------------------------------------------------- Header */}
       <header className="sticky top-0 z-50 border-b border-neutral-200/70 bg-white/75 backdrop-blur-md">
         <div className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-          <Link href="/" className="group flex items-center gap-2">
-            <LogoMark />
-            <span className="text-lg font-bold tracking-tight text-neutral-900">
-              Restro<span className="text-orange-600">Mitra</span>
-            </span>
+          <Link href="/" className="group flex items-center">
+            {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset from /public */}
+            <img
+              src="/brand/logo-horizontal.png"
+              alt="RestroMitra"
+              className="h-9 w-auto transition-transform duration-500 ease-out group-hover:scale-105 sm:h-10"
+            />
           </Link>
 
           <nav className="hidden items-center gap-7 sm:flex">
@@ -453,11 +454,13 @@ export default function LandingPage() {
       <footer className="border-t border-neutral-100 px-4 py-12 sm:px-6">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex flex-col items-center sm:items-start">
-            <Link href="/" className="group flex items-center gap-2">
-              <LogoMark />
-              <span className="text-base font-bold tracking-tight text-neutral-900">
-                Restro<span className="text-orange-600">Mitra</span>
-              </span>
+            <Link href="/" className="group flex items-center">
+              {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset from /public */}
+              <img
+                src="/brand/logo-horizontal.png"
+                alt="RestroMitra"
+                className="h-12 w-auto transition-transform duration-500 ease-out group-hover:scale-105 sm:h-14"
+              />
             </Link>
             <p className="mt-2 max-w-xs text-center text-xs text-neutral-400 sm:text-left">
               An independent restaurant management platform, launching first in Itahari and

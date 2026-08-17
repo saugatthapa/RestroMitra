@@ -30,7 +30,7 @@ export default async function TablesPage() {
           scan it to browse the menu and order directly — no app or login needed.
         </p>
       </div>
-      <TablesView slug={active.slug} />
+      <TablesView slug={active.slug} restaurantName={active.name} />
     </div>
   );
 }

@@ -18,11 +18,19 @@ export function buildOrderUrl(appUrl: string, qrToken: string): string {
   return `${appUrl.replace(/\/$/, "")}/order/${qrToken}`;
 }
 
-/** Renders a QR code for the given URL as a PNG data buffer. */
+/**
+ * Renders a QR code for the given URL as a PNG data buffer.
+ *
+ * Error correction is "H" (the highest level, tolerating ~30% of the code
+ * being obscured) rather than the default "M" — the branded poster (see
+ * QrPoster.tsx) draws the RestroMitra mark over the center of this same
+ * image, and "H" is what keeps that overlay scannable instead of quietly
+ * breaking codes on the printed table tents this is meant to end up on.
+ */
 export async function renderQrPng(url: string): Promise<Buffer> {
   return QRCode.toBuffer(url, {
     type: "png",
-    errorCorrectionLevel: "M",
+    errorCorrectionLevel: "H",
     margin: 2,
     width: 512,
   });

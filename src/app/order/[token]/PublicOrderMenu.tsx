@@ -131,7 +131,13 @@ export function PublicOrderMenu({
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 pb-24">
+    // Deliberately NOT min-h-screen — a short menu, an empty cart, or the
+    // checkout form (all a few hundred px of content) used to sit inside a
+    // full-viewport-height wrapper, leaving a large dead gray void below
+    // everything. Letting the page be exactly as tall as its content is
+    // means a customer never lands on a screen that looks broken/half-
+    // loaded just because it doesn't happen to fill their phone.
+    <div className="min-h-full bg-neutral-50 pb-24">
       <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white px-4 py-3">
         <p className="text-sm font-semibold text-neutral-900">{restaurantName}</p>
         <p className="text-xs text-neutral-500">{tableName}</p>
@@ -139,21 +145,23 @@ export function PublicOrderMenu({
 
       {view === "menu" && (
         <>
-          <div className="sticky top-[52px] z-10 flex gap-2 overflow-x-auto border-b border-neutral-200 bg-white px-4 py-2">
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => setSelectedCategoryId(c.id)}
-                className={`shrink-0 rounded-full border px-3 py-1.5 text-sm ${
-                  selectedCategoryId === c.id
-                    ? "border-orange-600 bg-orange-50 font-medium text-orange-700"
-                    : "border-neutral-200 text-neutral-600"
-                }`}
-              >
-                {c.name}
-              </button>
-            ))}
-          </div>
+          {categories.length > 1 && (
+            <div className="sticky top-[52px] z-10 flex gap-2 overflow-x-auto border-b border-neutral-200 bg-white px-4 py-2">
+              {categories.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setSelectedCategoryId(c.id)}
+                  className={`shrink-0 rounded-full border px-3 py-1.5 text-sm ${
+                    selectedCategoryId === c.id
+                      ? "border-orange-600 bg-orange-50 font-medium text-orange-700"
+                      : "border-neutral-200 text-neutral-600"
+                  }`}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="space-y-3 px-4 py-4">
             {categories
@@ -475,9 +483,14 @@ function CartView({
             </div>
           ))}
 
-          <div className="flex items-center justify-between border-t border-neutral-200 pt-3 text-sm font-semibold">
-            <span>Subtotal (tax calculated at checkout)</span>
-            <span>{formatNPR(total)}</span>
+          <div className="border-t border-neutral-200 pt-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-sm font-semibold text-neutral-900">Subtotal</span>
+              <span className="whitespace-nowrap text-sm font-semibold text-neutral-900">
+                {formatNPR(total)}
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-neutral-400">Tax calculated at checkout</p>
           </div>
 
           <button onClick={onCheckout} className="btn-primary w-full">
@@ -562,9 +575,14 @@ function CheckoutView({
           onChange={(e) => setNotes(e.target.value)}
         />
 
-        <div className="flex items-center justify-between rounded-xl bg-neutral-50 px-4 py-3 text-sm">
-          <span className="text-neutral-500">Estimated subtotal (tax added on submission)</span>
-          <span className="font-semibold text-neutral-900">{formatNPR(total)}</span>
+        <div className="rounded-xl bg-neutral-50 px-4 py-3">
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="font-semibold text-neutral-900">Estimated subtotal</span>
+            <span className="whitespace-nowrap font-semibold text-neutral-900">
+              {formatNPR(total)}
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs text-neutral-400">Tax added on submission</p>
         </div>
 
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

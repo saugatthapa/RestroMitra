@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { apiGet, apiPatch, ApiError } from "@/lib/api-client";
 import { formatNPR } from "@/lib/money";
 import { fileToCompressedDataUrl, ClientImageError } from "@/lib/client-image";
+import { QrPosterButton } from "@/components/QrPosterButton";
 import {
   WEBSITE_THEMES,
   WEBSITE_THEME_LABELS,
@@ -96,7 +97,7 @@ function toFormState(config: WebsiteConfig): FormState {
  * publishes accidentally (only the isPublished toggle takes effect
  * immediately, since that one's an explicit, single-purpose action).
  */
-export function WebsiteBuilderBoard({ slug }: { slug: string }) {
+export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; restaurantName: string }) {
   const [form, setForm] = useState<FormState | null>(null);
   const [siteUrl, setSiteUrl] = useState("");
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -276,6 +277,15 @@ export function WebsiteBuilderBoard({ slug }: { slug: string }) {
           >
             Download QR code
           </a>
+          <QrPosterButton
+            qrImageUrl={`/api/restaurants/${slug}/website/qr`}
+            restaurantName={restaurantName}
+            ctaLabel="Scan to visit our website"
+            fileName={`${slug}-website-poster.png`}
+            className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Download poster
+          </QrPosterButton>
           <button
             type="button"
             disabled={saving}

@@ -24,7 +24,7 @@ export default async function WebsitePage() {
         </p>
       </div>
       {canManage ? (
-        <WebsiteBuilderBoard slug={active.slug} />
+        <WebsiteBuilderBoard slug={active.slug} restaurantName={active.name} />
       ) : (
         <p className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-500">
           You don&apos;t have permission to manage this restaurant&apos;s website. Ask an owner for

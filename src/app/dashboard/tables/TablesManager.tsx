@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiGet, apiPost, apiPatch, apiDelete, ApiError } from "@/lib/api-client";
+import { QrPosterButton } from "@/components/QrPosterButton";
 
 type Table = {
   id: string;
@@ -18,7 +19,7 @@ function base(slug: string) {
   return `/api/restaurants/${slug}`;
 }
 
-export function TablesManager({ slug }: { slug: string }) {
+export function TablesManager({ slug, restaurantName }: { slug: string; restaurantName: string }) {
   const [tables, setTables] = useState<Table[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchFilter, setBranchFilter] = useState(""); // "" = all branches
@@ -198,6 +199,15 @@ export function TablesManager({ slug }: { slug: string }) {
                 >
                   Download QR
                 </a>
+                <QrPosterButton
+                  qrImageUrl={`${base(slug)}/tables/${table.id}/qr`}
+                  restaurantName={restaurantName}
+                  subtitle={table.name}
+                  fileName={`${table.name.replace(/[^a-z0-9]+/gi, "-")}-poster.png`}
+                  className="font-medium text-orange-600 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Download poster
+                </QrPosterButton>
                 <button
                   onClick={() => copyOrderLink(table)}
                   className="font-medium text-neutral-600 hover:text-neutral-900"

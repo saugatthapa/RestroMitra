@@ -10,7 +10,7 @@ import { FloorPlanBoard } from "./FloorPlanBoard";
  * adds a second view onto the same tables, toggled with a tab, rather than
  * duplicating the tables page.
  */
-export function TablesView({ slug }: { slug: string }) {
+export function TablesView({ slug, restaurantName }: { slug: string; restaurantName: string }) {
   const [view, setView] = useState<"floor" | "list">("floor");
 
   return (
@@ -34,7 +34,11 @@ export function TablesView({ slug }: { slug: string }) {
         </button>
       </div>
 
-      {view === "floor" ? <FloorPlanBoard slug={slug} /> : <TablesManager slug={slug} />}
+      {view === "floor" ? (
+        <FloorPlanBoard slug={slug} />
+      ) : (
+        <TablesManager slug={slug} restaurantName={restaurantName} />
+      )}
     </div>
   );
 }
