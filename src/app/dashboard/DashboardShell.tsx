@@ -505,6 +505,7 @@ function DashboardShellContent({
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-neutral-900">{restaurantName}</p>
           <p className="truncate text-[11px] text-neutral-400">Powered by RestroMitra</p>
+          <p className="truncate text-[9px] text-neutral-300">by Saugat Thapa</p>
         </div>
       </div>
     );

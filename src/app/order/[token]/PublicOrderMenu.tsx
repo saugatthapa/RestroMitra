@@ -184,6 +184,17 @@ export function PublicOrderMenu({
                 </button>
               ))}
           </div>
+
+          <p className="px-4 pb-2 pt-1 text-center text-[11px] text-neutral-400">
+            <a
+              href="/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition hover:text-neutral-600 hover:underline"
+            >
+              Powered by RestroMitra
+            </a>
+          </p>
         </>
       )}
 

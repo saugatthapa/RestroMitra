@@ -23,8 +23,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="min-h-screen bg-neutral-50">
       <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3 md:px-6">
         <div className="flex items-center gap-3">
-          <Link href="/admin" className="text-lg font-semibold tracking-tight text-neutral-900">
-            Restro<span className="text-orange-600">Mitra</span>
+          <Link href="/admin" className="flex flex-col leading-tight">
+            <span className="text-lg font-semibold tracking-tight text-neutral-900">
+              Restro<span className="text-orange-600">Mitra</span>
+            </span>
+            <span className="text-[10px] font-medium text-neutral-400">by Saugat Thapa</span>
           </Link>
           <span className="rounded-full bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase">
             Platform admin

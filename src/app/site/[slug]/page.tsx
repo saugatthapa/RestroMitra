@@ -219,7 +219,14 @@ export default async function PublicWebsitePage({
       </section>
 
       <footer className={`px-6 py-6 text-center text-xs ${classes.subtext}`}>
-        Powered by RestroMitra
+        <a
+          href="/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="transition hover:underline"
+        >
+          Powered by RestroMitra
+        </a>
       </footer>
     </div>
   );

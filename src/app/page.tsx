@@ -483,7 +483,7 @@ export default function LandingPage() {
           </nav>
         </div>
         <p className="mt-8 text-center text-xs text-neutral-400">
-          © {new Date().getFullYear()} RestroMitra. All rights reserved.
+          © {new Date().getFullYear()} RestroMitra · by Saugat Thapa
         </p>
       </footer>
     </div>
