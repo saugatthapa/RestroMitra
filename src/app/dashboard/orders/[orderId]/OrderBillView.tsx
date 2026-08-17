@@ -21,6 +21,7 @@ import {
   type PaymentMethod,
   type PaymentStatus,
 } from "@/lib/payments";
+import { ConfirmModal } from "@/components/ConfirmModal";
 
 type OrderItemAddon = { id: string; nameSnapshot: string; priceInPaisaSnapshot: number };
 type OrderItem = {
@@ -113,6 +114,11 @@ export function OrderBillView({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Replaces a native window.confirm() for the "complete with money still
+  // due" case — a small OS-styled popup is easy for a non-technical user to
+  // dismiss without reading; this dialog stays on-page and its two choices
+  // are as plainly labeled as everything else on this screen.
+  const [confirmComplete, setConfirmComplete] = useState(false);
   const searchParams = useSearchParams();
   const paymentOutcome = searchParams.get("payment");
   const dateSystem = useDateSystem();
@@ -187,16 +193,13 @@ export function OrderBillView({
   // with money still due used to silently book that balance as a ledger
   // due the instant the status route processed it. Here we already have
   // the exact remaining amount and the payment form is right below, so the
-  // prompt can just say "record it below" instead of navigating anywhere.
+  // confirmation can just say "record it below" instead of navigating
+  // anywhere.
   function handleAdvance() {
     if (!forward) return;
     if (forward === "completed" && billing && billing.remainingDueInPaisa > 0) {
-      const proceed = window.confirm(
-        `${formatNPR(billing.remainingDueInPaisa)} is still due on this order.\n\n` +
-          `Click Cancel to record the payment below first.\n` +
-          `Click OK to complete anyway — the balance will be booked as a due/credit in Account Books.`,
-      );
-      if (!proceed) return;
+      setConfirmComplete(true);
+      return;
     }
     updateStatus(forward);
   }
@@ -422,6 +425,21 @@ export function OrderBillView({
           )}
         </div>
       </div>
+
+      {confirmComplete && billing && (
+        <ConfirmModal
+          title={`${formatNPR(billing.remainingDueInPaisa)} is still due`}
+          message="You can record the payment below first, or complete the order anyway — the balance will be booked as a due/credit in Account Books."
+          confirmLabel="Complete anyway"
+          cancelLabel="Record payment first"
+          busy={busy}
+          onCancel={() => setConfirmComplete(false)}
+          onConfirm={() => {
+            setConfirmComplete(false);
+            if (forward) updateStatus(forward);
+          }}
+        />
+      )}
     </div>
   );
 }

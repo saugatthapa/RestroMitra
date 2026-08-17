@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { apiGet, apiPatch, ApiError } from "@/lib/api-client";
 import { formatNPR } from "@/lib/money";
 import {
@@ -12,7 +11,8 @@ import {
   type OrderStatus,
 } from "@/lib/order-status";
 import { openKotTicket } from "@/lib/kot-print-client";
-import type { PaymentStatus } from "@/lib/payments";
+import { PAYMENT_STATUS_LABELS, type PaymentStatus } from "@/lib/payments";
+import { OrderPaymentModal } from "./OrderPaymentModal";
 
 type OrderItemAddon = { id: string; nameSnapshot: string; priceInPaisaSnapshot: number };
 type OrderItem = {
@@ -76,7 +76,17 @@ export function OrdersBoard({
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
   // Re-render every 30s just to refresh "Xm ago" labels between polls.
   const [, forceTick] = useState(0);
-  const router = useRouter();
+  // The one place payment gets recorded from this board — opened either by
+  // the "Record payment" quick action on any unpaid/partially-paid order, or
+  // automatically when "Complete" is clicked on one (completeAfterPayment
+  // true in that case). Replaces the old window.confirm()+navigate-away
+  // flow: nothing about recording a payment or completing an unpaid order
+  // requires leaving this page anymore.
+  const [paymentModal, setPaymentModal] = useState<{
+    orderId: string;
+    orderNumber: string;
+    completeAfterPayment: boolean;
+  } | null>(null);
 
   async function loadOrders() {
     try {
@@ -134,22 +144,32 @@ export function OrdersBoard({
   // ->completed is also the moment the status route books the order's full
   // total into Account Books as a "due" if it isn't marked paid yet (see
   // recordSalesLedgerEntry in the status route) — that used to happen
-  // completely silently the instant someone clicked "Complete". This is the
-  // one place that decision becomes explicit: an unpaid/partially-paid
-  // order gets a confirmation instead of quietly turning into debt.
+  // completely silently the instant someone clicked "Complete". Instead of a
+  // window.confirm() that then navigated away to a separate order page, an
+  // unpaid/partially-paid order opens the payment dialog right here, with
+  // "record & complete" and "complete without paying" as two equally visible
+  // buttons in it.
   function handleAdvance(order: Order, forward: OrderStatus) {
     if (forward === "completed" && order.paymentStatus !== "paid") {
-      const goRecordPayment = window.confirm(
-        `Order #${order.orderNumber} (${formatNPR(order.totalInPaisa)}) isn't fully paid yet.\n\n` +
-          `Click OK to open the order and record the payment first.\n` +
-          `Click Cancel to complete it anyway — the unpaid balance will be booked as a due/credit in Account Books.`,
-      );
-      if (goRecordPayment) {
-        router.push(`/dashboard/orders/${order.id}`);
-        return;
-      }
+      setPaymentModal({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        completeAfterPayment: true,
+      });
+      return;
     }
     updateStatus(order, forward);
+  }
+
+  // The quick action on any unpaid/partially-paid order card, regardless of
+  // status/column — lets staff record a payment on the spot without waiting
+  // for the order to reach "served".
+  function handleRecordPayment(order: Order) {
+    setPaymentModal({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      completeAfterPayment: false,
+    });
   }
 
   if (loading) {
@@ -187,6 +207,7 @@ export function OrdersBoard({
                   const forward = nextForwardStatus(order.status);
                   const canCancelThis = canTransition(order.status, "cancelled");
                   const busy = busyOrderId === order.id;
+                  const isUnpaid = order.paymentStatus !== "paid";
                   return (
                     <div
                       key={order.id}
@@ -213,11 +234,18 @@ export function OrdersBoard({
                           </li>
                         ))}
                       </ul>
-                      <p className="mt-1 font-semibold text-neutral-900">
-                        {formatNPR(order.totalInPaisa)}
-                      </p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <p className="font-semibold text-neutral-900">
+                          {formatNPR(order.totalInPaisa)}
+                        </p>
+                        {isUnpaid && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                            {PAYMENT_STATUS_LABELS[order.paymentStatus]}
+                          </span>
+                        )}
+                      </div>
 
-                      {(forward && canEdit) || (canCancelThis && canCancel) ? (
+                      {(forward && canEdit) || (canCancelThis && canCancel) || (isUnpaid && canEdit) ? (
                         <div className="mt-2 flex flex-wrap gap-2">
                           {forward && canEdit && (
                             <button
@@ -226,6 +254,15 @@ export function OrdersBoard({
                               className="rounded-full bg-orange-600 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
                             >
                               {ADVANCE_LABELS[forward] ?? `Move to ${ORDER_STATUS_LABELS[forward]}`}
+                            </button>
+                          )}
+                          {isUnpaid && canEdit && (
+                            <button
+                              disabled={busy}
+                              onClick={() => handleRecordPayment(order)}
+                              className="rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
+                            >
+                              Record payment
                             </button>
                           )}
                           {canCancelThis && canCancel && (
@@ -251,6 +288,20 @@ export function OrdersBoard({
       <p className="text-xs text-neutral-400">
         {completedTodayCount} completed · {cancelledCount} cancelled (last 48 hours)
       </p>
+
+      {paymentModal && (
+        <OrderPaymentModal
+          slug={slug}
+          orderId={paymentModal.orderId}
+          orderNumber={paymentModal.orderNumber}
+          completeAfterPayment={paymentModal.completeAfterPayment}
+          onClose={() => setPaymentModal(null)}
+          onDone={() => {
+            setPaymentModal(null);
+            loadOrders();
+          }}
+        />
+      )}
     </div>
   );
 }
