@@ -102,15 +102,20 @@ export default async function PublicWebsitePage({
     <div className={`min-h-screen ${classes.page}`}>
       <header className="relative overflow-hidden">
         {content.heroImageUrl && (
-          // A plain <img>, not next/image — this is a customer-uploaded
-          // data:/http(s) URL of unknown origin/dimensions, same tradeoff
-          // MenuItemThumb already makes for menu photos.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={content.heroImageUrl}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover opacity-25"
-          />
+          <>
+            {/* A plain <img>, not next/image — this is a customer-uploaded
+                data:/http(s) URL of unknown origin/dimensions, same tradeoff
+                MenuItemThumb already makes for menu photos. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={content.heroImageUrl}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            {/* Theme-colored wash over the photo — see heroOverlay's own
+                comment in website-themes.ts for why this exists. */}
+            <div className={`absolute inset-0 ${classes.heroOverlay}`} />
+          </>
         )}
         <div className="relative mx-auto max-w-3xl px-6 py-16 text-center">
           {restaurant.logoUrl && (
@@ -123,6 +128,9 @@ export default async function PublicWebsitePage({
           )}
           <h1 className={`text-3xl font-bold sm:text-4xl ${classes.heading}`}>{restaurant.name}</h1>
           {content.tagline && <p className={`mt-3 text-lg ${classes.subtext}`}>{content.tagline}</p>}
+          {content.openingHoursSummary && (
+            <p className={`mt-2 text-sm ${classes.subtext}`}>{content.openingHoursSummary}</p>
+          )}
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             {whatsappNumber && (
               <a
@@ -132,6 +140,18 @@ export default async function PublicWebsitePage({
                 className={`rounded-full px-5 py-2 text-sm font-semibold text-white ${classes.accentBg} ${classes.accentBgHover}`}
               >
                 Message us on WhatsApp
+              </a>
+            )}
+            {/* A phone-call fallback so there's always at least one call-to-
+                action when a number is on file, even if the owner never set
+                up WhatsApp — matches whatsappNumber's own condition above
+                closely enough that showing both when both exist is fine. */}
+            {content.contactPhone && (
+              <a
+                href={`tel:${content.contactPhone}`}
+                className={`rounded-full border-2 px-5 py-2 text-sm font-semibold ${classes.border} ${classes.heading}`}
+              >
+                Call to order or reserve
               </a>
             )}
           </div>
@@ -192,7 +212,27 @@ export default async function PublicWebsitePage({
       <section className={`border-t px-6 py-10 ${classes.border}`}>
         <div className="mx-auto max-w-2xl text-center">
           <h2 className={`mb-3 text-xl font-semibold ${classes.heading}`}>Visit us</h2>
-          {content.contactAddress && <p className={`text-sm ${classes.subtext}`}>{content.contactAddress}</p>}
+          {content.contactAddress && (
+            <p className={`text-sm ${classes.subtext}`}>
+              {content.contactAddress}
+              {content.directionsUrl && (
+                <>
+                  {" · "}
+                  <a
+                    href={content.directionsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`font-medium ${classes.accentText} hover:underline`}
+                  >
+                    Get directions
+                  </a>
+                </>
+              )}
+            </p>
+          )}
+          {content.openingHoursSummary && (
+            <p className={`mt-1 text-sm ${classes.subtext}`}>{content.openingHoursSummary}</p>
+          )}
           {content.contactPhone && (
             <p className={`mt-1 text-sm ${classes.subtext}`}>
               <a href={`tel:${content.contactPhone}`} className={classes.accentText}>

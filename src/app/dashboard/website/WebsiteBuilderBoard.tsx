@@ -586,12 +586,24 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
         {savedAt && !saving && <span className="text-xs text-neutral-400">Saved</span>}
       </div>
 
-      {/* Live preview */}
+      {/* Live preview — shows the actual name/tagline/hero photo you've
+          entered above (not a placeholder), so you can sanity-check the
+          look before publishing without opening the live site in a new
+          tab. Not a pixel-perfect match for the full public page (no
+          gallery/menu/contact sections here) — just enough to judge the
+          theme, hero photo, and copy together. */}
       <section className="rounded-xl border border-neutral-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-semibold text-neutral-900">Preview</h2>
-        <div className={`overflow-hidden rounded-lg border ${themeClasses.border}`}>
-          <div className={`p-6 text-center ${themeClasses.page}`}>
-            <p className={`text-lg font-bold ${themeClasses.heading}`}>Your Restaurant</p>
+        <div className={`relative overflow-hidden rounded-lg border ${themeClasses.border}`}>
+          {form.heroImageUrl && (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={form.heroImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <div className={`absolute inset-0 ${themeClasses.heroOverlay}`} />
+            </>
+          )}
+          <div className={`relative p-6 text-center ${form.heroImageUrl ? "" : themeClasses.page}`}>
+            <p className={`text-lg font-bold ${themeClasses.heading}`}>{restaurantName}</p>
             {form.tagline && <p className={`mt-1 text-sm ${themeClasses.subtext}`}>{form.tagline}</p>}
             <p className={`mt-3 text-xs font-semibold ${themeClasses.accentText}`}>
               This is roughly how visitors will see your page&apos;s look and colors.

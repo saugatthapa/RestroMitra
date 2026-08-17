@@ -1,5 +1,5 @@
 import "server-only";
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { paisaToRupees } from "@/lib/money";
 import { getEsewaConfig, type EsewaConfig } from "./config";
 
@@ -127,7 +127,18 @@ export function verifyEsewaCallback(
   }
   const message = signedFieldNames.map((name) => `${name}=${payload[name]}`).join(",");
   const expected = createHmac("sha256", config.secretKey).update(message).digest("base64");
-  if (expected !== payload.signature) return null;
+  // Constant-time compare, not `!==` — this is a security-boundary check
+  // (does the caller actually hold our secret key), and `!==` on strings
+  // short-circuits at the first mismatched byte, which is the textbook
+  // timing side-channel `timingSafeEqual` exists to close. Length must
+  // match first since timingSafeEqual throws (rather than returning false)
+  // on differing buffer lengths — a forged/truncated signature is the
+  // common case this guards, not a real risk in itself.
+  const expectedBuf = Buffer.from(expected);
+  const signatureBuf = Buffer.from(payload.signature);
+  if (expectedBuf.length !== signatureBuf.length || !timingSafeEqual(expectedBuf, signatureBuf)) {
+    return null;
+  }
   return payload;
 }
 

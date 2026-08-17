@@ -6,6 +6,7 @@ import { paymentGatewayParamSchema } from "@/lib/validation/payment-gateway";
 import { computeBillingSummary } from "@/lib/payments";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp } from "@/lib/request";
+import { rateLimit } from "@/lib/rate-limit";
 import { verifyEsewaCallback } from "@/lib/payment-gateways/esewa";
 import { lookupKhaltiPayment, KHALTI_COMPLETED_STATUS } from "@/lib/payment-gateways/khalti";
 
@@ -51,6 +52,26 @@ export async function GET(
     gatewayReference = searchParams.get("ref") ?? searchParams.get("purchase_order_id");
   }
   if (!gatewayReference) return failRedirect();
+
+  // This route is public/unauthenticated by design (see the doc comment
+  // above), and unlike the other public routes in this app it wasn't rate
+  // limited at all — someone holding a valid `gatewayReference` (their own
+  // in-flight payment) could hammer this URL, forcing a repeated Khalti
+  // server-to-server lookup call and a repeated DB transaction per hit.
+  // Not a money-forgery risk (verification stays cryptographic), but cheap
+  // resource/outbound-API abuse worth closing off. Limited both per-IP
+  // (generic abuse) and per-reference (this exact in-flight payment).
+  const ip = getClientIp(request);
+  const ipLimit = rateLimit(`gateway-callback:ip:${ip}`, { limit: 30, windowMs: 10 * 60 * 1000 });
+  const refLimit = rateLimit(`gateway-callback:ref:${gatewayReference}`, {
+    limit: 10,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!ipLimit.allowed || !refLimit.allowed) {
+    return new NextResponse("Too many requests. Please wait a few minutes and try again.", {
+      status: 429,
+    });
+  }
 
   const transaction = await db.query.paymentGatewayTransactions.findFirst({
     where: eq(paymentGatewayTransactions.gatewayReference, gatewayReference),

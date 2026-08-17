@@ -79,21 +79,107 @@ export async function updateWebsiteConfig(
   return updated;
 }
 
+const DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+const DAY_LABELS: Record<(typeof DAY_ORDER)[number], string> = {
+  monday: "Mon",
+  tuesday: "Tue",
+  wednesday: "Wed",
+  thursday: "Thu",
+  friday: "Fri",
+  saturday: "Sat",
+  sunday: "Sun",
+};
+
+/** "09:00" -> "9:00 AM" — opening hours are stored as plain "HH:MM" strings
+ * (see restaurants.openingHours), not Date objects, so this is a small
+ * string-only formatter rather than reusing nepali-date.ts's Date-based one. */
+function formatHHMM(value: string): string {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return value;
+  const hour24 = Number(match[1]);
+  const minute = match[2];
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour12}:${minute} ${period}`;
+}
+
+/**
+ * Collected from every restaurant at onboarding (see
+ * api/onboarding/restaurant/route.ts) but, until this, never actually shown
+ * anywhere — not on the dashboard, not on the public site. Every restaurant
+ * onboards with the SAME hours on all 7 days (the onboarding form only asks
+ * once), so the common case collapses to one line; the formatter still
+ * handles per-day differences correctly in case that ever changes (e.g. a
+ * future "edit hours per day" settings screen).
+ */
+export function formatOpeningHoursSummary(
+  openingHours: Record<string, { open: string; close: string } | null> | null | undefined,
+): string | null {
+  if (!openingHours) return null;
+
+  const perDay = DAY_ORDER.map((day) => {
+    const entry = openingHours[day];
+    return { day, label: entry ? `${formatHHMM(entry.open)} – ${formatHHMM(entry.close)}` : "Closed" };
+  });
+  if (perDay.every((d) => d.label === "Closed")) return null;
+
+  // Group consecutive days sharing the same label ("Mon–Sat: 9 AM – 9 PM")
+  // instead of a line per day — cheap and reads far better once more than
+  // one or two days are involved.
+  const groups: { days: string[]; label: string }[] = [];
+  for (const { day, label } of perDay) {
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) {
+      last.days.push(day);
+    } else {
+      groups.push({ days: [day], label });
+    }
+  }
+
+  // All 7 days identical — the overwhelmingly common case today.
+  if (groups.length === 1 && groups[0].days.length === 7) {
+    return groups[0].label === "Closed" ? null : `Open daily · ${groups[0].label}`;
+  }
+
+  return groups
+    .map((g) => {
+      const names = g.days.map((d) => DAY_LABELS[d as (typeof DAY_ORDER)[number]]);
+      const range = names.length > 1 ? `${names[0]}–${names[names.length - 1]}` : names[0];
+      return `${range}: ${g.label}`;
+    })
+    .join(" · ");
+}
+
+/** Builds a Google Maps search link from a free-text address — no geocoding
+ * infra needed; Maps resolves a plain-text query itself. */
+export function buildDirectionsUrl(address: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
+
 /** Content actually shown on the public site — config values, falling back to the restaurant's own profile fields where the owner hasn't overridden them. */
 export function resolveWebsiteContent(
-  restaurant: { name: string; phone: string | null; address: string | null; city: string | null },
+  restaurant: {
+    name: string;
+    phone: string | null;
+    address: string | null;
+    city: string | null;
+    openingHours?: Record<string, { open: string; close: string } | null> | null;
+  },
   config: WebsiteConfig,
 ) {
+  const contactAddress =
+    config.contactAddress?.trim() ||
+    [restaurant.address, restaurant.city].filter(Boolean).join(", ") ||
+    null;
   return {
     tagline: config.tagline?.trim() || null,
     aboutText: config.aboutText?.trim() || null,
     heroImageUrl: config.heroImageUrl || null,
     galleryImageUrls: config.galleryImageUrls ?? [],
     contactPhone: config.contactPhone?.trim() || restaurant.phone || null,
-    contactAddress:
-      config.contactAddress?.trim() ||
-      [restaurant.address, restaurant.city].filter(Boolean).join(", ") ||
-      null,
+    contactAddress,
+    directionsUrl: contactAddress ? buildDirectionsUrl(contactAddress) : null,
+    openingHoursSummary: formatOpeningHoursSummary(restaurant.openingHours),
     seoTitle: config.seoTitle?.trim() || `${restaurant.name} — Menu & Info`,
     seoDescription:
       config.seoDescription?.trim() ||

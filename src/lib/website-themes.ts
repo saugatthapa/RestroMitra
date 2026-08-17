@@ -39,6 +39,15 @@ export const WEBSITE_THEME_CLASSES: Record<
     accentBgHover: string;
     card: string;
     border: string;
+    // A theme-colored, semi-transparent wash placed over a hero photo. A
+    // hero photo previously sat at a flat opacity with nothing else behind
+    // it, so its own colors dominated the header regardless of theme — all
+    // four themes looked nearly identical up top whenever a hero photo was
+    // set (confirmed by screenshotting each theme with the same photo).
+    // Tinting the photo with the theme's own background color keeps the
+    // theme visually distinct even with a photo, and keeps header text
+    // legible regardless of how bright or busy the photo is.
+    heroOverlay: string;
   }
 > = {
   classic: {
@@ -50,6 +59,7 @@ export const WEBSITE_THEME_CLASSES: Record<
     accentBgHover: "hover:bg-amber-600",
     card: "bg-neutral-50",
     border: "border-neutral-200",
+    heroOverlay: "bg-white/70",
   },
   modern: {
     page: "bg-neutral-100 text-neutral-900",
@@ -60,6 +70,7 @@ export const WEBSITE_THEME_CLASSES: Record<
     accentBgHover: "hover:bg-indigo-700",
     card: "bg-white",
     border: "border-neutral-200",
+    heroOverlay: "bg-indigo-50/75",
   },
   warm: {
     page: "bg-amber-50 text-stone-900",
@@ -70,6 +81,7 @@ export const WEBSITE_THEME_CLASSES: Record<
     accentBgHover: "hover:bg-orange-700",
     card: "bg-white",
     border: "border-amber-200",
+    heroOverlay: "bg-orange-50/70",
   },
   midnight: {
     page: "bg-neutral-950 text-neutral-100",
@@ -80,6 +92,7 @@ export const WEBSITE_THEME_CLASSES: Record<
     accentBgHover: "hover:bg-teal-400",
     card: "bg-neutral-900",
     border: "border-neutral-800",
+    heroOverlay: "bg-neutral-950/70",
   },
 };
 
