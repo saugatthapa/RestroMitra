@@ -7,6 +7,8 @@ import {
   TRIAL_MAX_STAFF,
   maxBranchesForRestaurant,
   TRIAL_MAX_BRANCHES,
+  yearlyPriceInPaisa,
+  monthlyEquivalentWhenYearlyInPaisa,
 } from "./plans";
 
 describe("PLANS catalog", () => {
@@ -35,6 +37,35 @@ describe("PLANS catalog", () => {
     expect(PLAN_MAP.pro.maxBranches).toBeNull();
     expect(PLAN_MAP.starter.maxBranches).toBeGreaterThan(0);
     expect(PLAN_MAP.growth.maxBranches).toBeGreaterThan(PLAN_MAP.starter.maxBranches!);
+  });
+});
+
+describe("yearlyPriceInPaisa", () => {
+  it("is exactly 10x the monthly price for every plan (2 months free)", () => {
+    for (const plan of PLANS) {
+      expect(yearlyPriceInPaisa(plan)).toBe(plan.priceInPaisaMonthly * 10);
+    }
+  });
+
+  it("is always cheaper than paying monthly for 12 months", () => {
+    for (const plan of PLANS) {
+      expect(yearlyPriceInPaisa(plan)).toBeLessThan(plan.priceInPaisaMonthly * 12);
+    }
+  });
+});
+
+describe("monthlyEquivalentWhenYearlyInPaisa", () => {
+  it("is lower than the plan's own monthly price (that's the point of billing yearly)", () => {
+    for (const plan of PLANS) {
+      expect(monthlyEquivalentWhenYearlyInPaisa(plan)).toBeLessThan(plan.priceInPaisaMonthly);
+    }
+  });
+
+  it("rounds yearly/12 to the nearest paisa", () => {
+    const starter = PLAN_MAP.starter;
+    expect(monthlyEquivalentWhenYearlyInPaisa(starter)).toBe(
+      Math.round(yearlyPriceInPaisa(starter) / 12),
+    );
   });
 });
 

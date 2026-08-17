@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { apiGet, apiPost, ApiError } from "@/lib/api-client";
-import { PLANS, type PlanKey } from "@/lib/plans";
+import {
+  PLANS,
+  yearlyPriceInPaisa,
+  monthlyEquivalentWhenYearlyInPaisa,
+  type PlanKey,
+} from "@/lib/plans";
 import { SUBSCRIPTION_STATUS_LABELS, daysRemaining, type SubscriptionStatus } from "@/lib/subscription";
 
 type BillingInfo = {
@@ -49,6 +54,7 @@ export function BillingBoard({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
   const [requestingPlan, setRequestingPlan] = useState<PlanKey | null>(null);
   const [requestedPlans, setRequestedPlans] = useState<Set<PlanKey>>(new Set());
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("yearly");
 
   async function load() {
     setLoading(true);
@@ -71,7 +77,15 @@ export function BillingBoard({ slug }: { slug: string }) {
   async function requestPlan(planKey: PlanKey) {
     setRequestingPlan(planKey);
     try {
-      await apiPost(`/api/restaurants/${slug}/billing/upgrade-request`, { planKey });
+      // The upgrade-request flow is a manual sales-assist step (see the
+      // route's own comment: no gateway subscription checkout yet, a
+      // platform admin follows up to actually activate it) — its schema
+      // has no dedicated billing-cycle field, so the toggle's choice rides
+      // along in `note` rather than being silently dropped on the floor.
+      await apiPost(`/api/restaurants/${slug}/billing/upgrade-request`, {
+        planKey,
+        note: billingCycle === "yearly" ? "Requested yearly billing (2 months free)." : undefined,
+      });
       setRequestedPlans((prev) => new Set(prev).add(planKey));
       await load();
     } catch (err) {
@@ -145,7 +159,32 @@ export function BillingBoard({ slug }: { slug: string }) {
         )}
       </div>
 
-      <h2 className="mb-4 text-sm font-semibold text-neutral-900">Plans</h2>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-neutral-900">Plans</h2>
+        <div className="inline-flex rounded-full border border-neutral-200 bg-neutral-50 p-0.5 text-xs font-medium">
+          <button
+            type="button"
+            onClick={() => setBillingCycle("monthly")}
+            className={`rounded-full px-3 py-1.5 transition ${
+              billingCycle === "monthly" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500"
+            }`}
+          >
+            Monthly
+          </button>
+          <button
+            type="button"
+            onClick={() => setBillingCycle("yearly")}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition ${
+              billingCycle === "yearly" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500"
+            }`}
+          >
+            Yearly
+            <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+              2 months free
+            </span>
+          </button>
+        </div>
+      </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {PLANS.map((plan) => {
           const isCurrent = data.planKey === plan.key && data.subscriptionStatus === "active";
@@ -163,10 +202,22 @@ export function BillingBoard({ slug }: { slug: string }) {
                 </span>
               )}
               <h3 className="text-base font-semibold text-neutral-900">{plan.name}</h3>
-              <p className="mt-1 text-2xl font-bold text-neutral-900">
-                {formatRupees(plan.priceInPaisaMonthly)}
-                <span className="text-sm font-normal text-neutral-500">/mo</span>
-              </p>
+              {billingCycle === "monthly" ? (
+                <p className="mt-1 text-2xl font-bold text-neutral-900">
+                  {formatRupees(plan.priceInPaisaMonthly)}
+                  <span className="text-sm font-normal text-neutral-500">/mo</span>
+                </p>
+              ) : (
+                <>
+                  <p className="mt-1 text-2xl font-bold text-neutral-900">
+                    {formatRupees(monthlyEquivalentWhenYearlyInPaisa(plan))}
+                    <span className="text-sm font-normal text-neutral-500">/mo</span>
+                  </p>
+                  <p className="text-xs text-neutral-500">
+                    {formatRupees(yearlyPriceInPaisa(plan))} billed yearly
+                  </p>
+                </>
+              )}
               <p className="mt-2 text-xs text-neutral-500">{plan.tagline}</p>
               <ul className="mt-4 flex-1 space-y-1.5 text-sm text-neutral-600">
                 {plan.features.map((f) => (

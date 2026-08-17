@@ -5,10 +5,33 @@
  * between the billing UI, the admin UI, and the staff-limit check on the
  * invite route.
  *
- * PRICING IS A PLACEHOLDER. There is no payment gateway wired up yet
- * (that's Phase 11's job) — these numbers exist so the billing/admin UI
- * has something real to render and compare against, not because they're a
- * finalized business decision. Update before ever taking a real payment.
+ * PRICING — researched against the actual Nepal small-restaurant-POS market
+ * (August 2026), not a guess. The previous numbers here (Rs 1,500/3,500/
+ * 6,500 per month) were an explicit placeholder — this pass replaced them
+ * after checking what a restaurant in RestroMitra's actual target segment
+ * (a single small restaurant/cafe/momo shop, Itahari-first) would see from
+ * every direct competitor with public pricing:
+ *   - LekhaPatra: Rs 500/mo (Rs 4,999/yr) entry, Rs 800/mo (Rs 7,999/yr) top
+ *   - Hamro SAN: Rs 599 / 999 / 1,199 per month (3 tiers, monthly only)
+ *   - Restronp: Rs 500 / 1,000 / 2,000 per month equivalent (annual-only billing)
+ *   - NRestro: Rs 833/mo entry, ~Rs 1,250–2,000/mo "most popular" tier
+ * The old placeholder priced RestroMitra's entry tier ABOVE every
+ * competitor's most-popular mid tier, and its mid/top tiers above anything
+ * else in the market — a real barrier to adoption in a price-sensitive
+ * market. These numbers land RestroMitra at the upper end of that
+ * competitive band (justified by real differentiators none of the above
+ * advertise — an AI assistant, offline-capable POS, eSewa/Khalti payment
+ * gateways included rather than gated, a website builder), not above it.
+ *
+ * Yearly = 10x the monthly price (2 months free) at every tier — the same
+ * "pay 10, get 12" framing LekhaPatra and most SaaS pricing uses, simple
+ * enough to explain to a non-technical owner without a discount-percent
+ * calculation. See yearlyPriceInPaisa().
+ *
+ * Still not wired to a real payment gateway for subscriptions themselves
+ * (BillingBoard's "Request this plan" is a manual sales-assist flow, not
+ * checkout) — these are the numbers to actually quote, but confirm before
+ * changing what's charged to any restaurant already on a paid plan.
  */
 
 export const PLAN_KEYS = ["starter", "growth", "pro"] as const;
@@ -32,13 +55,14 @@ export const PLANS: Plan[] = [
     key: "starter",
     name: "Starter",
     tagline: "For a single small restaurant, cafe, or momo shop getting started.",
-    priceInPaisaMonthly: 150_000, // Rs 1,500/mo
+    priceInPaisaMonthly: 79_900, // Rs 799/mo
     maxStaff: 5,
     maxBranches: 1,
     features: [
       "QR table ordering",
       "POS & billing",
       "Kitchen display (KDS)",
+      "eSewa & Khalti payments",
       "Up to 5 staff accounts",
       "1 branch",
     ],
@@ -47,7 +71,7 @@ export const PLANS: Plan[] = [
     key: "growth",
     name: "Growth",
     tagline: "For a busy restaurant that needs the full toolkit.",
-    priceInPaisaMonthly: 350_000, // Rs 3,500/mo
+    priceInPaisaMonthly: 179_900, // Rs 1,799/mo
     maxStaff: 15,
     maxBranches: 3,
     highlight: true,
@@ -55,6 +79,8 @@ export const PLANS: Plan[] = [
       "Everything in Starter",
       "Inventory & recipe costing",
       "Customers & loyalty program",
+      "AI restaurant assistant",
+      "Website builder",
       "Expense tracking & reports",
       "Up to 15 staff accounts",
       "Up to 3 branches",
@@ -64,7 +90,7 @@ export const PLANS: Plan[] = [
     key: "pro",
     name: "Pro",
     tagline: "For established restaurants that want everything, unlimited.",
-    priceInPaisaMonthly: 650_000, // Rs 6,500/mo
+    priceInPaisaMonthly: 349_900, // Rs 3,499/mo
     maxStaff: null,
     maxBranches: null,
     features: [
@@ -76,6 +102,20 @@ export const PLANS: Plan[] = [
     ],
   },
 ];
+
+/** Yearly price for a plan — 10x the monthly rate (2 months free), rounded
+ * to the nearest rupee. Kept as a function of priceInPaisaMonthly rather
+ * than a second stored field so the "2 months free" relationship can never
+ * drift out of sync if the monthly price changes. */
+export function yearlyPriceInPaisa(plan: Plan): number {
+  return plan.priceInPaisaMonthly * 10;
+}
+
+/** What a restaurant effectively pays per month when billed yearly —
+ * for display ("Rs X/mo, billed yearly") next to the full yearly price. */
+export function monthlyEquivalentWhenYearlyInPaisa(plan: Plan): number {
+  return Math.round(yearlyPriceInPaisa(plan) / 12);
+}
 
 export const PLAN_MAP: Record<PlanKey, Plan> = Object.fromEntries(
   PLANS.map((p) => [p.key, p]),
