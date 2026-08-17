@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { apiGet, apiPatch, ApiError } from "@/lib/api-client";
 import { formatNPR } from "@/lib/money";
 import {
@@ -11,6 +12,7 @@ import {
   type OrderStatus,
 } from "@/lib/order-status";
 import { openKotTicket } from "@/lib/kot-print-client";
+import type { PaymentStatus } from "@/lib/payments";
 
 type OrderItemAddon = { id: string; nameSnapshot: string; priceInPaisaSnapshot: number };
 type OrderItem = {
@@ -25,6 +27,7 @@ type Order = {
   id: string;
   orderNumber: string;
   status: OrderStatus;
+  paymentStatus: PaymentStatus;
   source: string;
   customerName: string | null;
   customerPhone: string | null;
@@ -73,6 +76,7 @@ export function OrdersBoard({
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
   // Re-render every 30s just to refresh "Xm ago" labels between polls.
   const [, forceTick] = useState(0);
+  const router = useRouter();
 
   async function loadOrders() {
     try {
@@ -125,6 +129,27 @@ export function OrdersBoard({
     const reason = window.prompt(`Cancel order #${order.orderNumber}? Add a reason (optional):`);
     if (reason === null) return; // user hit Cancel on the prompt itself
     updateStatus(order, "cancelled", reason || undefined);
+  }
+
+  // ->completed is also the moment the status route books the order's full
+  // total into Account Books as a "due" if it isn't marked paid yet (see
+  // recordSalesLedgerEntry in the status route) — that used to happen
+  // completely silently the instant someone clicked "Complete". This is the
+  // one place that decision becomes explicit: an unpaid/partially-paid
+  // order gets a confirmation instead of quietly turning into debt.
+  function handleAdvance(order: Order, forward: OrderStatus) {
+    if (forward === "completed" && order.paymentStatus !== "paid") {
+      const goRecordPayment = window.confirm(
+        `Order #${order.orderNumber} (${formatNPR(order.totalInPaisa)}) isn't fully paid yet.\n\n` +
+          `Click OK to open the order and record the payment first.\n` +
+          `Click Cancel to complete it anyway — the unpaid balance will be booked as a due/credit in Account Books.`,
+      );
+      if (goRecordPayment) {
+        router.push(`/dashboard/orders/${order.id}`);
+        return;
+      }
+    }
+    updateStatus(order, forward);
   }
 
   if (loading) {
@@ -197,7 +222,7 @@ export function OrdersBoard({
                           {forward && canEdit && (
                             <button
                               disabled={busy}
-                              onClick={() => updateStatus(order, forward)}
+                              onClick={() => handleAdvance(order, forward)}
                               className="rounded-full bg-orange-600 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
                             >
                               {ADVANCE_LABELS[forward] ?? `Move to ${ORDER_STATUS_LABELS[forward]}`}

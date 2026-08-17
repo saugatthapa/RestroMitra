@@ -183,6 +183,24 @@ export function OrderBillView({
   const forward = nextForwardStatus(order.status);
   const canCancelThis = canTransition(order.status, "cancelled");
 
+  // Same reasoning as OrdersBoard's handleAdvance — completing an order
+  // with money still due used to silently book that balance as a ledger
+  // due the instant the status route processed it. Here we already have
+  // the exact remaining amount and the payment form is right below, so the
+  // prompt can just say "record it below" instead of navigating anywhere.
+  function handleAdvance() {
+    if (!forward) return;
+    if (forward === "completed" && billing && billing.remainingDueInPaisa > 0) {
+      const proceed = window.confirm(
+        `${formatNPR(billing.remainingDueInPaisa)} is still due on this order.\n\n` +
+          `Click Cancel to record the payment below first.\n` +
+          `Click OK to complete anyway — the balance will be booked as a due/credit in Account Books.`,
+      );
+      if (!proceed) return;
+    }
+    updateStatus(forward);
+  }
+
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-4 flex items-center justify-between print:hidden">
@@ -249,7 +267,7 @@ export function OrderBillView({
             {forward && canEdit && (
               <button
                 disabled={busy}
-                onClick={() => updateStatus(forward)}
+                onClick={handleAdvance}
                 className="rounded-full bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
               >
                 {ADVANCE_LABELS[forward] ?? `Move to ${ORDER_STATUS_LABELS[forward]}`}
