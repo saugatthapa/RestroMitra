@@ -89,6 +89,28 @@
 // token — this is what lets an offline sidebar click resolve as a smooth
 // client-side transition instead of a full reload, for the (rarer, but
 // real) case where the tab genuinely is SW-controlled.
+//
+// --- Phase 22c: 206 responses were silently breaking every cache write ---
+//
+// On at least one real deployment (Hostinger's Node.js hosting), the
+// server/proxy in front of the app answers plain GETs — including ones
+// this worker never attached a Range header to — with HTTP 206 instead of
+// 200. The Cache API refuses to store ANY 206 response outright (it's a
+// hard platform rule, not configurable), so every cache.put() call was
+// throwing. Because that throw happened inside the fetch handler's own
+// try/catch, it fell into the catch branch, found nothing usable cached
+// (nothing had ever successfully been written), and rethrew — which is
+// what actually produced the "can't open the page" failures in
+// production, even though this exact code had already been verified
+// working end-to-end locally (where the dev/prod server answers with a
+// normal 200). Two changes fix this: cacheResponse() below normalizes a
+// 206 into a 200 before storing (safe here specifically because this
+// worker never requests a Range, so there's no legitimate partial content
+// to lose — the body is the whole resource, just mislabeled by whatever's
+// serving it), and every cache write is now wrapped so a failure there —
+// 206, quota exceeded, anything — can never propagate and break the
+// actual response the page receives. Caching was always meant to be
+// best-effort; now it actually is.
 
 const CACHE_NAME = "dhankipos-dashboard-shell-v2";
 const RSC_QUERY_PARAM = "_rsc";
@@ -147,7 +169,7 @@ async function warmCriticalRoutes() {
         const response = await fetch(path, { cache: "no-store" });
         if (!response.ok) return;
         const body = await response.text();
-        await cache.put(docCacheKey(path), new Response(body, response));
+        await cacheResponse(cache, docCacheKey(path), new Response(body, response));
 
         for (const match of body.matchAll(STATIC_ASSET_RE)) assetUrls.add(match[0]);
         if (!slug) {
@@ -166,7 +188,7 @@ async function warmCriticalRoutes() {
     [...assetUrls].map(async (assetUrl) => {
       try {
         const response = await fetch(assetUrl, { cache: "no-store" });
-        if (response.ok) await cache.put(docCacheKey(assetUrl), response);
+        if (response.ok) await cacheResponse(cache, docCacheKey(assetUrl), response);
       } catch {
         // Same as above — best effort, next real load will fill it in.
       }
@@ -179,7 +201,7 @@ async function warmCriticalRoutes() {
         const dataPath = `/api/restaurants/${slug}${suffix}`;
         try {
           const response = await fetch(dataPath, { cache: "no-store" });
-          if (response.ok) await cache.put(docCacheKey(dataPath), response);
+          if (response.ok) await cacheResponse(cache, docCacheKey(dataPath), response);
         } catch {
           // Same as above.
         }
@@ -191,6 +213,23 @@ async function warmCriticalRoutes() {
 function docCacheKey(pathOrUrl) {
   const path = pathOrUrl.startsWith("http") ? new URL(pathOrUrl).pathname : pathOrUrl;
   return `${self.location.origin}${path}::doc`;
+}
+
+// The one place any response gets written to Cache Storage — see the
+// Phase 22c comment above for why this exists. Never throws: a caching
+// failure (206, quota exceeded, an opaque cross-origin response slipping
+// through, whatever) is always swallowed here rather than allowed to
+// break whatever real work the caller is doing.
+async function cacheResponse(cache, key, response) {
+  try {
+    const toStore =
+      response.status === 206
+        ? new Response(response.body, { status: 200, statusText: "OK", headers: response.headers })
+        : response;
+    await cache.put(key, toStore);
+  } catch {
+    // Best-effort by design.
+  }
 }
 
 // Builds the Cache Storage key we actually store/match under: same origin
@@ -227,7 +266,9 @@ self.addEventListener("fetch", (event) => {
         const networkResponse = await fetch(request);
         if (networkResponse.ok) {
           const cache = await caches.open(CACHE_NAME);
-          cache.put(cacheKey, networkResponse.clone());
+          // Fire-and-forget: cacheResponse() never throws, so this can't
+          // delay or fail the response we're about to return to the page.
+          cacheResponse(cache, cacheKey, networkResponse.clone());
         }
         return networkResponse;
       } catch (err) {
