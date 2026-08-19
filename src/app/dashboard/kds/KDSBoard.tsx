@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiGet, apiPatch, ApiError } from "@/lib/api-client";
 import {
@@ -12,6 +12,15 @@ import {
 } from "@/lib/kds";
 import { type OrderStatus } from "@/lib/order-status";
 import { StatIcon } from "@/components/StatTile";
+import { useOnlineStatus } from "@/lib/use-online-status";
+import {
+  enqueueStatusUpdate,
+  listQueuedStatusUpdates,
+  removeQueuedStatusUpdate,
+  syncQueuedStatusUpdates,
+  isOfflineQueueSupported,
+  type QueuedStatusUpdate,
+} from "@/lib/offline-status-queue";
 
 type OrderItemAddon = { id: string; nameSnapshot: string; priceInPaisaSnapshot: number };
 type OrderItem = {
@@ -102,6 +111,60 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
   // Re-render every 30s just to refresh "Xm ago" labels between polls.
   const [, forceTick] = useState(0);
 
+  // Phase 22 (offline mode) — same queue-and-sync pattern as OrdersBoard
+  // (see its own comment, and offline-status-queue.ts's module comment).
+  // KDS only ever advances forward (confirmed->preparing->ready), never
+  // cancels, so there's no payment-linked exclusion to worry about here.
+  const [queuedUpdates, setQueuedUpdates] = useState<QueuedStatusUpdate[]>([]);
+  const [syncing, setSyncing] = useState(false);
+
+  const refreshQueue = useCallback(async () => {
+    if (!isOfflineQueueSupported()) return;
+    const rows = await listQueuedStatusUpdates(slug);
+    setQueuedUpdates(rows);
+  }, [slug]);
+
+  const runSync = useCallback(async () => {
+    if (!isOfflineQueueSupported() || syncing) return;
+    setSyncing(true);
+    try {
+      const result = await syncQueuedStatusUpdates(slug, {
+        applyStatus: async (update) => {
+          await apiPatch(`${base(slug)}/orders/${update.orderId}/status`, {
+            status: update.toStatus,
+          });
+        },
+        getCurrentStatus: async (orderId) => {
+          try {
+            const res = await apiGet<{ order: { status: OrderStatus } }>(
+              `${base(slug)}/orders/${orderId}`,
+            );
+            return res.order.status;
+          } catch (err) {
+            if (err instanceof ApiError) return null;
+            throw err;
+          }
+        },
+      });
+      if (result.synced > 0) load();
+    } finally {
+      await refreshQueue();
+      setSyncing(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, syncing, refreshQueue]);
+
+  const isOnline = useOnlineStatus(runSync);
+
+  async function discardQueuedUpdate(update: QueuedStatusUpdate) {
+    const ok = window.confirm(
+      `Discard this queued change to order #${update.orderNumber}? This cannot be undone.`,
+    );
+    if (!ok) return;
+    await removeQueuedStatusUpdate(update.clientRequestId);
+    await refreshQueue();
+  }
+
   async function load() {
     try {
       const res = await apiGet<{ orders: Order[] }>(`${base(slug)}/orders`);
@@ -119,6 +182,7 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
     // comment for why the SSE-triggered refresh and the 5s poll both stay,
     // one as the instant path, one as the backstop.
     load();
+    refreshQueue();
     const poll = setInterval(load, 5000);
     const tick = setInterval(() => forceTick((n) => n + 1), 30_000);
     window.addEventListener("dhankipos:orders-changed", load);
@@ -135,9 +199,30 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
     [orders],
   );
 
+  async function queueAdvance(order: Order, to: OrderStatus) {
+    if (!isOfflineQueueSupported()) {
+      alert(
+        "You're offline and this browser doesn't support saving changes for later — connect to the internet and try again.",
+      );
+      return;
+    }
+    await enqueueStatusUpdate({
+      slug,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      fromStatus: order.status,
+      toStatus: to,
+    });
+    await refreshQueue();
+  }
+
   async function advance(order: Order, to: OrderStatus) {
     setBusyOrderId(order.id);
     try {
+      if (!isOnline) {
+        await queueAdvance(order, to);
+        return;
+      }
       const res = await apiPatch<{ order: Order }>(`${base(slug)}/orders/${order.id}/status`, {
         status: to,
       });
@@ -147,7 +232,11 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
           : prev.filter((o) => o.id !== order.id),
       );
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Could not update the ticket.");
+      if (err instanceof ApiError) {
+        alert(err.message);
+      } else {
+        await queueAdvance(order, to);
+      }
     } finally {
       setBusyOrderId(null);
     }
@@ -160,6 +249,53 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
   return (
     <div className="space-y-4">
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      {!isOnline && (
+        <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+          You&apos;re offline — ticket updates will be saved on this device and applied
+          automatically once you&apos;re back online.
+        </div>
+      )}
+      {queuedUpdates.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-amber-800">
+              {queuedUpdates.length} update{queuedUpdates.length === 1 ? "" : "s"} waiting to sync
+            </p>
+            <button
+              onClick={runSync}
+              disabled={!isOnline || syncing}
+              className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 disabled:opacity-50"
+            >
+              {syncing ? "Syncing…" : "Sync now"}
+            </button>
+          </div>
+          <ul className="mt-2 space-y-1">
+            {queuedUpdates.map((u) => (
+              <li
+                key={u.clientRequestId}
+                className="flex items-center justify-between gap-2 text-xs text-amber-700"
+              >
+                <span>#{u.orderNumber} → {u.toStatus}</span>
+                <span className="flex items-center gap-2">
+                  <span className={u.status === "error" ? "font-medium text-red-600" : ""}>
+                    {u.status === "error" ? "Sync failed — will retry" : "Waiting"}
+                  </span>
+                  {u.status === "error" && (
+                    <button
+                      onClick={() => discardQueuedUpdate(u)}
+                      className="rounded border border-red-300 px-1.5 py-0.5 font-medium text-red-700 hover:bg-red-50"
+                    >
+                      Discard
+                    </button>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <button

@@ -9,6 +9,9 @@ import { formatAdDate, formatBsDate } from "@/lib/nepali-date";
 import { DateSystemProvider, useDateSystemControl, type DateSystem } from "@/lib/date-system";
 import { LocaleProvider, useLocaleControl, useTranslation, trialDaysLeftText, type Locale } from "@/lib/i18n";
 import { PERMISSIONS, roleHasPermission, type PermissionKey } from "@/lib/rbac/permissions";
+import { useOnlineStatus } from "@/lib/use-online-status";
+import { DashboardServiceWorker } from "@/components/DashboardServiceWorker";
+import { InstallAppPrompt } from "@/components/InstallAppPrompt";
 
 // Nav is grouped (Overview / Front of house / Back office / Account) with an
 // icon per item, rather than one flat 16-item list — the flat list was the
@@ -199,6 +202,13 @@ function DashboardShellContent({
   const { dateSystem, setDateSystem } = useDateSystemControl();
   const { locale, setLocale } = useLocaleControl();
   const { t } = useTranslation();
+
+  // Phase 22 (offline mode) — a shell-wide connectivity indicator. Each
+  // page that can actually queue-and-sync a mutation (POS, Orders, KDS)
+  // still shows its own more specific "N waiting to sync" banner; this one
+  // is the fallback for every OTHER dashboard page, which previously gave
+  // staff no signal at all when a background fetch silently failed.
+  const isOnline = useOnlineStatus();
 
   // Live "N active" / "Kitchen Clear|Busy" header pills — same 5s polling
   // cadence OrdersBoard.tsx already uses, backed by a real query
@@ -792,6 +802,7 @@ function DashboardShellContent({
 
             <DateSystemToggle dateSystem={dateSystem} onChange={setDateSystem} />
             <LanguageToggle locale={locale} onChange={setLocale} label={t("nav.language")} />
+            <InstallAppPrompt />
 
             <div className="mx-1 hidden h-6 w-px bg-neutral-200 sm:block" aria-hidden="true" />
 
@@ -818,6 +829,16 @@ function DashboardShellContent({
             </Link>
           </div>
         </header>
+
+        <DashboardServiceWorker />
+
+        {!isOnline && (
+          <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800 md:px-6">
+            <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" />
+            You&apos;re offline — POS, Orders, and KDS will keep working and sync automatically once
+            you&apos;re back online. Other pages may show stale data until then.
+          </div>
+        )}
 
         {canViewServiceCalls && activeCalls.length > 0 && (
           <div className="space-y-2 border-b border-orange-100 bg-orange-50 px-4 py-3 md:px-6">

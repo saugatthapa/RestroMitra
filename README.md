@@ -292,16 +292,23 @@ src/
   app/
     (auth)/login, (auth)/register   — public auth pages
     onboarding/                     — restaurant creation wizard (protected)
-    dashboard/                      — owner dashboard shell (protected), incl.
-                                       tables/, orders/ (the live order board +
+    dashboard/                      — owner dashboard shell (protected — Phase 22:
+                                       installable via public/manifest.json, and
+                                       wraps a dashboard-wide service worker, see
+                                       DashboardServiceWorker.tsx / public/
+                                       dashboard-sw.js, for offline GET caching),
+                                       incl. tables/, orders/ (the live order
+                                       board — Phase 22: queues status changes
+                                       locally via offline-status-queue.ts when
+                                       offline, same pattern as POS below) +
                                        orders/[orderId] bill/payment view), pos/
                                        (staff order creation — Phase 11b: tracks
                                        connectivity, caches its menu, and queues
                                        orders locally via offline-queue.ts +
-                                       IndexedDB when offline, see
-                                       OfflineServiceWorker.tsx / public/pos-sw.js),
-                                       kds/ (kitchen ticket
-                                       board, grouped by station), inventory/
+                                       IndexedDB when offline), kds/ (kitchen
+                                       ticket board, grouped by station — Phase
+                                       22: same offline status-queue as orders/),
+                                       inventory/
                                        (suppliers, stock items, purchases, recipes),
                                        staff/ (roster + attendance), customers/
                                        (CRM list/detail, loyalty ledger + tier),

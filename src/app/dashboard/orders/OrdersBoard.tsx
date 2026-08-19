@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiGet, apiPatch, ApiError } from "@/lib/api-client";
 import { formatNPR } from "@/lib/money";
@@ -13,6 +13,15 @@ import {
 import { openKotTicket } from "@/lib/kot-print-client";
 import { PAYMENT_STATUS_LABELS, type PaymentStatus } from "@/lib/payments";
 import { OrderPaymentModal } from "./OrderPaymentModal";
+import { useOnlineStatus } from "@/lib/use-online-status";
+import {
+  enqueueStatusUpdate,
+  listQueuedStatusUpdates,
+  removeQueuedStatusUpdate,
+  syncQueuedStatusUpdates,
+  isOfflineQueueSupported,
+  type QueuedStatusUpdate,
+} from "@/lib/offline-status-queue";
 
 type OrderItemAddon = { id: string; nameSnapshot: string; priceInPaisaSnapshot: number };
 type OrderItem = {
@@ -88,6 +97,69 @@ export function OrdersBoard({
     completeAfterPayment: boolean;
   } | null>(null);
 
+  // Phase 22 (offline mode) — status changes made while offline (or that
+  // fail due to a network-level error even though the browser thought it
+  // was online) are queued the same way POS already queues new orders (see
+  // offline-status-queue.ts's module comment for why this is a separate
+  // queue rather than sharing POS's). Payment-linked completion still
+  // requires connectivity — see handleAdvance below.
+  const [queuedUpdates, setQueuedUpdates] = useState<QueuedStatusUpdate[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [queuedMessage, setQueuedMessage] = useState<string | null>(null);
+
+  const refreshQueue = useCallback(async () => {
+    if (!isOfflineQueueSupported()) return;
+    const rows = await listQueuedStatusUpdates(slug);
+    setQueuedUpdates(rows);
+  }, [slug]);
+
+  const runSync = useCallback(async () => {
+    if (!isOfflineQueueSupported() || syncing) return;
+    setSyncing(true);
+    try {
+      const result = await syncQueuedStatusUpdates(slug, {
+        applyStatus: async (update) => {
+          await apiPatch(`${base(slug)}/orders/${update.orderId}/status`, {
+            status: update.toStatus,
+            reason: update.reason ?? undefined,
+          });
+          if (update.fromStatus === "pending" && update.toStatus === "confirmed") {
+            openKotTicket(update.orderId);
+          }
+        },
+        getCurrentStatus: async (orderId) => {
+          try {
+            const res = await apiGet<{ order: Order }>(`${base(slug)}/orders/${orderId}`);
+            return res.order.status;
+          } catch (err) {
+            // A real response came back (e.g. 404, the order's gone) —
+            // that's a definite answer, not a connectivity problem.
+            if (err instanceof ApiError) return null;
+            // fetch() itself threw — still offline. Propagate so the sync
+            // loop knows to stop rather than mark this a real conflict.
+            throw err;
+          }
+        },
+      });
+      if (result.synced > 0) loadOrders();
+    } finally {
+      await refreshQueue();
+      setSyncing(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, syncing, refreshQueue]);
+
+  const isOnline = useOnlineStatus(runSync);
+
+  async function discardQueuedUpdate(update: QueuedStatusUpdate) {
+    const ok = window.confirm(
+      `Discard this queued change to order #${update.orderNumber} (→ ${ORDER_STATUS_LABELS[update.toStatus]})? This cannot be undone.`,
+    );
+    if (!ok) return;
+    await removeQueuedStatusUpdate(update.clientRequestId);
+    await refreshQueue();
+  }
+
   async function loadOrders() {
     try {
       const res = await apiGet<{ orders: Order[] }>(`${base(slug)}/orders`);
@@ -110,6 +182,7 @@ export function OrdersBoard({
     // change made through a path that doesn't publish an event, still
     // surfaces within 5s instead of silently going stale.
     loadOrders();
+    refreshQueue();
     const poll = setInterval(loadOrders, 5000);
     const tick = setInterval(() => forceTick((n) => n + 1), 30_000);
     window.addEventListener("dhankipos:orders-changed", loadOrders);
@@ -121,9 +194,35 @@ export function OrdersBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
+  async function queueStatusChange(order: Order, status: OrderStatus, reason?: string) {
+    if (!isOfflineQueueSupported()) {
+      alert(
+        "You're offline and this browser doesn't support saving changes for later — connect to the internet and try again.",
+      );
+      return;
+    }
+    await enqueueStatusUpdate({
+      slug,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      fromStatus: order.status,
+      toStatus: status,
+      reason,
+    });
+    await refreshQueue();
+    setQueuedMessage(
+      `Order #${order.orderNumber} — will move to "${ORDER_STATUS_LABELS[status]}" once you're back online.`,
+    );
+  }
+
   async function updateStatus(order: Order, status: OrderStatus, reason?: string) {
     setBusyOrderId(order.id);
+    setQueuedMessage(null);
     try {
+      if (!isOnline) {
+        await queueStatusChange(order, status, reason);
+        return;
+      }
       const res = await apiPatch<{ order: Order }>(`${base(slug)}/orders/${order.id}/status`, {
         status,
         reason,
@@ -137,7 +236,17 @@ export function OrdersBoard({
         openKotTicket(order.id);
       }
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Could not update order status.");
+      if (err instanceof ApiError) {
+        // A real response came back (validation, permission, a genuine
+        // 409 conflict) — that's not a connectivity problem, so it's a
+        // real error to show, not something to silently queue.
+        alert(err.message);
+      } else {
+        // fetch() itself threw — offline, DNS failure, timeout — even
+        // though navigator.onLine said we were connected. Queue it exactly
+        // like the explicit offline path above.
+        await queueStatusChange(order, status, reason);
+      }
     } finally {
       setBusyOrderId(null);
     }
@@ -190,6 +299,60 @@ export function OrdersBoard({
   return (
     <div className="space-y-4">
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      {!isOnline && (
+        <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+          You&apos;re offline — status changes will be saved on this device and applied
+          automatically once you&apos;re back online.
+        </div>
+      )}
+      {queuedUpdates.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-amber-800">
+              {queuedUpdates.length} change{queuedUpdates.length === 1 ? "" : "s"} waiting to sync
+            </p>
+            <button
+              onClick={runSync}
+              disabled={!isOnline || syncing}
+              className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 disabled:opacity-50"
+            >
+              {syncing ? "Syncing…" : "Sync now"}
+            </button>
+          </div>
+          <ul className="mt-2 space-y-1">
+            {queuedUpdates.map((u) => (
+              <li
+                key={u.clientRequestId}
+                className="flex items-center justify-between gap-2 text-xs text-amber-700"
+              >
+                <span>
+                  #{u.orderNumber} → {ORDER_STATUS_LABELS[u.toStatus]}
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className={u.status === "error" ? "font-medium text-red-600" : ""}>
+                    {u.status === "error" ? "Sync failed — will retry" : "Waiting"}
+                  </span>
+                  {u.status === "error" && (
+                    <button
+                      onClick={() => discardQueuedUpdate(u)}
+                      className="rounded border border-red-300 px-1.5 py-0.5 font-medium text-red-700 hover:bg-red-50"
+                    >
+                      Discard
+                    </button>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {queuedMessage && (
+        <p className="rounded-lg bg-green-50 px-3 py-2 text-xs font-medium text-green-700">
+          {queuedMessage}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {BOARD_COLUMNS.map((status) => {

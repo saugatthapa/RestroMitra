@@ -1,0 +1,16 @@
+{
+  "name": "RestroMitra",
+  "short_name": "RestroMitra",
+  "description": "The restaurant operating system for Nepal — POS, orders, kitchen display, and more, from one installable app.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ea580c",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/brand/icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

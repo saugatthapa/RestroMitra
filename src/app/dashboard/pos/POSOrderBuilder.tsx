@@ -15,6 +15,7 @@ import {
   isOfflineQueueSupported,
   type QueuedOrder,
 } from "@/lib/offline-queue";
+import { useOnlineStatus } from "@/lib/use-online-status";
 
 type Variant = { id: string; name: string; priceInPaisa: number; isActive: boolean };
 type Addon = { id: string; name: string; priceInPaisa: number; isAvailable: boolean };
@@ -65,9 +66,10 @@ function base(slug: string) {
 
 // Phase 11b (offline POS): the POS page's own menu/table data is cached to
 // localStorage every time it loads successfully, so a device that goes
-// offline (or reloads while offline — the service worker at
-// public/pos-sw.js keeps the page shell itself available) can still render
-// a usable, if possibly stale, ordering screen instead of a blank error.
+// offline (or reloads while offline — the dashboard-wide service worker at
+// public/dashboard-sw.js, Phase 22, keeps the page shell itself available)
+// can still render a usable, if possibly stale, ordering screen instead of
+// a blank error.
 function snapshotKey(slug: string) {
   return `dhankipos:pos-menu:${slug}`;
 }
@@ -147,12 +149,6 @@ export function POSOrderBuilder({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [queuedMessage, setQueuedMessage] = useState<string | null>(null);
 
-  // Lazy initializer — navigator.onLine only exists in the browser, and
-  // reading it in an effect (rather than assuming `true` and correcting
-  // later) avoids a moment where an actually-offline device looks online.
-  const [isOnline, setIsOnline] = useState(() =>
-    typeof navigator === "undefined" ? true : navigator.onLine,
-  );
   const [queuedOrders, setQueuedOrders] = useState<QueuedOrder[]>([]);
   const [syncing, setSyncing] = useState(false);
 
@@ -175,6 +171,13 @@ export function POSOrderBuilder({
     }
   }, [slug, syncing, refreshQueue]);
 
+  // Phase 22 (offline mode) — shared with OrdersBoard/KDSBoard now, see
+  // use-online-status.ts. `runSync` fires the instant the browser reports
+  // "online" again — a device regaining signal is exactly when queued
+  // orders should try to land, without staff having to remember a manual
+  // "Sync now" click.
+  const isOnline = useOnlineStatus(runSync);
+
   // QA hardening pass: a queued order that keeps failing for a real reason
   // (e.g. a menu item it references was deleted while offline, so every
   // retry gets a permanent 400, not a transient network error) used to
@@ -191,25 +194,6 @@ export function POSOrderBuilder({
     await removeQueuedOrder(order.clientRequestId);
     await refreshQueue();
   }
-
-  useEffect(() => {
-    function goOnline() {
-      setIsOnline(true);
-      // A device regaining signal is exactly when queued orders should try
-      // to land — don't make staff remember to hit "Sync now."
-      runSync();
-    }
-    function goOffline() {
-      setIsOnline(false);
-    }
-    window.addEventListener("online", goOnline);
-    window.addEventListener("offline", goOffline);
-    return () => {
-      window.removeEventListener("online", goOnline);
-      window.removeEventListener("offline", goOffline);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug]);
 
   useEffect(() => {
     let cancelled = false;

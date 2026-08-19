@@ -4,7 +4,6 @@ import { getSession } from "@/lib/auth/session";
 import { getUserRestaurants } from "@/lib/restaurant";
 import { PERMISSIONS, roleHasPermission } from "@/lib/rbac/permissions";
 import { POSOrderBuilder } from "./POSOrderBuilder";
-import { OfflineServiceWorker } from "./OfflineServiceWorker";
 
 export default async function PosPage() {
   const session = await getSession();
@@ -36,16 +35,13 @@ export default async function PosPage() {
       </div>
 
       {canCreateOrder ? (
-        <>
-          <OfflineServiceWorker />
-          <Suspense fallback={<p className="text-sm text-neutral-500">Loading…</p>}>
-            <POSOrderBuilder
-              slug={active.slug}
-              canApplyDiscount={canApplyDiscount}
-              canManageCustomers={canManageCustomers}
-            />
-          </Suspense>
-        </>
+        <Suspense fallback={<p className="text-sm text-neutral-500">Loading…</p>}>
+          <POSOrderBuilder
+            slug={active.slug}
+            canApplyDiscount={canApplyDiscount}
+            canManageCustomers={canManageCustomers}
+          />
+        </Suspense>
       ) : (
         <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-500">
           Your role doesn&apos;t have permission to create orders.
