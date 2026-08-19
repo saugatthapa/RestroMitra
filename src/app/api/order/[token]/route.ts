@@ -11,6 +11,8 @@ import { rateLimit } from "@/lib/rate-limit";
 import { isUniqueViolation } from "@/lib/db-error";
 import { assertTableAcceptsOrders, syncTableStatusFromOrders } from "@/lib/tables";
 import { publishEvent } from "@/lib/realtime";
+import { sendPushToRestaurant } from "@/lib/push";
+import { formatNPR } from "@/lib/money";
 
 /**
  * Public, UNAUTHENTICATED endpoint — a customer's phone hits this after
@@ -194,6 +196,20 @@ export async function POST(
         status: insertedOrder.status,
         totalInPaisa: insertedOrder.totalInPaisa,
       },
+    });
+
+    // Phase 25 — the SSE publish above only reaches a tab/app that's
+    // currently open; Web Push is what reaches staff whose phone has the
+    // app fully closed. `sendPushToRestaurant` never throws (see its own
+    // comment) and a slow/failed push service must never delay or fail the
+    // order response the guest is waiting on, so this isn't awaited.
+    void sendPushToRestaurant(resolved.restaurantId, {
+      title: insertedOrder.orderNumber ? `New order #${insertedOrder.orderNumber}` : "New order",
+      body: resolved.tableName
+        ? `${resolved.tableName} • ${formatNPR(insertedOrder.totalInPaisa)}`
+        : formatNPR(insertedOrder.totalInPaisa),
+      url: "/dashboard/orders",
+      tag: "dhankipos-order",
     });
 
     return NextResponse.json(

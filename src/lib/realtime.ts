@@ -1,26 +1,68 @@
 import "server-only";
+import { EventEmitter } from "node:events";
 import { and, asc, desc, eq, gt, lt } from "drizzle-orm";
 import type { Database, Transaction } from "@/db";
 import { db } from "@/db";
 import { realtimeEvents } from "@/db/schema";
 
 /**
- * Real-time event bus, backed by the database instead of in-memory pub/sub.
+ * Real-time event bus, backed by the database rather than PURELY an
+ * in-memory pub/sub.
  *
- * Why: this app deploys as serverless functions (Netlify Functions /
- * Vercel), not one long-running Node process — see the schema.ts comment
- * above `realtimeEvents` for the full reasoning, and rate-limit.ts for the
- * same caveat already documented elsewhere in this codebase. An in-memory
- * EventEmitter would silently drop every event published from a different
- * invocation than the one holding the SSE connection open, which in a
- * serverless deployment is the common case, not an edge case. Routing every
- * event through a table both instances can see sidesteps that entirely, at
- * the cost of being "DB-polling under an SSE connection" rather than a true
- * push channel. That's still a big, honest improvement over the client
- * polling every 5s: staff never issue a request to learn about a new order
- * or a service call — the already-open connection delivers it, typically
- * within one poll interval (~1s).
+ * Why the DB stays the source of truth: this app was originally built
+ * against serverless deployment targets (Netlify Functions / Vercel) — see
+ * the schema.ts comment above `realtimeEvents` for the full reasoning, and
+ * rate-limit.ts for the same caveat documented elsewhere in this codebase.
+ * A publish from one invocation and an open SSE connection on another can't
+ * share in-memory state on a serverless host, so routing every event
+ * through a table both can see is what makes this correct there — and it
+ * stays correct even now that the actual deployment target (Hostinger
+ * Node.js hosting, `npm start`) is one persistent long-running process,
+ * or if this ever scales out to more than one instance behind a load
+ * balancer in the future.
+ *
+ * Phase 25 — what changed: this app's real deployment is that one
+ * persistent process, not serverless, so `publishEvent` and every open SSE
+ * connection for the same restaurant now usually DO share memory. The
+ * local `wake`/`waitForWake` pair below is a same-process shortcut layered
+ * on top of the DB polling loop — publish also emits a local signal, and a
+ * waiting connection wakes immediately instead of sitting out the rest of
+ * its poll interval, then re-reads from the DB exactly as it always did.
+ * The DB read stays authoritative (correctness, ordering, tenant/branch
+ * scoping, reconnect catch-up all still flow through it unchanged) — this
+ * only shortens the WAIT before that read happens. If a publish and a
+ * connection ever end up on different processes (e.g. a future multi-
+ * instance deploy), the emit simply reaches nobody and the connection falls
+ * back to its normal ~1s poll cadence, exactly as before this existed —
+ * never a correctness risk, only ever a latency win when it applies.
  */
+
+// Deliberately module-level/per-process (see comment above). `setMaxListeners(0)`
+// removes the default-10 warning threshold — one listener per currently-open
+// SSE connection per restaurant is the expected shape, not a leak.
+const localBus = new EventEmitter().setMaxListeners(0);
+
+function wakeRestaurant(restaurantId: string): void {
+  localBus.emit(restaurantId);
+}
+
+/** Resolves the instant `wakeRestaurant(restaurantId)` fires, or after
+ *  `timeoutMs` regardless — so this always stands in for the old
+ *  unconditional `setTimeout(resolve, pollIntervalMs)` wait with the exact
+ *  same worst-case latency, just with a same-process fast path. */
+function waitForWake(restaurantId: string, timeoutMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      localBus.off(restaurantId, onWake);
+      resolve();
+    }, timeoutMs);
+    function onWake() {
+      clearTimeout(timer);
+      resolve();
+    }
+    localBus.once(restaurantId, onWake);
+  });
+}
 
 export type RealtimeEventType =
   | "order.created"
@@ -55,6 +97,18 @@ export async function publishEvent(
     type: params.type,
     payload: params.payload,
   });
+
+  // Same-process fast path — see this file's header comment. Safe to fire
+  // right after the insert above when `handle` is the bare `db` (a plain
+  // statement auto-commits immediately in Postgres, so the row is already
+  // visible to any connection by the time a woken SSE loop re-reads). A
+  // caller that passed an in-flight `tx` here (order status changes,
+  // service calls) can wake a connection slightly before ITS OWN outer
+  // transaction commits — not a correctness issue, since the woken
+  // connection just finds nothing new yet and falls back to the normal
+  // poll cadence, exactly as if this optimization didn't exist for that
+  // one event.
+  wakeRestaurant(params.restaurantId);
 
   // Opportunistic pruning — this table has no natural TTL and nothing else
   // in this codebase runs a reliable background cron (see the scheduled-
@@ -166,11 +220,14 @@ const HEARTBEAT_MS = 15_000;
  * when present (a reconnect — resume exactly where the last connection left
  * off, so no event is missed across the reconnect gap) and otherwise from
  * `getLatestEventId`/an explicit "now" cursor (a fresh connection — start
- * from here, don't replay history).
+ * from here, don't replay history). `wakeKey` is what `publishEvent` wakes
+ * (the restaurant id) — this connection re-polls immediately when it fires,
+ * instead of unconditionally sitting out the rest of DEFAULT_POLL_INTERVAL_MS.
  */
 export function createEventStream(params: {
   fetchEvents: (afterId: number) => Promise<StoredEvent[]>;
   initialCursor: number;
+  wakeKey: string;
 }): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
 
@@ -208,7 +265,7 @@ export function createEventStream(params: {
           lastSentAt = Date.now();
         }
 
-        await new Promise((resolve) => setTimeout(resolve, DEFAULT_POLL_INTERVAL_MS));
+        await waitForWake(params.wakeKey, DEFAULT_POLL_INTERVAL_MS);
       }
 
       controller.close();

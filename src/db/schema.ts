@@ -2299,3 +2299,58 @@ export const serviceCallsRelations = relations(serviceCalls, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+// Phase 25 — Web Push subscriptions. One row per browser/device that has
+// granted notification permission and completed pushManager.subscribe() —
+// NOT one row per user, since the same staff member opening the dashboard
+// on their phone AND a tablet ends up with two independent subscriptions,
+// both of which should receive a push for the same order. `endpoint` is
+// unique because re-subscribing the same browser installation (permission
+// already granted, service worker re-registers after a cache clear, etc.)
+// yields the same endpoint URL from the push service — upsert-by-endpoint
+// on save, rather than accumulating duplicate rows that would double-fire
+// the notification for that one device.
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // The push service URL (e.g. FCM for Chrome) this subscription posts
+    // to — opaque, can be long, so text rather than varchar.
+    endpoint: text("endpoint").notNull(),
+    // PushSubscription's encryption keys (from subscription.toJSON().keys),
+    // required to encrypt the payload per the Web Push spec — the `web-push`
+    // library needs both to call sendNotification.
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    // Diagnostic only (shown in a future "manage devices" UI, not read by
+    // any send path) — helps a restaurant owner tell which stale
+    // subscription belongs to which retired phone if they ever want to
+    // prune manually.
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("push_subscriptions_endpoint_idx").on(table.endpoint),
+    // Powers "every subscription for this restaurant" — the send path's
+    // only query.
+    index("push_subscriptions_restaurant_id_idx").on(table.restaurantId),
+  ],
+);
+
+export const pushSubscriptionsRelations = relations(pushSubscriptions, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [pushSubscriptions.restaurantId],
+    references: [restaurants.id],
+  }),
+  user: one(users, {
+    fields: [pushSubscriptions.userId],
+    references: [users.id],
+  }),
+}));

@@ -8,9 +8,11 @@ import { createEventStream, fetchEventsForRestaurant, getLatestEventId, SSE_RESP
  * per open dashboard tab rather than one per feature (so three boards open
  * in three tabs doesn't mean three separate SSE connections against the
  * same restaurant). See src/lib/realtime.ts's top-of-file comment for why
- * this is DB-polling under an SSE response rather than a live pub/sub
- * channel — that's a deliberate, honest choice given this app's serverless
- * deployment, not an oversight.
+ * this stays DB-backed (correctness, tenant/branch scoping, reconnect
+ * catch-up) rather than a pure in-memory pub/sub, and for the same-process
+ * wake fast path (Phase 25) that makes delivery near-instant in this app's
+ * actual deployment (one persistent Node process) instead of waiting out
+ * the ~1s poll interval that remains only as a safety-net upper bound.
  *
  * No specific permission required beyond an active role grant on this
  * restaurant (same bar as the header-status poll) — a kitchen_staff member
@@ -31,6 +33,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
     const stream = createEventStream({
       fetchEvents: fetchEventsForRestaurant(restaurantId, branchId),
       initialCursor,
+      wakeKey: restaurantId,
     });
 
     return new Response(stream, { headers: SSE_RESPONSE_HEADERS });

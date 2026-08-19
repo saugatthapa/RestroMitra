@@ -1,11 +1,62 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiGet, apiPost } from "@/lib/api-client";
 
 const SNOOZE_KEY = "dhankipos:notif-gate-snoozed"; // sessionStorage — reappears next session, not gone forever
 
 function isNotificationSupported(): boolean {
   return typeof window !== "undefined" && "Notification" in window;
+}
+
+function isPushSupported(): boolean {
+  return typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
+}
+
+// Converts a URL-safe base64 VAPID public key (what web-push's
+// generateVAPIDKeys produces, and what the GET below returns) into the raw
+// Uint8Array pushManager.subscribe's applicationServerKey option requires —
+// the Push API spec takes only that binary form, never the base64 string
+// directly.
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+/**
+ * Subscribes this browser/device to Web Push (if not already subscribed
+ * with a still-valid subscription) and saves it server-side. Safe to call
+ * opportunistically on every mount once permission is already "granted" —
+ * `pushManager.subscribe()` returns the existing subscription instead of
+ * creating a duplicate when one is already active, and the save route
+ * upserts by endpoint — so this is cheap even when it's a no-op.
+ */
+async function subscribeAndSave(slug: string): Promise<void> {
+  if (!isPushSupported()) return;
+
+  const keyRes = await apiGet<{ configured: boolean; publicKey: string | null }>(
+    `/api/restaurants/${slug}/push-subscriptions`,
+  );
+  if (!keyRes.configured || !keyRes.publicKey) return; // deployment hasn't set VAPID_* yet
+
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(keyRes.publicKey) as BufferSource,
+  });
+  const json = subscription.toJSON() as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
+  if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
+
+  await apiPost(`/api/restaurants/${slug}/push-subscriptions`, {
+    endpoint: json.endpoint,
+    keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+  });
 }
 
 /**
@@ -14,6 +65,14 @@ function isNotificationSupported(): boolean {
  * DashboardShell plays on order.created had no way to also raise a system
  * notification when the dashboard tab wasn't focused (a switched tab, a
  * minimized window, a different app entirely on the POS tablet/phone).
+ *
+ * Phase 25 — granting permission here now also drives an actual Web Push
+ * subscription (see subscribeAndSave above, src/lib/push.ts, and
+ * public/dashboard-sw.js's `push` handler), which is what lets a new-order
+ * alert reach staff even when the app/PWA is completely closed, not just
+ * backgrounded — permission alone was never enough for that; the in-page
+ * `Notification` API this gate originally only requested permission for
+ * can't fire at all once nothing is running.
  *
  * A browser gives no way to truly *force* a permission grant — only a user
  * gesture can open the native prompt, and once someone taps "Block" the page
@@ -24,7 +83,7 @@ function isNotificationSupported(): boolean {
  * until a choice is made — dismissing it is a `sessionStorage` snooze, not a
  * permanent one, so closing it today doesn't silence it for good tomorrow.
  */
-export function NotificationPermissionGate() {
+export function NotificationPermissionGate({ slug }: { slug: string }) {
   const [supported, setSupported] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [dismissedThisSession, setDismissedThisSession] = useState(false);
@@ -37,12 +96,33 @@ export function NotificationPermissionGate() {
     setDismissedThisSession(window.sessionStorage.getItem(SNOOZE_KEY) === "1");
   }, []);
 
+  // Opportunistic re-subscribe: covers both "permission was already granted
+  // in an earlier session, before Web Push existed here" and "the OS/
+  // browser silently invalidated a previous subscription" (endpoint
+  // rotation, browser data cleared, etc.) — either way, every mount with
+  // permission already granted quietly ensures a live subscription exists
+  // without needing staff to click anything again.
+  useEffect(() => {
+    if (typeof window === "undefined" || Notification.permission !== "granted") return;
+    subscribeAndSave(slug).catch(() => {
+      // Best-effort — the ding/in-tab alerting still works regardless of
+      // whether push subscribing succeeds.
+    });
+  }, [slug]);
+
   async function enable() {
     if (!isNotificationSupported()) return;
     setRequesting(true);
     try {
       const result = await Notification.requestPermission();
       setPermission(result);
+      if (result === "granted") {
+        await subscribeAndSave(slug).catch(() => {
+          // Permission granted is still worth keeping even if the push
+          // subscribe step itself failed (e.g. transient network error) —
+          // the opportunistic effect above will retry on next mount.
+        });
+      }
     } finally {
       setRequesting(false);
     }

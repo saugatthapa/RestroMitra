@@ -279,3 +279,60 @@ self.addEventListener("fetch", (event) => {
     })(),
   );
 });
+
+// --- Phase 25: Web Push ------------------------------------------------
+//
+// This is the piece that makes a new-order alert show up as a real system
+// notification even when the dashboard/PWA is completely closed on staff's
+// phone — not just backgrounded. The `push` event fires whenever the OS/
+// browser wakes this worker in response to a message from the push service
+// (see src/lib/push.ts for the send side); that wake-up happens regardless
+// of whether any tab or the installed app is currently open, which is
+// exactly the gap the older in-page `new Notification(...)` call (still in
+// DashboardShell, for the open-tab case) can never close on its own.
+self.addEventListener("push", (event) => {
+  let data = { title: "New activity", body: "Open the dashboard for details.", url: "/dashboard/orders" };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch {
+    // Malformed/non-JSON payload — fall back to the generic message above
+    // rather than dropping the notification entirely.
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      tag: data.tag || "dhankipos-order",
+      // Re-notify even if a previous notification with the same tag is
+      // still showing (a second order arriving before staff dismiss the
+      // first alert must still buzz the phone again).
+      renotify: true,
+      requireInteraction: true,
+      icon: "/brand/icon-256.png",
+      badge: "/brand/icon-128.png",
+      data: { url: data.url },
+    }),
+  );
+});
+
+// Tapping the system notification focuses an already-open dashboard tab if
+// one exists (so staff don't end up with a pile of duplicate tabs), or
+// opens a new one at the target URL otherwise.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || "/dashboard/orders";
+
+  event.waitUntil(
+    (async () => {
+      const allClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of allClients) {
+        if (client.url.includes("/dashboard") && "focus" in client) {
+          await client.focus();
+          if ("navigate" in client) await client.navigate(targetUrl);
+          return;
+        }
+      }
+      await self.clients.openWindow(targetUrl);
+    })(),
+  );
+});

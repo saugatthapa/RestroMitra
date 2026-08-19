@@ -300,8 +300,10 @@ function DashboardShellContent({
 
   // The real-time stream — see src/app/api/restaurants/[slug]/events and
   // src/lib/realtime.ts for what's actually behind it (DB-polling under an
-  // SSE connection, not a live pub/sub channel — an honest tradeoff for a
-  // serverless deployment). Mounted once per dashboard session, here at the
+  // SSE connection, not a pure in-memory pub/sub — kept DB-authoritative for
+  // correctness/tenant scoping/reconnect catch-up, with a same-process wake
+  // fast path added in Phase 25 for near-instant delivery on this app's
+  // actual deployment). Mounted once per dashboard session, here at the
   // shell level (not per-page), so it keeps running as staff navigate
   // between Orders/KDS/Staff/etc. without reopening a connection on every
   // route change. Two things happen with what arrives:
@@ -315,11 +317,11 @@ function DashboardShellContent({
   //      order is costly for everyone on shift, not just whoever owns the
   //      Orders page right now); order.status_changed removes it again once
   //      staff confirm (or cancel) the order, which is what actually stops
-  //      the alarm. If the tab isn't the one currently in view and the
-  //      staff member has granted permission (see NotificationPermissionGate),
-  //      order.created also raises a real system notification so it's not
-  //      missed while on another tab, another app, or a locked/backgrounded
-  //      screen.
+  //      the alarm. A real system notification for order.created — even
+  //      with the app fully closed, not just backgrounded — is now handled
+  //      server-side via Web Push (see NotificationPermissionGate and
+  //      public/dashboard-sw.js's `push` handler) rather than from this
+  //      in-page listener, which can only ever run while some tab is alive.
   //   2. service_call.* — handled directly here: a new call plays the
   //      alert sound and adds a banner (only for roles holding
   //      VIEW_SERVICE_CALLS — kitchen_staff etc. still need the order
@@ -345,20 +347,14 @@ function DashboardShellContent({
             return new Set(prev).add(orderId as string);
           });
         }
-
-        if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden) {
-          const body = data.tableName
-            ? `${data.tableName} just placed an order — confirm it to stop the alert.`
-            : "A new order just came in — confirm it to stop the alert.";
-          const notification = new Notification(
-            data.orderNumber ? `New order #${data.orderNumber}` : "New order",
-            { body, icon: "/brand/icon-128.png", badge: "/brand/icon-128.png", tag: "dhankipos-new-order" },
-          );
-          notification.onclick = () => {
-            window.focus();
-            notification.close();
-          };
-        }
+        // Phase 25: the in-page `new Notification(...)` call that used to
+        // live here (for the "tab open but hidden" case) has been removed —
+        // Web Push (see NotificationPermissionGate + public/dashboard-sw.js)
+        // now covers that case too, from the service worker's `push`
+        // handler, and firing both would show two notifications for the
+        // same order on any device that's subscribed. Web Push also covers
+        // the case this in-page call never could: the app fully closed, not
+        // just backgrounded.
       } catch {
         // Malformed/absent payload — the alarm can't be tied to a specific
         // order in that case, but the poll reconciliation above will still
@@ -946,7 +942,7 @@ function DashboardShellContent({
 
         <DashboardServiceWorker />
 
-        <NotificationPermissionGate />
+        <NotificationPermissionGate slug={slug} />
 
         {pendingOrderIds.size > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-4 py-2.5 text-xs font-medium text-red-900 md:px-6">
