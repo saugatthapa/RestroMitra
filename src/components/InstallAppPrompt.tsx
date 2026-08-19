@@ -88,7 +88,8 @@ export function InstallAppPrompt() {
       <button
         type="button"
         onClick={handleClick}
-        className="hidden items-center gap-1.5 rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50 sm:inline-flex"
+        aria-label="Install app"
+        className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50 sm:px-3"
       >
         <span className="flex h-3.5 w-3.5 items-center justify-center" aria-hidden="true">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -97,7 +98,7 @@ export function InstallAppPrompt() {
             <path d="M5 19h14" />
           </svg>
         </span>
-        Install app
+        <span className="hidden sm:inline">Install app</span>
       </button>
 
       {showIosTip && (

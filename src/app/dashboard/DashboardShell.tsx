@@ -12,6 +12,7 @@ import { PERMISSIONS, roleHasPermission, type PermissionKey } from "@/lib/rbac/p
 import { useOnlineStatus } from "@/lib/use-online-status";
 import { DashboardServiceWorker } from "@/components/DashboardServiceWorker";
 import { InstallAppPrompt } from "@/components/InstallAppPrompt";
+import { NotificationPermissionGate } from "@/components/NotificationPermissionGate";
 
 // Nav is grouped (Overview / Front of house / Back office / Account) with an
 // icon per item, rather than one flat 16-item list — the flat list was the
@@ -238,9 +239,11 @@ function DashboardShellContent({
   const [activeCalls, setActiveCalls] = useState<ServiceCallAlert[]>([]);
   const [callActionBusy, setCallActionBusy] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const orderAlertAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     audioRef.current = new Audio("/sounds/service-call-alert.wav");
+    orderAlertAudioRef.current = new Audio("/sounds/new-order-alert.wav");
   }, []);
 
   // The real-time stream — see src/app/api/restaurants/[slug]/events and
@@ -254,7 +257,14 @@ function DashboardShellContent({
   //      window CustomEvent so OrdersBoard/KDSBoard (mounted as `children`
   //      on their own pages) can react instantly on top of their existing
   //      5s poll, without this shell needing to know either component's
-  //      internals.
+  //      internals. order.created additionally plays an audible alert here
+  //      (every role hears it, same as the live "N active" header pill
+  //      being ungated — missing a new order is costly for everyone on
+  //      shift, not just whoever owns the Orders page right now) and, if
+  //      the tab isn't the one currently in view and the staff member has
+  //      granted permission (see NotificationPermissionGate), also raises a
+  //      real system notification so it's not missed while on another tab,
+  //      another app, or a locked/backgrounded screen.
   //   2. service_call.* — handled directly here: a new call plays the
   //      alert sound and adds a banner (only for roles holding
   //      VIEW_SERVICE_CALLS — kitchen_staff etc. still need the order
@@ -263,8 +273,38 @@ function DashboardShellContent({
   useEffect(() => {
     const source = new EventSource(`/api/restaurants/${slug}/events`);
 
-    source.addEventListener("order.created", () => {
+    source.addEventListener("order.created", (event) => {
       window.dispatchEvent(new CustomEvent("dhankipos:orders-changed"));
+
+      orderAlertAudioRef.current?.play().catch(() => {
+        // Same autoplay caveat as the service-call alert below — silent
+        // until the staff member has interacted with the page once.
+        // NotificationPermissionGate's own "Turn on notifications" button
+        // click doubles as that first interaction in practice.
+      });
+
+      if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden) {
+        try {
+          const data = JSON.parse((event as MessageEvent).data) as {
+            orderNumber?: string;
+            tableName?: string;
+          };
+          const body = data.tableName
+            ? `${data.tableName} just placed an order.`
+            : "A new order just came in.";
+          const notification = new Notification(
+            data.orderNumber ? `New order #${data.orderNumber}` : "New order",
+            { body, icon: "/brand/icon-128.png", badge: "/brand/icon-128.png", tag: "dhankipos-new-order" },
+          );
+          notification.onclick = () => {
+            window.focus();
+            notification.close();
+          };
+        } catch {
+          // Malformed/absent payload — the audible alert above already
+          // fired, so this is a nice-to-have, not the only signal.
+        }
+      }
     });
     source.addEventListener("order.status_changed", () => {
       window.dispatchEvent(new CustomEvent("dhankipos:orders-changed"));
@@ -831,6 +871,8 @@ function DashboardShellContent({
         </header>
 
         <DashboardServiceWorker />
+
+        <NotificationPermissionGate />
 
         {!isOnline && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800 md:px-6">
