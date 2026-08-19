@@ -20,6 +20,11 @@ import { isLowStock } from "@/lib/inventory";
  *   so the two can never disagree on what "low" means, and counts
  *   reservations still in "requested" status the same way the
  *   Reservations board treats them (awaiting staff confirmation).
+ * - `pendingOrderIds`: every order still in "pending" (placed, not yet
+ *   confirmed by staff) — the source of truth DashboardShell reconciles its
+ *   looping new-order alert against every poll, so a tab opened *after* an
+ *   order already came in (no order.created SSE event to have caught) still
+ *   picks up the alarm instead of staying silent until the next order.
  */
 export async function GET(
   request: Request,
@@ -31,7 +36,7 @@ export async function GET(
 
     const [orderRows, inventoryRows, pendingReservationsRow] = await Promise.all([
       db
-        .select({ status: orders.status })
+        .select({ id: orders.id, status: orders.status })
         .from(orders)
         .where(
           and(
@@ -56,12 +61,14 @@ export async function GET(
     const kitchenBusy = orderRows.some((row) => row.status === "preparing");
     const lowStockCount = inventoryRows.filter(isLowStock).length;
     const pendingReservationsCount = pendingReservationsRow.length;
+    const pendingOrderIds = orderRows.filter((row) => row.status === "pending").map((row) => row.id);
 
     return NextResponse.json({
       activeOrders,
       kitchenBusy,
       lowStockCount,
       pendingReservationsCount,
+      pendingOrderIds,
     });
   } catch (err) {
     return toErrorResponse(err);

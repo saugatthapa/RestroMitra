@@ -91,6 +91,7 @@ type HeaderStatus = {
   kitchenBusy: boolean;
   lowStockCount: number;
   pendingReservationsCount: number;
+  pendingOrderIds: string[];
 };
 
 type ServiceCallAlert = {
@@ -216,13 +217,20 @@ function DashboardShellContent({
   // (src/app/api/restaurants/[slug]/header-status) rather than a static
   // demo value. A failed poll just leaves the pills showing their last
   // good value (or hidden, before the first success) — never worth an
-  // error banner over a background refresh.
+  // error banner over a background refresh. Also the authoritative source
+  // for `pendingOrderIds` (see below) — every 5s reconciliation catches a
+  // tab that was opened *after* an order already came in, and self-heals
+  // from any SSE event this tab happened to miss (a dropped connection
+  // reconnecting, a brief network blip).
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
         const data = await apiGet<HeaderStatus>(`/api/restaurants/${slug}/header-status`);
-        if (!cancelled) setHeaderStatus(data);
+        if (!cancelled) {
+          setHeaderStatus(data);
+          setPendingOrderIds(new Set(data.pendingOrderIds));
+        }
       } catch {
         // ignore — see comment above
       }
@@ -241,10 +249,42 @@ function DashboardShellContent({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const orderAlertAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Orders still in "pending" (placed, not yet confirmed) — the alarm
+  // (below) keeps looping for as long as this set is non-empty, and the
+  // banner near the top of the page gives staff the obvious way to stop it:
+  // go confirm the order. Reconciled from the header-status poll above and
+  // kept live in between by the order.created / order.status_changed SSE
+  // handlers further down.
+  const [pendingOrderIds, setPendingOrderIds] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     audioRef.current = new Audio("/sounds/service-call-alert.wav");
     orderAlertAudioRef.current = new Audio("/sounds/new-order-alert.wav");
+    orderAlertAudioRef.current.loop = true;
   }, []);
+
+  // Starts/stops the looping new-order alarm to match pendingOrderIds —
+  // a plain state comparison rather than reacting to "just got a new one"
+  // vs "just cleared the last one" as separate cases, so it's correct
+  // however pendingOrderIds changed (an SSE event, a poll reconciliation,
+  // several orders confirmed out of order, etc).
+  useEffect(() => {
+    const audio = orderAlertAudioRef.current;
+    if (!audio) return;
+    if (pendingOrderIds.size > 0) {
+      if (audio.paused) {
+        audio.currentTime = 0;
+        audio.play().catch(() => {
+          // Autoplay can be blocked until the user has interacted with the
+          // page at least once — the banner below still shows regardless of
+          // whether sound actually played.
+        });
+      }
+    } else {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+  }, [pendingOrderIds]);
 
   // The real-time stream — see src/app/api/restaurants/[slug]/events and
   // src/lib/realtime.ts for what's actually behind it (DB-polling under an
@@ -257,14 +297,17 @@ function DashboardShellContent({
   //      window CustomEvent so OrdersBoard/KDSBoard (mounted as `children`
   //      on their own pages) can react instantly on top of their existing
   //      5s poll, without this shell needing to know either component's
-  //      internals. order.created additionally plays an audible alert here
-  //      (every role hears it, same as the live "N active" header pill
-  //      being ungated — missing a new order is costly for everyone on
-  //      shift, not just whoever owns the Orders page right now) and, if
-  //      the tab isn't the one currently in view and the staff member has
-  //      granted permission (see NotificationPermissionGate), also raises a
-  //      real system notification so it's not missed while on another tab,
-  //      another app, or a locked/backgrounded screen.
+  //      internals. order.created also adds the order to `pendingOrderIds`,
+  //      which starts the looping alarm below (every role hears it, same as
+  //      the live "N active" header pill being ungated — missing a new
+  //      order is costly for everyone on shift, not just whoever owns the
+  //      Orders page right now); order.status_changed removes it again once
+  //      staff confirm (or cancel) the order, which is what actually stops
+  //      the alarm. If the tab isn't the one currently in view and the
+  //      staff member has granted permission (see NotificationPermissionGate),
+  //      order.created also raises a real system notification so it's not
+  //      missed while on another tab, another app, or a locked/backgrounded
+  //      screen.
   //   2. service_call.* — handled directly here: a new call plays the
   //      alert sound and adds a banner (only for roles holding
   //      VIEW_SERVICE_CALLS — kitchen_staff etc. still need the order
@@ -276,22 +319,25 @@ function DashboardShellContent({
     source.addEventListener("order.created", (event) => {
       window.dispatchEvent(new CustomEvent("dhankipos:orders-changed"));
 
-      orderAlertAudioRef.current?.play().catch(() => {
-        // Same autoplay caveat as the service-call alert below — silent
-        // until the staff member has interacted with the page once.
-        // NotificationPermissionGate's own "Turn on notifications" button
-        // click doubles as that first interaction in practice.
-      });
+      let orderId: string | null = null;
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as {
+          orderId?: string;
+          orderNumber?: string;
+          tableName?: string;
+        };
+        orderId = data.orderId ?? null;
+        if (orderId) {
+          setPendingOrderIds((prev) => {
+            if (prev.has(orderId as string)) return prev;
+            return new Set(prev).add(orderId as string);
+          });
+        }
 
-      if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden) {
-        try {
-          const data = JSON.parse((event as MessageEvent).data) as {
-            orderNumber?: string;
-            tableName?: string;
-          };
+        if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden) {
           const body = data.tableName
-            ? `${data.tableName} just placed an order.`
-            : "A new order just came in.";
+            ? `${data.tableName} just placed an order — confirm it to stop the alert.`
+            : "A new order just came in — confirm it to stop the alert.";
           const notification = new Notification(
             data.orderNumber ? `New order #${data.orderNumber}` : "New order",
             { body, icon: "/brand/icon-128.png", badge: "/brand/icon-128.png", tag: "dhankipos-new-order" },
@@ -300,14 +346,29 @@ function DashboardShellContent({
             window.focus();
             notification.close();
           };
-        } catch {
-          // Malformed/absent payload — the audible alert above already
-          // fired, so this is a nice-to-have, not the only signal.
         }
+      } catch {
+        // Malformed/absent payload — the alarm can't be tied to a specific
+        // order in that case, but the poll reconciliation above will still
+        // pick up any real pending order within 5s regardless.
       }
     });
-    source.addEventListener("order.status_changed", () => {
+    source.addEventListener("order.status_changed", (event) => {
       window.dispatchEvent(new CustomEvent("dhankipos:orders-changed"));
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as { orderId: string; to: string };
+        if (data.to !== "pending") {
+          setPendingOrderIds((prev) => {
+            if (!prev.has(data.orderId)) return prev;
+            const next = new Set(prev);
+            next.delete(data.orderId);
+            return next;
+          });
+        }
+      } catch {
+        // Malformed payload — the next 5s poll reconciles pendingOrderIds
+        // regardless, so this never leaves the alarm stuck on indefinitely.
+      }
     });
 
     source.addEventListener("service_call.created", (event) => {
@@ -873,6 +934,26 @@ function DashboardShellContent({
         <DashboardServiceWorker />
 
         <NotificationPermissionGate />
+
+        {pendingOrderIds.size > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-4 py-2.5 text-xs font-medium text-red-900 md:px-6">
+            <span className="flex items-center gap-1.5">
+              <span className="text-sm" aria-hidden="true">
+                🔔
+              </span>
+              {pendingOrderIds.size === 1
+                ? "1 new order is"
+                : `${pendingOrderIds.size} new orders are`}{" "}
+              waiting to be confirmed — the alert keeps playing until you do.
+            </span>
+            <Link
+              href="/dashboard/orders"
+              className="rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700"
+            >
+              Go to Orders
+            </Link>
+          </div>
+        )}
 
         {!isOnline && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800 md:px-6">
