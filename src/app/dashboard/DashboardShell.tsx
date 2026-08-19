@@ -7,6 +7,7 @@ import { apiGet, apiPost, apiPatch } from "@/lib/api-client";
 import { NavIcon } from "@/components/NavIcon";
 import { formatAdDate, formatBsDate } from "@/lib/nepali-date";
 import { DateSystemProvider, useDateSystemControl, type DateSystem } from "@/lib/date-system";
+import { LocaleProvider, useLocaleControl, useTranslation, trialDaysLeftText, type Locale } from "@/lib/i18n";
 import { PERMISSIONS, roleHasPermission, type PermissionKey } from "@/lib/rbac/permissions";
 
 // Nav is grouped (Overview / Front of house / Back office / Account) with an
@@ -116,7 +117,9 @@ export function DashboardShell(props: {
 }) {
   return (
     <DateSystemProvider>
-      <DashboardShellContent {...props} />
+      <LocaleProvider>
+        <DashboardShellContent {...props} />
+      </LocaleProvider>
     </DateSystemProvider>
   );
 }
@@ -194,6 +197,8 @@ function DashboardShellContent({
   // `children`) rather than local state, so every dashboard screen — not
   // just this header — reads the same preference.
   const { dateSystem, setDateSystem } = useDateSystemControl();
+  const { locale, setLocale } = useLocaleControl();
+  const { t } = useTranslation();
 
   // Live "N active" / "Kitchen Clear|Busy" header pills — same 5s polling
   // cadence OrdersBoard.tsx already uses, backed by a real query
@@ -318,18 +323,18 @@ function DashboardShellContent({
 
   const ALL_NAV_GROUPS: NavGroup[] = [
     {
-      title: "Overview",
+      title: t("nav.overview"),
       items: [
-        { label: "Dashboard", href: "/dashboard", enabled: true, icon: <NavIcon.Dashboard /> },
+        { label: t("nav.dashboard"), href: "/dashboard", enabled: true, icon: <NavIcon.Dashboard /> },
         {
-          label: "Reports",
+          label: t("nav.reports"),
           href: "/dashboard/reports",
           enabled: true,
           icon: <NavIcon.Reports />,
           permission: PERMISSIONS.VIEW_REPORTS,
         },
         {
-          label: "AI Assistant",
+          label: t("nav.aiAssistant"),
           href: "/dashboard/assistant",
           enabled: true,
           icon: <NavIcon.Assistant />,
@@ -338,26 +343,26 @@ function DashboardShellContent({
       ],
     },
     {
-      title: "Front of house",
+      title: t("nav.frontOfHouse"),
       items: [
-        { label: "Orders", href: "/dashboard/orders", enabled: true, icon: <NavIcon.Orders /> },
+        { label: t("nav.orders"), href: "/dashboard/orders", enabled: true, icon: <NavIcon.Orders /> },
         {
-          label: "POS",
+          label: t("nav.pos"),
           href: "/dashboard/pos",
           enabled: true,
           icon: <NavIcon.Pos />,
           permission: PERMISSIONS.CREATE_ORDER,
         },
-        { label: "Kitchen (KDS)", href: "/dashboard/kds", enabled: true, icon: <NavIcon.Kitchen /> },
+        { label: t("nav.kitchenKds"), href: "/dashboard/kds", enabled: true, icon: <NavIcon.Kitchen /> },
         {
-          label: "Tables & QR",
+          label: t("nav.tablesQr"),
           href: "/dashboard/tables",
           enabled: true,
           icon: <NavIcon.Tables />,
           permission: PERMISSIONS.MANAGE_TABLES,
         },
         {
-          label: "Reservations",
+          label: t("nav.reservations"),
           href: "/dashboard/reservations",
           enabled: true,
           icon: <NavIcon.Reservations />,
@@ -366,52 +371,52 @@ function DashboardShellContent({
       ],
     },
     {
-      title: "Back office",
+      title: t("nav.backOffice"),
       items: [
         {
-          label: "Menu",
+          label: t("nav.menu"),
           href: "/dashboard/menu",
           enabled: true,
           icon: <NavIcon.Menu />,
           permission: PERMISSIONS.EDIT_MENU,
         },
         {
-          label: "Inventory",
+          label: t("nav.inventory"),
           href: "/dashboard/inventory",
           enabled: true,
           icon: <NavIcon.Inventory />,
           permission: PERMISSIONS.MANAGE_INVENTORY,
         },
         {
-          label: "Staff",
+          label: t("nav.staff"),
           href: "/dashboard/staff",
           enabled: true,
           icon: <NavIcon.Staff />,
           permission: [PERMISSIONS.MANAGE_STAFF, PERMISSIONS.VIEW_PAYROLL, PERMISSIONS.MANAGE_PAYROLL],
         },
         {
-          label: "Customers",
+          label: t("nav.customers"),
           href: "/dashboard/customers",
           enabled: true,
           icon: <NavIcon.Customers />,
           permission: PERMISSIONS.MANAGE_CUSTOMERS,
         },
         {
-          label: "Expenses",
+          label: t("nav.expenses"),
           href: "/dashboard/expenses",
           enabled: true,
           icon: <NavIcon.Expenses />,
           permission: PERMISSIONS.MANAGE_EXPENSES,
         },
         {
-          label: "Account Books",
+          label: t("nav.accountBooks"),
           href: "/dashboard/account-books",
           enabled: true,
           icon: <NavIcon.AccountBooks />,
           permission: PERMISSIONS.MANAGE_ACCOUNT_BOOKS,
         },
         {
-          label: "Website",
+          label: t("nav.website"),
           href: "/dashboard/website",
           enabled: true,
           icon: <NavIcon.Website />,
@@ -420,28 +425,28 @@ function DashboardShellContent({
       ],
     },
     {
-      title: "Account",
+      title: t("nav.account"),
       items: [
         {
-          label: "Branches",
+          label: t("nav.branches"),
           href: "/dashboard/branches",
           enabled: true,
           icon: <NavIcon.Branches />,
           permission: PERMISSIONS.MANAGE_BRANCHES,
         },
         {
-          label: "Billing",
+          label: t("nav.billing"),
           href: "/billing",
           enabled: true,
           icon: <NavIcon.Billing />,
           permission: PERMISSIONS.MANAGE_SUBSCRIPTION,
         },
         {
-          label: "Settings",
+          label: t("nav.settings"),
           href: "#",
           enabled: false,
           icon: <NavIcon.Settings />,
-          badge: "Coming soon",
+          badge: t("nav.comingSoon"),
           permission: PERMISSIONS.MANAGE_RESTAURANT_SETTINGS,
         },
       ],
@@ -475,7 +480,7 @@ function DashboardShellContent({
   const prefixMatch = flatNavItems
     .filter((item) => item.href !== "#" && pathname.startsWith(`${item.href}/`))
     .sort((a, b) => b.href.length - a.href.length)[0];
-  const pageTitle = exactMatch?.label ?? prefixMatch?.label ?? "Dashboard";
+  const pageTitle = exactMatch?.label ?? prefixMatch?.label ?? t("nav.dashboard");
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -617,7 +622,7 @@ function DashboardShellContent({
         {logo}
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-neutral-900">{restaurantName}</p>
-          <p className="truncate text-[11px] text-neutral-400">Powered by RestroMitra</p>
+          <p className="truncate text-[11px] text-neutral-400">{t("nav.poweredBy")}</p>
           <p className="truncate text-[9px] text-neutral-300">by Saugat Thapa</p>
         </div>
       </div>
@@ -651,8 +656,8 @@ function DashboardShellContent({
         )}
         <button
           type="button"
-          aria-label="Log out"
-          title="Log out"
+          aria-label={t("nav.logOut")}
+          title={t("nav.logOut")}
           onClick={handleLogout}
           disabled={loggingOut}
           className="shrink-0 rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-50"
@@ -674,8 +679,8 @@ function DashboardShellContent({
           {brandBlock()}
           <button
             type="button"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
+            title={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
             onClick={() => setCollapsed((c) => !c)}
             className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
           >
@@ -781,11 +786,12 @@ function DashboardShellContent({
             )}
             {subscriptionStatus === "trialing" && days !== null && (
               <span className="hidden rounded-full bg-orange-50 px-3 py-1 text-xs font-medium text-orange-700 sm:inline-block">
-                {days} day{days === 1 ? "" : "s"} left in trial
+                {trialDaysLeftText(days, locale)}
               </span>
             )}
 
             <DateSystemToggle dateSystem={dateSystem} onChange={setDateSystem} />
+            <LanguageToggle locale={locale} onChange={setLocale} label={t("nav.language")} />
 
             <div className="mx-1 hidden h-6 w-px bg-neutral-200 sm:block" aria-hidden="true" />
 
@@ -805,7 +811,7 @@ function DashboardShellContent({
               <span className="flex h-3.5 w-3.5 items-center justify-center">
                 <NavIcon.Pos />
               </span>
-              <span className="hidden sm:inline">Open POS</span>
+              <span className="hidden sm:inline">{t("nav.openPos")}</span>
               <span className="flex h-3 w-3 items-center justify-center">
                 <NavIcon.ExternalLink />
               </span>
@@ -884,6 +890,7 @@ function NotificationBell({
   onToggle: () => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const lowStock = status?.lowStockCount ?? 0;
   const pendingReservations = status?.pendingReservationsCount ?? 0;
   const alertCount = lowStock + pendingReservations;
@@ -892,7 +899,7 @@ function NotificationBell({
     <div className="relative">
       <button
         type="button"
-        aria-label="Notifications"
+        aria-label={t("nav.notifications")}
         aria-expanded={open}
         onClick={onToggle}
         className="relative rounded-full border border-neutral-200 bg-white p-2 text-neutral-500 transition-colors hover:bg-neutral-50 hover:text-neutral-700"
@@ -982,6 +989,48 @@ function NotificationBell({
  * stay Gregorian (no browser ships a BS date picker), with a small BS
  * equivalent hint shown alongside them when BS is active.
  */
+/**
+ * Dashboard-wide EN/नेपाली toggle — same visual pattern as DateSystemToggle
+ * right next to it (a pill-group control in the header), backed by
+ * LocaleProvider (src/lib/i18n.tsx) rather than DateSystemProvider. Only
+ * the shell's own chrome (this file) is translated so far — see i18n.tsx's
+ * module comment for the deliberately narrow initial scope; picking नेपाली
+ * here does not yet change page content on Orders/POS/Reports/etc.
+ */
+function LanguageToggle({
+  locale,
+  onChange,
+  label,
+}: {
+  locale: Locale;
+  onChange: (next: Locale) => void;
+  label: string;
+}) {
+  return (
+    <div
+      className="hidden items-center rounded-full bg-neutral-100 p-0.5 sm:flex"
+      role="group"
+      aria-label={label}
+    >
+      {(["en", "ne"] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onChange(option)}
+          aria-pressed={locale === option}
+          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ${
+            locale === option
+              ? "bg-white text-orange-700 shadow-sm"
+              : "text-neutral-400 hover:text-neutral-600"
+          }`}
+        >
+          {option === "en" ? "EN" : "ने"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function DateSystemToggle({
   dateSystem,
   onChange,

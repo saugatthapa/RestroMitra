@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { formatNPR } from "@/lib/money";
 import { apiGet, apiPost, ApiError } from "@/lib/api-client";
 import { MenuItemThumb } from "@/components/MenuItemThumb";
+import { useGuestTranslation, cartItemCountText, type Locale, type TranslationKey } from "@/lib/i18n";
+
+type TFunc = (key: TranslationKey) => string;
 
 type Variant = { id: string; name: string; priceInPaisa: number };
 type Addon = { id: string; name: string; priceInPaisa: number };
@@ -36,6 +39,31 @@ function cartLineTotal(line: CartLine): number {
   return (line.unitPriceInPaisa + addonUnitTotal) * line.quantity;
 }
 
+/** EN/नेपाली toggle for a guest's own device — see useGuestTranslation's doc
+ * comment in i18n.tsx for why this is a separate preference from the
+ * dashboard's. Menu item/category names themselves stay whatever the
+ * restaurant entered (this doesn't translate restaurant-authored content,
+ * only the app's own surrounding UI text). */
+function GuestLanguageToggle({ locale, onChange }: { locale: Locale; onChange: (next: Locale) => void }) {
+  return (
+    <div className="flex items-center rounded-full bg-neutral-100 p-0.5" role="group" aria-label="Language">
+      {(["en", "ne"] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onChange(option)}
+          aria-pressed={locale === option}
+          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ${
+            locale === option ? "bg-white text-orange-700 shadow-sm" : "text-neutral-400"
+          }`}
+        >
+          {option === "en" ? "EN" : "ने"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function PublicOrderMenu({
   token,
   restaurantName,
@@ -47,6 +75,7 @@ export function PublicOrderMenu({
   tableName: string;
   categories: Category[];
 }) {
+  const { locale, setLocale, t } = useGuestTranslation();
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     categories[0]?.id ?? null,
   );
@@ -112,7 +141,7 @@ export function PublicOrderMenu({
       );
       setCall(data.call);
     } catch (err) {
-      setCallError(err instanceof ApiError ? err.message : "Couldn't reach staff. Please try again.");
+      setCallError(err instanceof ApiError ? err.message : t("publicMenu.couldNotReachStaff"));
     } finally {
       setCallRequesting(false);
     }
@@ -144,9 +173,7 @@ export function PublicOrderMenu({
       <div className="flex min-h-screen items-center justify-center bg-neutral-50 p-6 text-center">
         <div>
           <p className="text-lg font-semibold text-neutral-900">{restaurantName}</p>
-          <p className="mt-2 text-sm text-neutral-500">
-            The menu isn&apos;t available for ordering right now. Please ask staff for help.
-          </p>
+          <p className="mt-2 text-sm text-neutral-500">{t("publicMenu.menuUnavailable")}</p>
         </div>
       </div>
     );
@@ -159,19 +186,19 @@ export function PublicOrderMenu({
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-2xl text-green-600">
             ✓
           </div>
-          <p className="text-lg font-semibold text-neutral-900">Order placed!</p>
-          <p className="mt-1 text-sm text-neutral-500">Show this screen to staff if needed.</p>
+          <p className="text-lg font-semibold text-neutral-900">{t("publicMenu.orderPlaced")}</p>
+          <p className="mt-1 text-sm text-neutral-500">{t("publicMenu.showScreenToStaff")}</p>
           <div className="mt-4 space-y-1 rounded-xl bg-neutral-50 p-4 text-left text-sm">
             <p>
-              <span className="text-neutral-500">Order #</span>{" "}
+              <span className="text-neutral-500">{t("publicMenu.orderNumberLabel")}</span>{" "}
               <span className="font-semibold">{confirmation.orderNumber}</span>
             </p>
             <p>
-              <span className="text-neutral-500">Table</span>{" "}
+              <span className="text-neutral-500">{t("publicMenu.tableLabel")}</span>{" "}
               <span className="font-semibold">{tableName}</span>
             </p>
             <p>
-              <span className="text-neutral-500">Total</span>{" "}
+              <span className="text-neutral-500">{t("publicMenu.totalLabel")}</span>{" "}
               <span className="font-semibold">{formatNPR(confirmation.totalInPaisa)}</span>
             </p>
           </div>
@@ -183,7 +210,7 @@ export function PublicOrderMenu({
               setView("menu");
             }}
           >
-            Order more
+            {t("publicMenu.orderMore")}
           </button>
         </div>
       </div>
@@ -203,7 +230,8 @@ export function PublicOrderMenu({
           <p className="text-sm font-semibold text-neutral-900">{restaurantName}</p>
           <p className="text-xs text-neutral-500">{tableName}</p>
         </div>
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex flex-col items-end gap-1.5">
+          <GuestLanguageToggle locale={locale} onChange={setLocale} />
           {call ? (
             <span
               className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${
@@ -217,7 +245,7 @@ export function PublicOrderMenu({
                   call.status === "acknowledged" ? "bg-green-500" : "animate-pulse bg-orange-500"
                 }`}
               />
-              {call.status === "acknowledged" ? "Staff on the way" : "Staff notified"}
+              {call.status === "acknowledged" ? t("publicMenu.staffOnTheWay") : t("publicMenu.staffNotified")}
             </span>
           ) : (
             <button
@@ -225,7 +253,7 @@ export function PublicOrderMenu({
               disabled={callRequesting}
               className="flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 active:bg-neutral-50 disabled:opacity-50"
             >
-              🔔 {callRequesting ? "Calling…" : "Call staff"}
+              🔔 {callRequesting ? t("publicMenu.calling") : t("publicMenu.callStaff")}
             </button>
           )}
           {callError && <p className="text-[11px] text-red-600">{callError}</p>}
@@ -276,7 +304,7 @@ export function PublicOrderMenu({
                     </p>
                   </div>
                   <span className="shrink-0 self-end rounded-full bg-orange-600 px-3 py-1 text-xs font-semibold text-white">
-                    Add
+                    {t("publicMenu.add")}
                   </span>
                 </button>
               ))}
@@ -289,7 +317,7 @@ export function PublicOrderMenu({
               rel="noopener noreferrer"
               className="transition hover:text-neutral-600 hover:underline"
             >
-              Powered by RestroMitra
+              {t("publicMenu.poweredBy")}
             </a>
           </p>
         </>
@@ -298,6 +326,7 @@ export function PublicOrderMenu({
       {view === "cart" && (
         <CartView
           cart={cart}
+          t={t}
           onBack={() => setView("menu")}
           onRemove={removeCartLine}
           onChangeQuantity={changeQuantity}
@@ -310,6 +339,7 @@ export function PublicOrderMenu({
           token={token}
           cart={cart}
           total={cartTotal}
+          t={t}
           onBack={() => setView("cart")}
           onPlaced={(order) => {
             setConfirmation(order);
@@ -321,6 +351,7 @@ export function PublicOrderMenu({
       {customizingItem && (
         <CustomizeModal
           item={customizingItem}
+          t={t}
           onClose={() => setCustomizingItem(null)}
           onAdd={addToCart}
         />
@@ -332,7 +363,7 @@ export function PublicOrderMenu({
           className="fixed inset-x-4 bottom-4 z-20 flex items-center justify-between rounded-2xl bg-orange-600 px-5 py-3.5 text-sm font-semibold text-white shadow-lg"
         >
           <span>
-            View cart · {cartCount} item{cartCount === 1 ? "" : "s"}
+            {t("publicMenu.viewCart")} · {cartItemCountText(cartCount, locale)}
           </span>
           <span>{formatNPR(cartTotal)}</span>
         </button>
@@ -350,10 +381,12 @@ function priceRange(variants: Variant[]): string {
 
 function CustomizeModal({
   item,
+  t,
   onClose,
   onAdd,
 }: {
   item: MenuItem;
+  t: TFunc;
   onClose: () => void;
   onAdd: (line: CartLine) => void;
 }) {
@@ -413,7 +446,7 @@ function CustomizeModal({
 
         {item.variants.length > 0 && (
           <div className="mb-4">
-            <p className="mb-1.5 text-xs font-semibold text-neutral-700">Choose an option</p>
+            <p className="mb-1.5 text-xs font-semibold text-neutral-700">{t("publicMenu.chooseOption")}</p>
             <div className="space-y-1.5">
               {item.variants.map((v) => (
                 <label
@@ -438,7 +471,7 @@ function CustomizeModal({
 
         {item.addons.length > 0 && (
           <div className="mb-4">
-            <p className="mb-1.5 text-xs font-semibold text-neutral-700">Add-ons</p>
+            <p className="mb-1.5 text-xs font-semibold text-neutral-700">{t("publicMenu.addons")}</p>
             <div className="space-y-1.5">
               {item.addons.map((a) => (
                 <label
@@ -454,7 +487,7 @@ function CustomizeModal({
                     {a.name}
                   </span>
                   <span className="text-neutral-500">
-                    {a.priceInPaisa > 0 ? `+${formatNPR(a.priceInPaisa)}` : "free"}
+                    {a.priceInPaisa > 0 ? `+${formatNPR(a.priceInPaisa)}` : t("publicMenu.free")}
                   </span>
                 </label>
               ))}
@@ -465,13 +498,13 @@ function CustomizeModal({
         <textarea
           className="input mb-4"
           rows={2}
-          placeholder="Special instructions (optional)"
+          placeholder={t("publicMenu.specialInstructions")}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />
 
         <div className="mb-4 flex items-center justify-between">
-          <p className="text-xs font-semibold text-neutral-700">Quantity</p>
+          <p className="text-xs font-semibold text-neutral-700">{t("publicMenu.quantity")}</p>
           <div className="flex items-center gap-3">
             <button
               className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-600"
@@ -494,7 +527,7 @@ function CustomizeModal({
           disabled={item.variants.length > 0 && !variantId}
           className="btn-primary w-full disabled:opacity-50"
         >
-          Add to cart · {formatNPR(lineTotal)}
+          {t("publicMenu.addToCart")} · {formatNPR(lineTotal)}
         </button>
       </div>
     </div>
@@ -503,12 +536,14 @@ function CustomizeModal({
 
 function CartView({
   cart,
+  t,
   onBack,
   onRemove,
   onChangeQuantity,
   onCheckout,
 }: {
   cart: CartLine[];
+  t: TFunc;
   onBack: () => void;
   onRemove: (key: string) => void;
   onChangeQuantity: (key: string, delta: number) => void;
@@ -519,12 +554,12 @@ function CartView({
   return (
     <div className="px-4 py-4">
       <button onClick={onBack} className="mb-4 text-sm text-neutral-500">
-        ← Back to menu
+        {t("publicMenu.backToMenu")}
       </button>
-      <h1 className="mb-3 text-base font-semibold text-neutral-900">Your order</h1>
+      <h1 className="mb-3 text-base font-semibold text-neutral-900">{t("publicMenu.yourOrder")}</h1>
 
       {cart.length === 0 ? (
-        <p className="text-sm text-neutral-500">Your cart is empty.</p>
+        <p className="text-sm text-neutral-500">{t("publicMenu.cartEmpty")}</p>
       ) : (
         <div className="space-y-3">
           {cart.map((line) => (
@@ -546,7 +581,7 @@ function CartView({
                   onClick={() => onRemove(line.key)}
                   className="text-xs text-neutral-400 hover:text-red-600"
                 >
-                  Remove
+                  {t("publicMenu.remove")}
                 </button>
               </div>
               <div className="mt-2 flex items-center justify-between">
@@ -574,16 +609,16 @@ function CartView({
 
           <div className="border-t border-neutral-200 pt-3">
             <div className="flex items-baseline justify-between gap-3">
-              <span className="text-sm font-semibold text-neutral-900">Subtotal</span>
+              <span className="text-sm font-semibold text-neutral-900">{t("publicMenu.subtotal")}</span>
               <span className="whitespace-nowrap text-sm font-semibold text-neutral-900">
                 {formatNPR(total)}
               </span>
             </div>
-            <p className="mt-0.5 text-xs text-neutral-400">Tax calculated at checkout</p>
+            <p className="mt-0.5 text-xs text-neutral-400">{t("publicMenu.taxAtCheckout")}</p>
           </div>
 
           <button onClick={onCheckout} className="btn-primary w-full">
-            Checkout
+            {t("publicMenu.checkout")}
           </button>
         </div>
       )}
@@ -595,12 +630,14 @@ function CheckoutView({
   token,
   cart,
   total,
+  t,
   onBack,
   onPlaced,
 }: {
   token: string;
   cart: CartLine[];
   total: number;
+  t: TFunc;
   onBack: () => void;
   onPlaced: (order: { orderNumber: string; totalInPaisa: number }) => void;
 }) {
@@ -630,7 +667,7 @@ function CheckoutView({
       });
       onPlaced(res.order);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not place your order. Please try again.");
+      setError(err instanceof ApiError ? err.message : t("publicMenu.couldNotPlaceOrder"));
     } finally {
       setSubmitting(false);
     }
@@ -639,45 +676,45 @@ function CheckoutView({
   return (
     <div className="px-4 py-4">
       <button onClick={onBack} className="mb-4 text-sm text-neutral-500" disabled={submitting}>
-        ← Back to cart
+        {t("publicMenu.backToCart")}
       </button>
-      <h1 className="mb-3 text-base font-semibold text-neutral-900">Checkout</h1>
+      <h1 className="mb-3 text-base font-semibold text-neutral-900">{t("publicMenu.checkout")}</h1>
 
       <div className="space-y-3">
         <input
           className="input"
-          placeholder="Your name (optional)"
+          placeholder={t("publicMenu.yourNameOptional")}
           value={customerName}
           onChange={(e) => setCustomerName(e.target.value)}
         />
         <input
           className="input"
-          placeholder="Phone number (optional)"
+          placeholder={t("publicMenu.phoneOptional")}
           value={customerPhone}
           onChange={(e) => setCustomerPhone(e.target.value)}
         />
         <textarea
           className="input"
           rows={2}
-          placeholder="Notes for the kitchen (optional)"
+          placeholder={t("publicMenu.notesForKitchen")}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />
 
         <div className="rounded-xl bg-neutral-50 px-4 py-3">
           <div className="flex items-baseline justify-between gap-3 text-sm">
-            <span className="font-semibold text-neutral-900">Estimated subtotal</span>
+            <span className="font-semibold text-neutral-900">{t("publicMenu.estimatedSubtotal")}</span>
             <span className="whitespace-nowrap font-semibold text-neutral-900">
               {formatNPR(total)}
             </span>
           </div>
-          <p className="mt-0.5 text-xs text-neutral-400">Tax added on submission</p>
+          <p className="mt-0.5 text-xs text-neutral-400">{t("publicMenu.taxAddedOnSubmission")}</p>
         </div>
 
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
         <button onClick={handleSubmit} disabled={submitting} className="btn-primary w-full">
-          {submitting ? "Placing order…" : "Place order"}
+          {submitting ? t("publicMenu.placingOrder") : t("publicMenu.placeOrder")}
         </button>
       </div>
     </div>
