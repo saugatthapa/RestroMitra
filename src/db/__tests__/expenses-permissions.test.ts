@@ -28,6 +28,7 @@ describe.skipIf(!hasDb)("Expenses permissions (integration)", () => {
   let ownerBId: string;
   let restaurantAId: string;
   let restaurantBId: string;
+  let categoryAId: string;
 
   beforeAll(async () => {
     db = (await import("@/db")).db;
@@ -74,11 +75,20 @@ describe.skipIf(!hasDb)("Expenses permissions (integration)", () => {
       { userId: inventoryManagerAId, restaurantId: restaurantAId, role: "inventory_manager" },
       { userId: ownerBId, restaurantId: restaurantBId, role: "owner" },
     ]);
+
+    const [categoryA] = await db
+      .insert(schema.expenseCategories)
+      .values({ restaurantId: restaurantAId, name: "TEST Utilities" })
+      .returning({ id: schema.expenseCategories.id });
+    categoryAId = categoryA.id;
   });
 
   afterAll(async () => {
     await db.delete(schema.expenses).where(eq(schema.expenses.restaurantId, restaurantAId));
     await db.delete(schema.expenses).where(eq(schema.expenses.restaurantId, restaurantBId));
+    await db
+      .delete(schema.expenseCategories)
+      .where(eq(schema.expenseCategories.restaurantId, restaurantAId));
     await db.delete(schema.userRoles).where(eq(schema.userRoles.restaurantId, restaurantAId));
     await db.delete(schema.userRoles).where(eq(schema.userRoles.restaurantId, restaurantBId));
     await db.delete(schema.restaurants).where(eq(schema.restaurants.id, restaurantAId));
@@ -118,7 +128,7 @@ describe.skipIf(!hasDb)("Expenses permissions (integration)", () => {
       .insert(schema.expenses)
       .values({
         restaurantId: restaurantAId,
-        category: "utilities",
+        categoryId: categoryAId,
         amountInPaisa: 250000,
         description: "TEST electricity bill",
         recordedByUserId: managerAId,

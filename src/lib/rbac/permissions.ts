@@ -42,9 +42,25 @@ export const PERMISSIONS = {
 
   // Expenses
   MANAGE_EXPENSES: "manage_expenses",
+  // Phase 21 — the expense approval/payment workflow. Deliberately
+  // separate from MANAGE_EXPENSES (create/edit/manage categories):
+  // CREATE_EXPENSE_REQUEST is the low-trust "submit for approval" grant;
+  // APPROVE_EXPENSE and PAY_EXPENSE are split per the spec's own example
+  // (a manager can approve spend, but paying it out is a step higher —
+  // owner/accountant only by default).
+  CREATE_EXPENSE_REQUEST: "create_expense_request",
+  APPROVE_EXPENSE: "approve_expense",
+  PAY_EXPENSE: "pay_expense",
 
   // Account Books (Phase 19)
   MANAGE_ACCOUNT_BOOKS: "manage_account_books",
+
+  // Payroll (Phase 21) — kept separate from every other financial
+  // permission above: salary information must stay private (spec
+  // section 31), so this is never bundled into MANAGE_EXPENSES or any
+  // role that doesn't explicitly need to see pay.
+  VIEW_PAYROLL: "view_payroll",
+  MANAGE_PAYROLL: "manage_payroll",
 
   // Reports
   VIEW_REPORTS: "view_reports",
@@ -74,8 +90,13 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.MANAGE_TABLES]: "Create/edit tables and generate QR codes",
   [PERMISSIONS.MANAGE_RESERVATIONS]: "Create and manage reservations",
   [PERMISSIONS.MANAGE_CUSTOMERS]: "View and edit customer CRM records",
-  [PERMISSIONS.MANAGE_EXPENSES]: "Record and edit operational expenses",
+  [PERMISSIONS.MANAGE_EXPENSES]: "Record and edit operational expenses, manage expense categories",
+  [PERMISSIONS.CREATE_EXPENSE_REQUEST]: "Submit an expense for approval",
+  [PERMISSIONS.APPROVE_EXPENSE]: "Approve or reject a pending expense",
+  [PERMISSIONS.PAY_EXPENSE]: "Mark an approved expense as paid",
   [PERMISSIONS.MANAGE_ACCOUNT_BOOKS]: "View and record entries in the Account Books ledger, settle dues",
+  [PERMISSIONS.VIEW_PAYROLL]: "View payroll and salary information",
+  [PERMISSIONS.MANAGE_PAYROLL]: "Calculate, approve, and pay employee payroll",
   [PERMISSIONS.VIEW_REPORTS]: "View analytics and reports",
   [PERMISSIONS.VIEW_KDS]: "View the Kitchen Display System",
   [PERMISSIONS.UPDATE_KDS_STATUS]: "Update order/ticket status from the KDS",
@@ -94,7 +115,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     | "cashier"
     | "waiter"
     | "kitchen_staff"
-    | "inventory_manager",
+    | "inventory_manager"
+    | "accountant",
     never
   >,
   PermissionKey[]
@@ -120,6 +142,15 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     PERMISSIONS.MANAGE_RESERVATIONS,
     PERMISSIONS.MANAGE_CUSTOMERS,
     PERMISSIONS.MANAGE_EXPENSES,
+    PERMISSIONS.CREATE_EXPENSE_REQUEST,
+    // Phase 21 — matches the financial-system spec's own example exactly:
+    // "Manager: can approve expense. Owner: can approve/pay expense."
+    // A manager's own directly-created expenses now land as "approved,
+    // awaiting payment" rather than instantly paid — PAY_EXPENSE is
+    // deliberately NOT granted here. This narrows what manager could do
+    // yesterday (create = instantly done); see the Phase 21 commit for
+    // the full reasoning.
+    PERMISSIONS.APPROVE_EXPENSE,
     // Same trust tier as MANAGE_EXPENSES — a manager routinely needs to
     // log cash sales/dues without waking the owner, but cashier/waiter
     // don't get it by default (see their lists below), same reasoning as
@@ -137,10 +168,38 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     // — not money/profit-sensitive the way MANAGE_EXPENSES is, so cashier
     // gets it by default while waiter (floor-focused) does not.
     PERMISSIONS.MANAGE_RESERVATIONS,
+    // Phase 21 — a cashier is the front-of-house role most likely to need
+    // petty-cash reimbursement (a supply run, a delivery tip) — can
+    // submit a request, cannot approve or pay it themselves.
+    PERMISSIONS.CREATE_EXPENSE_REQUEST,
   ],
   waiter: [PERMISSIONS.CREATE_ORDER, PERMISSIONS.EDIT_ORDER],
   kitchen_staff: [PERMISSIONS.VIEW_KDS, PERMISSIONS.UPDATE_KDS_STATUS],
-  inventory_manager: [PERMISSIONS.MANAGE_INVENTORY, PERMISSIONS.VIEW_PROFIT],
+  inventory_manager: [
+    PERMISSIONS.MANAGE_INVENTORY,
+    PERMISSIONS.VIEW_PROFIT,
+    // Phase 21 — the role most likely submitting supply/equipment expense
+    // requests; same request-only trust level as cashier above.
+    PERMISSIONS.CREATE_EXPENSE_REQUEST,
+  ],
+  // Phase 21 — a role trusted with money/reports but not floor
+  // operations: financial management, expense approval + payment,
+  // payroll, and reports, WITHOUT manager's operational reach
+  // (no MANAGE_STAFF, MANAGE_INVENTORY, MANAGE_TABLES, MANAGE_RESERVATIONS,
+  // EDIT_MENU, refunds/discounts). Matches the spec's own "ACCOUNTANT:
+  // Financial management, Payroll, Reports" example.
+  accountant: [
+    PERMISSIONS.VIEW_SALES,
+    PERMISSIONS.VIEW_PROFIT,
+    PERMISSIONS.MANAGE_EXPENSES,
+    PERMISSIONS.CREATE_EXPENSE_REQUEST,
+    PERMISSIONS.APPROVE_EXPENSE,
+    PERMISSIONS.PAY_EXPENSE,
+    PERMISSIONS.MANAGE_ACCOUNT_BOOKS,
+    PERMISSIONS.VIEW_PAYROLL,
+    PERMISSIONS.MANAGE_PAYROLL,
+    PERMISSIONS.VIEW_REPORTS,
+  ],
 };
 
 /**

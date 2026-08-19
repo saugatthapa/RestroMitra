@@ -81,6 +81,12 @@ export const systemRoleEnum = pgEnum("system_role", [
   "waiter",
   "kitchen_staff",
   "inventory_manager",
+  // Financial system (Phase 21) — a role trusted with money/reports but
+  // not floor operations: payroll, expense approval/payment, account
+  // books, and reports, without the operational reach of "manager"
+  // (no MANAGE_STAFF, MANAGE_INVENTORY, MANAGE_TABLES, etc.). See
+  // DEFAULT_ROLE_PERMISSIONS for the exact grant.
+  "accountant",
 ]);
 
 // Phase 3 — an order's lifecycle. Deliberately small/linear for now: the
@@ -1412,24 +1418,74 @@ export const attendanceRecords = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Expenses (Phase 8c) — operational spending tracking: rent, utilities,
-// salaries paid in cash, supply runs, and the like. Deliberately a simple,
-// directly-editable ledger (unlike payments/loyalty_transactions) — an
-// expense has no downstream cached balance that needs to stay in sync, so
-// there's no atomic-increment pattern needed here; PATCH edits the row
-// in place and isVoided is the soft-delete flag (an expense may need
-// correcting or voiding after the fact, e.g. a duplicate entry).
+// Expenses (Phase 8c, workflow added Phase 21) — operational spending
+// tracking: rent, utilities, salaries paid in cash, supply runs, and the
+// like. isVoided remains the soft-delete flag (an expense may need
+// correcting or voiding after the fact) — but voiding now creates a
+// reversal ledger entry (see reverseExpenseLedgerEntry in ledger.ts)
+// instead of silently leaving the original debit sitting in Account
+// Books, so a voided expense's financial trail stays intact rather than
+// just going stale.
+//
+// Phase 21 replaced the old fixed 8-value `expense_category` enum (see
+// git history / PHASE_8c_NOTES.md) with a real per-restaurant table —
+// custom categories were an explicitly documented "known gap" from
+// Phase 8c, and a Postgres enum can't grow per-tenant at runtime the way
+// a table can. Existing rows were backfilled onto the closest-matching
+// new default category (see the migration).
 // ---------------------------------------------------------------------------
 
-export const expenseCategoryEnum = pgEnum("expense_category", [
-  "rent",
-  "utilities",
-  "salaries",
-  "supplies",
-  "maintenance",
-  "marketing",
-  "transport",
+export const expenseCategories = pgTable(
+  "expense_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 100 }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("expense_categories_restaurant_id_idx").on(table.restaurantId),
+    uniqueIndex("expense_categories_restaurant_name_idx").on(table.restaurantId, table.name),
+  ],
+);
+
+// How an expense was actually settled once PAID. Deliberately a distinct,
+// smaller enum from PAYMENT_METHODS (payments.ts, used for incoming
+// order payments: cash/card/mobile_wallet/other) — an outgoing business
+// payment splits "mobile wallet" into esewa/khalti explicitly (so
+// payment-method breakdown reporting can tell them apart, per the
+// financial dashboard spec) and adds bank_transfer/mobile_banking, which
+// have no meaning for a customer paying at the till.
+export const expensePaymentMethodEnum = pgEnum("expense_payment_method", [
+  "cash",
+  "bank_transfer",
+  "esewa",
+  "khalti",
+  "mobile_banking",
   "other",
+]);
+
+// pending_approval -> approved -> paid is the multi-step flow for a
+// creator who doesn't hold pay/approve authority themselves (see
+// resolveInitialExpenseStatus in expense-workflow.ts). rejected is a
+// terminal dead end from pending_approval. A creator who already holds
+// APPROVE_EXPENSE or PAY_EXPENSE skips straight to "approved" or "paid"
+// respectively — this is what keeps today's one-step owner/manager flow
+// working unchanged rather than forcing everyone through every stage.
+export const expenseStatusEnum = pgEnum("expense_status", [
+  "pending_approval",
+  "approved",
+  "rejected",
+  "paid",
 ]);
 
 export const expenses = pgTable(
@@ -1439,7 +1495,13 @@ export const expenses = pgTable(
     restaurantId: uuid("restaurant_id")
       .notNull()
       .references(() => restaurants.id, { onDelete: "cascade" }),
-    category: expenseCategoryEnum("category").notNull(),
+    // Nullable — an expense isn't required to be pinned to one branch
+    // (e.g. a platform-wide software subscription). Set, it scopes the
+    // expense to that branch for branch-filtered reporting.
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => expenseCategories.id, { onDelete: "restrict" }),
     amountInPaisa: integer("amount_in_paisa").notNull(),
     description: varchar("description", { length: 300 }).notNull(),
     // The calendar date the expense actually happened — separate from
@@ -1447,7 +1509,23 @@ export const expenses = pgTable(
     // entering yesterday's electricity bill today). Defaults to today.
     expenseDate: date("expense_date").notNull().defaultNow(),
     note: text("note"),
+    status: expenseStatusEnum("status").notNull().default("paid"),
+    // Only ever set once status = "paid" — see recordExpenseLedgerEntry's
+    // call site, which is the ONLY place this table's ledger debit gets
+    // created (matches the spec's "never mark paid before confirmation").
+    paymentMethod: expensePaymentMethodEnum("payment_method"),
+    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    paidByUserId: uuid("paid_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    rejectionReason: varchar("rejection_reason", { length: 300 }),
     isVoided: boolean("is_voided").notNull().default(false),
+    // Who originally submitted/created this expense (a request, or a
+    // direct paid entry) — "created by" throughout the audit trail.
     recordedByUserId: uuid("recorded_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -1461,6 +1539,9 @@ export const expenses = pgTable(
   (table) => [
     index("expenses_restaurant_id_idx").on(table.restaurantId),
     index("expenses_expense_date_idx").on(table.expenseDate),
+    index("expenses_branch_id_idx").on(table.branchId),
+    index("expenses_category_id_idx").on(table.categoryId),
+    index("expenses_status_idx").on(table.status),
   ],
 );
 
@@ -1672,10 +1753,37 @@ export const expensesRelations = relations(expenses, ({ one }) => ({
     fields: [expenses.restaurantId],
     references: [restaurants.id],
   }),
+  branch: one(branches, {
+    fields: [expenses.branchId],
+    references: [branches.id],
+  }),
+  category: one(expenseCategories, {
+    fields: [expenses.categoryId],
+    references: [expenseCategories.id],
+  }),
   recordedBy: one(users, {
     fields: [expenses.recordedByUserId],
     references: [users.id],
+    relationName: "expenseRecordedBy",
   }),
+  approvedBy: one(users, {
+    fields: [expenses.approvedByUserId],
+    references: [users.id],
+    relationName: "expenseApprovedBy",
+  }),
+  paidBy: one(users, {
+    fields: [expenses.paidByUserId],
+    references: [users.id],
+    relationName: "expensePaidBy",
+  }),
+}));
+
+export const expenseCategoriesRelations = relations(expenseCategories, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [expenseCategories.restaurantId],
+    references: [restaurants.id],
+  }),
+  expenses: many(expenses),
 }));
 
 export const reservationsRelations = relations(reservations, ({ one }) => ({

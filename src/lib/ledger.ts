@@ -135,6 +135,38 @@ export async function recordExpenseLedgerEntry(
   });
 }
 
+/**
+ * Reverses a previously-recorded expense debit — called when a PAID
+ * expense is voided (see the expense PATCH route). Inserts a new CREDIT
+ * entry linked back to the original via referenceId, rather than
+ * mutating or deleting the original debit — the financial history stays
+ * intact and traceable (spec section 39: reversals, not silent edits).
+ * The inverse (recordExpenseLedgerEntry again) is used when a voided
+ * expense is un-voided.
+ */
+export async function reverseExpenseLedgerEntry(
+  tx: Transaction,
+  params: {
+    restaurantId: string;
+    expenseId: string;
+    amountInPaisa: number;
+    categoryLabel: string;
+    description: string;
+    recordedByUserId?: string | null;
+  },
+) {
+  return recordLedgerEntry(tx, {
+    restaurantId: params.restaurantId,
+    direction: "credit",
+    category: "expense",
+    amountInPaisa: params.amountInPaisa,
+    description: `Voided: ${params.categoryLabel}: ${params.description}`,
+    referenceType: "expense",
+    referenceId: params.expenseId,
+    recordedByUserId: params.recordedByUserId ?? null,
+  });
+}
+
 /** Called from the purchase-creation route, right after the purchase transaction commits its header row. */
 export async function recordPurchaseLedgerEntry(
   tx: Transaction,

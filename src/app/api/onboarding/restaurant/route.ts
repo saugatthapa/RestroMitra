@@ -9,6 +9,7 @@ import { recordAuditLog } from "@/lib/audit";
 import { recordSubscriptionEvent } from "@/lib/subscription-db";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { slugify, randomSuffix } from "@/lib/slug";
+import { seedDefaultExpenseCategories } from "@/lib/expense-categories";
 
 const DAYS = [
   "monday",
@@ -112,6 +113,8 @@ export async function POST(request: Request) {
       note: "30-day free trial started at signup.",
       performedByUserId: session.user.id,
     });
+
+    await seedDefaultExpenseCategories(tx, restaurant.id);
 
     return { restaurant, branch };
   });

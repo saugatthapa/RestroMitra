@@ -33,6 +33,9 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
   let restaurantAId: string;
   let restaurantBId: string;
   let branchAId: string;
+  let rentCategoryId: string;
+  let suppliesCategoryId: string;
+  let marketingCategoryId: string;
 
   const RANGE = { from: "2026-06-01", to: "2026-06-07" };
 
@@ -173,13 +176,30 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
       },
     ]);
 
+    // Expense categories — real per-restaurant rows now, not a fixed enum.
+    const [rentCategory] = await db
+      .insert(schema.expenseCategories)
+      .values({ restaurantId: restaurantAId, name: "TEST Rent" })
+      .returning({ id: schema.expenseCategories.id });
+    const [suppliesCategory] = await db
+      .insert(schema.expenseCategories)
+      .values({ restaurantId: restaurantAId, name: "TEST Supplies" })
+      .returning({ id: schema.expenseCategories.id });
+    const [marketingCategory] = await db
+      .insert(schema.expenseCategories)
+      .values({ restaurantId: restaurantAId, name: "TEST Marketing" })
+      .returning({ id: schema.expenseCategories.id });
+    rentCategoryId = rentCategory.id;
+    suppliesCategoryId = suppliesCategory.id;
+    marketingCategoryId = marketingCategory.id;
+
     // Expenses — two categories inside the range, one voided (must be
     // excluded), one dated the day after the range ends (must not leak
     // in).
     await db.insert(schema.expenses).values([
       {
         restaurantId: restaurantAId,
-        category: "rent",
+        categoryId: rentCategoryId,
         amountInPaisa: 40_000,
         description: "TEST rent",
         expenseDate: "2026-06-01",
@@ -187,7 +207,7 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
       },
       {
         restaurantId: restaurantAId,
-        category: "supplies",
+        categoryId: suppliesCategoryId,
         amountInPaisa: 15_000,
         description: "TEST supplies",
         expenseDate: "2026-06-04",
@@ -195,7 +215,7 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
       },
       {
         restaurantId: restaurantAId,
-        category: "supplies",
+        categoryId: suppliesCategoryId,
         amountInPaisa: 999_999,
         description: "TEST voided supplies",
         expenseDate: "2026-06-04",
@@ -204,7 +224,7 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
       },
       {
         restaurantId: restaurantAId,
-        category: "marketing",
+        categoryId: marketingCategoryId,
         amountInPaisa: 888_888,
         description: "TEST out-of-range marketing",
         expenseDate: "2026-06-08",
@@ -216,6 +236,9 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
   afterAll(async () => {
     await db.delete(schema.payments).where(eq(schema.payments.restaurantId, restaurantAId));
     await db.delete(schema.expenses).where(eq(schema.expenses.restaurantId, restaurantAId));
+    await db
+      .delete(schema.expenseCategories)
+      .where(eq(schema.expenseCategories.restaurantId, restaurantAId));
     // orderItems cascade-delete with their orders.
     await db.delete(schema.orders).where(eq(schema.orders.restaurantId, restaurantAId));
     await db.delete(schema.branches).where(eq(schema.branches.id, branchAId));
@@ -292,9 +315,9 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
   it("getExpenseCategoryBreakdown excludes voided rows and sums per category", async () => {
     const breakdown = await reports.getExpenseCategoryBreakdown(restaurantAId, RANGE);
     const byCategory = Object.fromEntries(breakdown.map((r) => [r.category, r.totalInPaisa]));
-    expect(byCategory.rent).toBe(40_000);
-    expect(byCategory.supplies).toBe(15_000); // not 15_000 + 999_999 voided
-    expect(byCategory.marketing).toBeUndefined(); // out of range
+    expect(byCategory["TEST Rent"]).toBe(40_000);
+    expect(byCategory["TEST Supplies"]).toBe(15_000); // not 15_000 + 999_999 voided
+    expect(byCategory["TEST Marketing"]).toBeUndefined(); // out of range
   });
 
   it("getReportSummary bundles everything and computes net profit as revenue minus expenses", async () => {

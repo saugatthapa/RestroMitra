@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, ApiError } from "@/lib/api-client";
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/payments";
-import { EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/expense-categories";
 import type { DailySeriesPoint } from "@/lib/reports-helpers";
 import { RevenueTrendChart } from "./RevenueTrendChart";
 import { HourlyHeatmap, type HourlyHeatmapCell } from "./HourlyHeatmap";
@@ -33,7 +32,7 @@ type ReportSummary = {
   dailySeries: DailySeriesPoint[];
   topItems: { name: string; quantitySold: number; revenueInPaisa: number }[];
   paymentBreakdown: { method: PaymentMethod; totalInPaisa: number }[];
-  expenseBreakdown: { category: ExpenseCategory; totalInPaisa: number }[];
+  expenseBreakdown: { category: string; totalInPaisa: number }[];
   totalTipsInPaisa: number;
   peakHour: {
     peakOrdersHour: number | null;
@@ -500,7 +499,7 @@ export function ReportsBoard({ slug }: { slug: string }) {
                     {data.expenseBreakdown.map((row) => (
                       <BreakdownBar
                         key={row.category}
-                        label={EXPENSE_CATEGORY_LABELS[row.category]}
+                        label={row.category}
                         valueLabel={formatRupees(row.totalInPaisa)}
                         fraction={row.totalInPaisa / maxExpenseTotal}
                         color={EXPENSES_COLOR}

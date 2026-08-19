@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, desc, eq, gte, lt, lte, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { orders, orderItems, payments, expenses, branches } from "@/db/schema";
+import { orders, orderItems, payments, expenses, expenseCategories, branches } from "@/db/schema";
 import {
   generateDateRange,
   mergeDailySeries,
@@ -12,7 +12,6 @@ import {
   type DailySeriesPoint,
 } from "@/lib/reports-helpers";
 import type { PaymentMethod } from "@/lib/payments";
-import type { ExpenseCategory } from "@/lib/expense-categories";
 
 export type ReportDateRange = {
   /** YYYY-MM-DD, inclusive. */
@@ -387,6 +386,13 @@ export async function getTotalExpensesInPaisa(
       and(
         eq(expenses.restaurantId, restaurantId),
         eq(expenses.isVoided, false),
+        // Phase 21 — only PAID expenses are real cash-out; a
+        // pending_approval/approved expense hasn't actually been paid yet
+        // (and has no matching ledger debit — see the /pay route), so
+        // counting it here would make this number disagree with Account
+        // Books (spec section 42: summaries must reconcile with the
+        // underlying transactions).
+        eq(expenses.status, "paid"),
         gte(expenses.expenseDate, range.from),
         lte(expenses.expenseDate, range.to),
       ),
@@ -431,6 +437,7 @@ export async function getDailyRevenueVsExpenses(
       and(
         eq(expenses.restaurantId, restaurantId),
         eq(expenses.isVoided, false),
+        eq(expenses.status, "paid"),
         gte(expenses.expenseDate, range.from),
         lte(expenses.expenseDate, range.to),
       ),
@@ -528,7 +535,10 @@ export async function getPaymentMethodBreakdown(
   return rows.map((r) => ({ method: r.method as PaymentMethod, totalInPaisa: Number(r.totalInPaisa) }));
 }
 
-export type ExpenseBreakdownRow = { category: ExpenseCategory; totalInPaisa: number };
+/** category is the category's display NAME (Phase 21 — categories are a
+ * per-restaurant table now, not a fixed enum, so there's no fixed type to
+ * key this by; see expense-categories.ts). */
+export type ExpenseBreakdownRow = { category: string; totalInPaisa: number };
 
 export async function getExpenseCategoryBreakdown(
   restaurantId: string,
@@ -536,22 +546,24 @@ export async function getExpenseCategoryBreakdown(
 ): Promise<ExpenseBreakdownRow[]> {
   const rows = await db
     .select({
-      category: expenses.category,
+      category: expenseCategories.name,
       totalInPaisa: sql<string>`coalesce(sum(${expenses.amountInPaisa}), 0)`,
     })
     .from(expenses)
+    .innerJoin(expenseCategories, eq(expenseCategories.id, expenses.categoryId))
     .where(
       and(
         eq(expenses.restaurantId, restaurantId),
         eq(expenses.isVoided, false),
+        eq(expenses.status, "paid"),
         gte(expenses.expenseDate, range.from),
         lte(expenses.expenseDate, range.to),
       ),
     )
-    .groupBy(expenses.category)
+    .groupBy(expenseCategories.name)
     .orderBy(desc(sql`sum(${expenses.amountInPaisa})`));
 
-  return rows.map((r) => ({ category: r.category as ExpenseCategory, totalInPaisa: Number(r.totalInPaisa) }));
+  return rows.map((r) => ({ category: r.category, totalInPaisa: Number(r.totalInPaisa) }));
 }
 
 /**

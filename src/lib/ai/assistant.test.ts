@@ -50,7 +50,7 @@ const sampleSummary: ReportSummary = {
     { method: "cash", totalInPaisa: 3_000_00 },
     { method: "mobile_wallet", totalInPaisa: 2_000_00 },
   ],
-  expenseBreakdown: [{ category: "rent", totalInPaisa: 1_000_00 }, { category: "utilities", totalInPaisa: 500_00 }],
+  expenseBreakdown: [{ category: "Rent", totalInPaisa: 1_000_00 }, { category: "Utilities", totalInPaisa: 500_00 }],
   totalTipsInPaisa: 100_00,
   peakHour: {
     peakOrdersHour: 19,
@@ -102,7 +102,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("2026-08-14");
     expect(prompt).toContain("Rs. 5,000.00"); // revenue
     expect(prompt).toContain("Chicken Momo");
-    expect(prompt).toContain("Rent"); // EXPENSE_CATEGORY_LABELS
+    expect(prompt).toContain("Rent"); // real per-restaurant category name (expenseBreakdown.category)
     expect(prompt).toContain("Cash"); // PAYMENT_METHOD_LABELS
   });
 

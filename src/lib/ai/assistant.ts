@@ -1,7 +1,6 @@
 import "server-only";
 import { formatNPR } from "@/lib/money";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payments";
-import { EXPENSE_CATEGORY_LABELS } from "@/lib/expense-categories";
 import type { getReportSummary } from "@/lib/reports";
 import { getAiConfig, type AiConfig, type AnthropicConfig, type GroqConfig } from "./config";
 
@@ -91,7 +90,7 @@ export function buildSystemPrompt(restaurantName: string, summary: ReportSummary
   const expenseText =
     expenseBreakdown.length > 0
       ? expenseBreakdown
-          .map((e) => `${EXPENSE_CATEGORY_LABELS[e.category]}: ${formatNPR(e.totalInPaisa)}`)
+          .map((e) => `${e.category}: ${formatNPR(e.totalInPaisa)}`)
           .join("\n")
       : "(no expenses recorded in this range)";
 

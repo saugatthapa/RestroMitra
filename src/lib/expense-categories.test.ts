@@ -1,18 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS } from "./expense-categories";
+import { DEFAULT_EXPENSE_CATEGORY_NAMES } from "./expense-categories";
 
-describe("EXPENSE_CATEGORIES", () => {
-  it("has a label for every category", () => {
-    for (const category of EXPENSE_CATEGORIES) {
-      expect(EXPENSE_CATEGORY_LABELS[category]).toBeTruthy();
-    }
-  });
-
-  it("includes 'other' as a catch-all", () => {
-    expect(EXPENSE_CATEGORIES).toContain("other");
+describe("DEFAULT_EXPENSE_CATEGORY_NAMES", () => {
+  it("includes 'Miscellaneous' as a catch-all", () => {
+    expect(DEFAULT_EXPENSE_CATEGORY_NAMES).toContain("Miscellaneous");
   });
 
   it("has no duplicate categories", () => {
-    expect(new Set(EXPENSE_CATEGORIES).size).toBe(EXPENSE_CATEGORIES.length);
+    expect(new Set(DEFAULT_EXPENSE_CATEGORY_NAMES).size).toBe(DEFAULT_EXPENSE_CATEGORY_NAMES.length);
+  });
+
+  it("has no empty names", () => {
+    for (const name of DEFAULT_EXPENSE_CATEGORY_NAMES) {
+      expect(name.trim().length).toBeGreaterThan(0);
+    }
   });
 });
