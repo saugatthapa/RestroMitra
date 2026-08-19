@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
-import { getUserRestaurants } from "@/lib/restaurant";
+import { getUserRestaurants, getSelectableBranches } from "@/lib/restaurant";
 import { computeSubscriptionAccess } from "@/lib/subscription";
 import { DashboardShell } from "./DashboardShell";
 
@@ -43,6 +43,13 @@ export default async function DashboardLayout({
     if (!access.allowed) redirect("/billing");
   }
 
+  // Header branch switcher (Reports filtering) — platform_admin has no
+  // userRoles row on a tenant it's viewing for support/ops (see
+  // requireRestaurantAccess's bypass), so it never gets a branch lock and
+  // this simply returns every active branch for them, same as an
+  // unrestricted owner/manager would see.
+  const selectableBranches = await getSelectableBranches(session.user.id, active.id);
+
   return (
     <DashboardShell
       ownerName={session.user.fullName}
@@ -54,6 +61,7 @@ export default async function DashboardLayout({
       logoUrl={active.logoUrl}
       restaurants={restaurants.map((r) => ({ id: r.id, name: r.name }))}
       activeRestaurantId={active.id}
+      branches={selectableBranches}
     >
       {children}
     </DashboardShell>

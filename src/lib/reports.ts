@@ -40,7 +40,11 @@ function dayBounds(range: ReportDateRange) {
   return { dayStart, dayAfterEnd };
 }
 
-export async function getSalesSummary(restaurantId: string, range: ReportDateRange) {
+export async function getSalesSummary(
+  restaurantId: string,
+  range: ReportDateRange,
+  branchId?: string,
+) {
   const { dayStart, dayAfterEnd } = dayBounds(range);
 
   const [completedRow] = await db
@@ -62,6 +66,7 @@ export async function getSalesSummary(restaurantId: string, range: ReportDateRan
         eq(orders.status, "completed"),
         gte(orders.placedAt, dayStart),
         lt(orders.placedAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
       ),
     );
 
@@ -74,6 +79,7 @@ export async function getSalesSummary(restaurantId: string, range: ReportDateRan
         eq(orders.status, "cancelled"),
         gte(orders.placedAt, dayStart),
         lt(orders.placedAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
       ),
     );
 
@@ -99,17 +105,28 @@ export async function getSalesSummary(restaurantId: string, range: ReportDateRan
 export async function getTipsSummary(
   restaurantId: string,
   range: ReportDateRange,
+  branchId?: string,
 ): Promise<{ totalTipsInPaisa: number }> {
   const { dayStart, dayAfterEnd } = dayBounds(range);
 
+  // payments has no branchId column of its own (see schema.ts) — every
+  // payment belongs to exactly one order (orderId is NOT NULL), so an
+  // inner join onto orders.branchId is how branch scoping applies here.
+  // Joining unconditionally (rather than only when branchId is passed)
+  // keeps this one query shape instead of two, and changes nothing about
+  // the result when branchId is omitted — payments.orderId always
+  // resolves to exactly one order row, so the join can't drop or
+  // duplicate a payment.
   const [row] = await db
     .select({ totalTipsInPaisa: sql<string>`coalesce(sum(${payments.tipInPaisa}), 0)` })
     .from(payments)
+    .innerJoin(orders, eq(payments.orderId, orders.id))
     .where(
       and(
         eq(payments.restaurantId, restaurantId),
         gte(payments.createdAt, dayStart),
         lt(payments.createdAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
       ),
     );
 
@@ -138,6 +155,7 @@ export type PeakHourStats = {
 export async function getPeakHourStats(
   restaurantId: string,
   range: ReportDateRange,
+  branchId?: string,
 ): Promise<PeakHourStats> {
   const { dayStart, dayAfterEnd } = dayBounds(range);
 
@@ -154,6 +172,7 @@ export async function getPeakHourStats(
         eq(orders.status, "completed"),
         gte(orders.placedAt, dayStart),
         lt(orders.placedAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
       ),
     )
     .groupBy(sql`1`);
@@ -199,6 +218,7 @@ export type HourlyHeatmapCell = {
 export async function getHourlyHeatmap(
   restaurantId: string,
   range: ReportDateRange,
+  branchId?: string,
 ): Promise<HourlyHeatmapCell[]> {
   const { dayStart, dayAfterEnd } = dayBounds(range);
 
@@ -216,6 +236,7 @@ export async function getHourlyHeatmap(
         eq(orders.status, "completed"),
         gte(orders.placedAt, dayStart),
         lt(orders.placedAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
       ),
     )
     .groupBy(sql`1`, sql`2`);
@@ -323,6 +344,7 @@ export type CompletionStats = {
 export async function getCompletionStats(
   restaurantId: string,
   range: ReportDateRange,
+  branchId?: string,
 ): Promise<CompletionStats> {
   const { dayStart, dayAfterEnd } = dayBounds(range);
 
@@ -335,6 +357,7 @@ export async function getCompletionStats(
         ne(orders.status, "cancelled"),
         gte(orders.placedAt, dayStart),
         lt(orders.placedAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
       ),
     );
 
@@ -348,6 +371,7 @@ export async function getCompletionStats(
         eq(orders.paymentStatus, "paid"),
         gte(orders.placedAt, dayStart),
         lt(orders.placedAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
       ),
     );
 
@@ -362,6 +386,7 @@ export async function getCompletionStats(
         eq(orders.status, "completed"),
         gte(orders.placedAt, dayStart),
         lt(orders.placedAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
       ),
     );
 
@@ -378,6 +403,7 @@ export async function getCompletionStats(
 export async function getTotalExpensesInPaisa(
   restaurantId: string,
   range: ReportDateRange,
+  branchId?: string,
 ): Promise<number> {
   const [row] = await db
     .select({ totalInPaisa: sql<string>`coalesce(sum(${expenses.amountInPaisa}), 0)` })
@@ -395,6 +421,12 @@ export async function getTotalExpensesInPaisa(
         eq(expenses.status, "paid"),
         gte(expenses.expenseDate, range.from),
         lte(expenses.expenseDate, range.to),
+        // expenses.branchId is nullable (an expense can be restaurant-wide
+        // overhead, not tied to any one location) — a branch-scoped view
+        // only shows expenses explicitly recorded against that branch, not
+        // shared overhead, same as how a branch's own P&L wouldn't
+        // normally absorb head-office costs unless someone allocates them.
+        ...(branchId ? [eq(expenses.branchId, branchId)] : []),
       ),
     );
   return Number(row?.totalInPaisa ?? 0);
@@ -408,6 +440,7 @@ export async function getTotalExpensesInPaisa(
 export async function getDailyRevenueVsExpenses(
   restaurantId: string,
   range: ReportDateRange,
+  branchId?: string,
 ): Promise<DailySeriesPoint[]> {
   const { dayStart, dayAfterEnd } = dayBounds(range);
 
@@ -423,6 +456,7 @@ export async function getDailyRevenueVsExpenses(
         eq(orders.status, "completed"),
         gte(orders.placedAt, dayStart),
         lt(orders.placedAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
       ),
     )
     .groupBy(sql`1`);
@@ -440,6 +474,9 @@ export async function getDailyRevenueVsExpenses(
         eq(expenses.status, "paid"),
         gte(expenses.expenseDate, range.from),
         lte(expenses.expenseDate, range.to),
+        // See getTotalExpensesInPaisa's comment on why branchId=null
+        // expenses (shared overhead) drop out of a branch-scoped view.
+        ...(branchId ? [eq(expenses.branchId, branchId)] : []),
       ),
     )
     .groupBy(expenses.expenseDate);
@@ -472,6 +509,7 @@ export async function getTopMenuItems(
   restaurantId: string,
   range: ReportDateRange,
   limit = 10,
+  branchId?: string,
 ): Promise<TopMenuItemRow[]> {
   const { dayStart, dayAfterEnd } = dayBounds(range);
 
@@ -489,6 +527,7 @@ export async function getTopMenuItems(
         eq(orders.status, "completed"),
         gte(orders.placedAt, dayStart),
         lt(orders.placedAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
       ),
     )
     .groupBy(orderItems.menuItemNameSnapshot)
@@ -513,20 +552,25 @@ export type PaymentBreakdownRow = { method: PaymentMethod; totalInPaisa: number 
 export async function getPaymentMethodBreakdown(
   restaurantId: string,
   range: ReportDateRange,
+  branchId?: string,
 ): Promise<PaymentBreakdownRow[]> {
   const { dayStart, dayAfterEnd } = dayBounds(range);
 
+  // Same unconditional join-to-orders rationale as getTipsSummary above —
+  // payments has no branchId of its own.
   const rows = await db
     .select({
       method: payments.method,
       totalInPaisa: sql<string>`coalesce(sum(${payments.amountInPaisa}), 0)`,
     })
     .from(payments)
+    .innerJoin(orders, eq(payments.orderId, orders.id))
     .where(
       and(
         eq(payments.restaurantId, restaurantId),
         gte(payments.createdAt, dayStart),
         lt(payments.createdAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
       ),
     )
     .groupBy(payments.method)
@@ -543,6 +587,7 @@ export type ExpenseBreakdownRow = { category: string; totalInPaisa: number };
 export async function getExpenseCategoryBreakdown(
   restaurantId: string,
   range: ReportDateRange,
+  branchId?: string,
 ): Promise<ExpenseBreakdownRow[]> {
   const rows = await db
     .select({
@@ -558,6 +603,9 @@ export async function getExpenseCategoryBreakdown(
         eq(expenses.status, "paid"),
         gte(expenses.expenseDate, range.from),
         lte(expenses.expenseDate, range.to),
+        // See getTotalExpensesInPaisa's comment on why branchId=null
+        // expenses (shared overhead) drop out of a branch-scoped view.
+        ...(branchId ? [eq(expenses.branchId, branchId)] : []),
       ),
     )
     .groupBy(expenseCategories.name)
@@ -585,7 +633,11 @@ export type PeriodComparison = {
   netProfitChangePercent: number | null;
 };
 
-export async function getReportSummary(restaurantId: string, range: ReportDateRange) {
+export async function getReportSummary(
+  restaurantId: string,
+  range: ReportDateRange,
+  branchId?: string,
+) {
   const [
     sales,
     totalExpensesInPaisa,
@@ -599,17 +651,21 @@ export async function getReportSummary(restaurantId: string, range: ReportDateRa
     hourlyHeatmap,
     branchComparison,
   ] = await Promise.all([
-    getSalesSummary(restaurantId, range),
-    getTotalExpensesInPaisa(restaurantId, range),
-    getDailyRevenueVsExpenses(restaurantId, range),
-    getTopMenuItems(restaurantId, range),
-    getPaymentMethodBreakdown(restaurantId, range),
-    getExpenseCategoryBreakdown(restaurantId, range),
-    getTipsSummary(restaurantId, range),
-    getPeakHourStats(restaurantId, range),
-    getCompletionStats(restaurantId, range),
-    getHourlyHeatmap(restaurantId, range),
-    getBranchComparison(restaurantId, range),
+    getSalesSummary(restaurantId, range, branchId),
+    getTotalExpensesInPaisa(restaurantId, range, branchId),
+    getDailyRevenueVsExpenses(restaurantId, range, branchId),
+    getTopMenuItems(restaurantId, range, 10, branchId),
+    getPaymentMethodBreakdown(restaurantId, range, branchId),
+    getExpenseCategoryBreakdown(restaurantId, range, branchId),
+    getTipsSummary(restaurantId, range, branchId),
+    getPeakHourStats(restaurantId, range, branchId),
+    getCompletionStats(restaurantId, range, branchId),
+    getHourlyHeatmap(restaurantId, range, branchId),
+    // A branch-vs-branch comparison is meaningless once the whole report
+    // is already scoped to one branch — skip the query entirely rather
+    // than compute a comparison table that would just get discarded (the
+    // UI already hides this section once it has 1 or fewer rows).
+    branchId ? Promise.resolve([] as BranchComparisonRow[]) : getBranchComparison(restaurantId, range),
   ]);
 
   const netProfitInPaisa = computeNetProfitInPaisa(sales.revenueInPaisa, totalExpensesInPaisa);
@@ -622,8 +678,8 @@ export async function getReportSummary(restaurantId: string, range: ReportDateRa
   // each other without complicating the primary batch above.
   const previousRange = previousPeriodRange(range);
   const [previousSales, previousExpensesInPaisa] = await Promise.all([
-    getSalesSummary(restaurantId, previousRange),
-    getTotalExpensesInPaisa(restaurantId, previousRange),
+    getSalesSummary(restaurantId, previousRange, branchId),
+    getTotalExpensesInPaisa(restaurantId, previousRange, branchId),
   ]);
   const previousNetProfitInPaisa = computeNetProfitInPaisa(
     previousSales.revenueInPaisa,
@@ -643,6 +699,7 @@ export async function getReportSummary(restaurantId: string, range: ReportDateRa
 
   return {
     range,
+    branchId: branchId ?? null,
     sales,
     totalExpensesInPaisa,
     netProfitInPaisa,

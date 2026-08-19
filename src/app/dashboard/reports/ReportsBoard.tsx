@@ -8,6 +8,7 @@ import { RevenueTrendChart } from "./RevenueTrendChart";
 import { HourlyHeatmap, type HourlyHeatmapCell } from "./HourlyHeatmap";
 import { IconStatTile, StatIcon } from "@/components/StatTile";
 import { useDateSystem, type DateSystem } from "@/lib/date-system";
+import { useActiveBranch } from "@/lib/branch-context";
 import { formatDate, formatBsHint } from "@/lib/nepali-date";
 
 // Chart chrome tokens, matching RevenueTrendChart's validated palette
@@ -19,6 +20,9 @@ const SECONDARY_TEXT_COLOR = "#52514e";
 
 type ReportSummary = {
   range: { from: string; to: string };
+  /** The branch this summary is scoped to (header's BranchSwitcher), or
+   *  null when it's restaurant-wide ("All branches"). */
+  branchId: string | null;
   sales: {
     revenueInPaisa: number;
     orderCount: number;
@@ -129,6 +133,11 @@ export function ReportsBoard({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const dateSystem = useDateSystem();
+  // Header's BranchSwitcher — see BranchProvider's own comment for why this
+  // is a client-side context read rather than a prop threaded down from the
+  // server page, and why changing it here just refetches rather than
+  // navigating anywhere.
+  const { branches, activeBranchId } = useActiveBranch();
 
   useEffect(() => {
     let cancelled = false;
@@ -136,6 +145,7 @@ export function ReportsBoard({ slug }: { slug: string }) {
       setLoading(true);
       try {
         const params = new URLSearchParams({ from, to });
+        if (activeBranchId) params.set("branchId", activeBranchId);
         const res = await apiGet<ReportSummary>(`${base(slug)}/reports/summary?${params}`);
         if (!cancelled) {
           setData(res);
@@ -153,7 +163,7 @@ export function ReportsBoard({ slug }: { slug: string }) {
     return () => {
       cancelled = true;
     };
-  }, [slug, from, to]);
+  }, [slug, from, to, activeBranchId]);
 
   function applyPreset(preset: (typeof PRESETS)[number]) {
     setFrom(preset.from());
@@ -195,6 +205,13 @@ export function ReportsBoard({ slug }: { slug: string }) {
             </button>
           ))}
         </div>
+        {branches.length > 1 && (
+          <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-600">
+            {activeBranchId
+              ? branches.find((b) => b.id === activeBranchId)?.name ?? "Branch"
+              : "All branches"}
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-2 text-sm">
           <label className="flex items-center gap-1.5 text-neutral-600">
             From

@@ -50,6 +50,25 @@ export type QueuedStatusUpdate = {
   lastError: string | null;
 };
 
+// `new Date().toISOString()` alone is only millisecond-resolution — two
+// enqueueStatusUpdate() calls issued back-to-back (a common case: this
+// module's own tests enqueue two updates with no await/delay between them,
+// and in practice a staff member could tap "confirm" then "mark ready" on
+// two different orders within the same millisecond) can tie. A tied
+// `createdAt` makes listQueuedStatusUpdates's sort a no-op for those two
+// rows, silently falling back to whatever order IndexedDB happened to
+// enumerate them in — not guaranteed to be insertion order. A zero-padded,
+// monotonically-increasing in-memory counter appended to the timestamp
+// breaks that tie deterministically (lexicographic string comparison stays
+// correct as long as the suffix is fixed-width) without needing IndexedDB's
+// own autoIncrement machinery, which only applies to out-of-line keys and
+// this store already uses clientRequestId as its keyPath.
+let createdAtSequence = 0;
+function nextCreatedAt(): string {
+  createdAtSequence = (createdAtSequence + 1) % 1_000_000;
+  return `${new Date().toISOString()}#${String(createdAtSequence).padStart(6, "0")}`;
+}
+
 export function isOfflineQueueSupported(): boolean {
   // Checked as a bare global, not `window.indexedDB` — see offline-queue.ts's
   // identical comment on why (works under the fake-indexeddb test polyfill,
@@ -110,7 +129,7 @@ export async function enqueueStatusUpdate(input: {
     fromStatus: input.fromStatus,
     toStatus: input.toStatus,
     reason: input.reason ?? null,
-    createdAt: new Date().toISOString(),
+    createdAt: nextCreatedAt(),
     status: "pending",
     attempts: 0,
     lastError: null,

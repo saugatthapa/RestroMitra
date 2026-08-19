@@ -33,6 +33,7 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
   let restaurantAId: string;
   let restaurantBId: string;
   let branchAId: string;
+  let branchBId: string;
   let rentCategoryId: string;
   let suppliesCategoryId: string;
   let marketingCategoryId: string;
@@ -80,6 +81,11 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
       .values({ restaurantId: restaurantAId, name: "Main", isMain: true })
       .returning({ id: schema.branches.id });
     branchAId = branchA.id;
+    const [branchB] = await db
+      .insert(schema.branches)
+      .values({ restaurantId: restaurantAId, name: "TEST Branch B", isMain: false })
+      .returning({ id: schema.branches.id });
+    branchBId = branchB.id;
 
     await db.insert(schema.userRoles).values([
       { userId: managerAId, restaurantId: restaurantAId, role: "manager" },
@@ -92,12 +98,17 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
     // cancelled order inside the range (must NOT count as revenue), and
     // one completed order the day AFTER the range ends (must NOT leak in
     // — proves the half-open day boundary).
-    async function makeOrder(status: "completed" | "cancelled", placedAt: string, totalInPaisa: number) {
+    async function makeOrder(
+      status: "completed" | "cancelled",
+      placedAt: string,
+      totalInPaisa: number,
+      branchId: string = branchAId,
+    ) {
       const [order] = await db
         .insert(schema.orders)
         .values({
           restaurantId: restaurantAId,
-          branchId: branchAId,
+          branchId,
           tableId: null,
           orderNumber: generateOrderNumber(),
           source: "pos",
@@ -115,6 +126,11 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
     const order2Id = await makeOrder("completed", "2026-06-05T18:30:00Z", 50_000);
     await makeOrder("cancelled", "2026-06-03T12:00:00Z", 999_999);
     await makeOrder("completed", "2026-06-08T00:00:00Z", 777_777); // day after range
+    // A second branch's own completed order inside the range — proves
+    // branch-scoped queries (getSalesSummary etc. with a branchId arg)
+    // exclude it, while the restaurant-wide (no branchId) totals above
+    // still include it.
+    await makeOrder("completed", "2026-06-03T14:00:00Z", 60_000, branchBId);
 
     // Order items for the top-items report — Momo appears on both orders
     // (highest revenue), Cold Drink only on order 2.
@@ -241,7 +257,7 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
       .where(eq(schema.expenseCategories.restaurantId, restaurantAId));
     // orderItems cascade-delete with their orders.
     await db.delete(schema.orders).where(eq(schema.orders.restaurantId, restaurantAId));
-    await db.delete(schema.branches).where(eq(schema.branches.id, branchAId));
+    await db.delete(schema.branches).where(eq(schema.branches.restaurantId, restaurantAId));
     await db.delete(schema.userRoles).where(eq(schema.userRoles.restaurantId, restaurantAId));
     await db.delete(schema.userRoles).where(eq(schema.userRoles.restaurantId, restaurantBId));
     await db.delete(schema.restaurants).where(eq(schema.restaurants.id, restaurantAId));
@@ -274,10 +290,22 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
 
   it("getSalesSummary counts only completed orders inside the range, excludes cancelled and out-of-range", async () => {
     const summary = await reports.getSalesSummary(restaurantAId, RANGE);
-    expect(summary.revenueInPaisa).toBe(150_000); // 100_000 + 50_000, not the 777_777 or 999_999
-    expect(summary.orderCount).toBe(2);
-    expect(summary.averageOrderValueInPaisa).toBe(75_000);
+    // 100_000 (branch A) + 50_000 (branch A) + 60_000 (branch B), not the
+    // 777_777 out-of-range or 999_999 cancelled order.
+    expect(summary.revenueInPaisa).toBe(210_000);
+    expect(summary.orderCount).toBe(3);
+    expect(summary.averageOrderValueInPaisa).toBe(70_000);
     expect(summary.cancelledCount).toBe(1);
+  });
+
+  it("getSalesSummary with a branchId only counts that branch's orders", async () => {
+    const branchA = await reports.getSalesSummary(restaurantAId, RANGE, branchAId);
+    expect(branchA.revenueInPaisa).toBe(150_000); // 100_000 + 50_000, branch B's 60_000 excluded
+    expect(branchA.orderCount).toBe(2);
+
+    const branchB = await reports.getSalesSummary(restaurantAId, RANGE, branchBId);
+    expect(branchB.revenueInPaisa).toBe(60_000);
+    expect(branchB.orderCount).toBe(1);
   });
 
   it("getTotalExpensesInPaisa excludes voided and out-of-range expenses", async () => {
@@ -322,10 +350,28 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
 
   it("getReportSummary bundles everything and computes net profit as revenue minus expenses", async () => {
     const summary = await reports.getReportSummary(restaurantAId, RANGE);
-    expect(summary.sales.revenueInPaisa).toBe(150_000);
+    expect(summary.sales.revenueInPaisa).toBe(210_000);
     expect(summary.totalExpensesInPaisa).toBe(55_000);
-    expect(summary.netProfitInPaisa).toBe(95_000);
+    expect(summary.netProfitInPaisa).toBe(155_000);
     expect(summary.dailySeries).toHaveLength(7);
+    expect(summary.branchId).toBeNull();
+  });
+
+  it("getReportSummary with a branchId scopes every figure to that branch and skips branch comparison", async () => {
+    const summary = await reports.getReportSummary(restaurantAId, RANGE, branchAId);
+    expect(summary.branchId).toBe(branchAId);
+    expect(summary.sales.revenueInPaisa).toBe(150_000); // branch B's order excluded
+    expect(summary.sales.orderCount).toBe(2);
+    // Expenses in this fixture were never tied to a branch (branchId null),
+    // so a branch-scoped view correctly shows 0 — see getTotalExpensesInPaisa's
+    // comment on why restaurant-wide overhead doesn't leak into one branch's
+    // totals.
+    expect(summary.totalExpensesInPaisa).toBe(0);
+    expect(summary.netProfitInPaisa).toBe(150_000);
+    // Comparing one branch against itself isn't meaningful — see
+    // getReportSummary's own comment on why this is skipped entirely
+    // rather than returning a single-row result.
+    expect(summary.branchComparison).toEqual([]);
   });
 
   it("restaurant B sees none of restaurant A's report data — tenant isolation holds for aggregation queries", async () => {

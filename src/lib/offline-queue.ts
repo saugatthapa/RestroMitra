@@ -37,6 +37,16 @@ export type QueuedOrder = {
   summary: { itemCount: number; totalLabel: string };
 };
 
+// See offline-status-queue.ts's identical comment: `new Date().toISOString()`
+// alone is only millisecond-resolution, so two enqueueOrder() calls issued
+// back-to-back can tie and make the oldest-first sort below a no-op for
+// those rows. The zero-padded counter suffix breaks the tie deterministically.
+let createdAtSequence = 0;
+function nextCreatedAt(): string {
+  createdAtSequence = (createdAtSequence + 1) % 1_000_000;
+  return `${new Date().toISOString()}#${String(createdAtSequence).padStart(6, "0")}`;
+}
+
 export function isOfflineQueueSupported(): boolean {
   // Checked as a bare global, not `window.indexedDB` — `indexedDB` is a
   // global in every context that has it (browser main thread, and the
@@ -92,7 +102,7 @@ export async function enqueueOrder(
     clientRequestId,
     slug,
     payload,
-    createdAt: new Date().toISOString(),
+    createdAt: nextCreatedAt(),
     status: "pending",
     attempts: 0,
     lastError: null,

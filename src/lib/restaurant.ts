@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { restaurants, userRoles, branches } from "@/db/schema";
 
@@ -74,4 +74,48 @@ export async function getMainBranch(restaurantId: string) {
     .where(and(eq(branches.restaurantId, restaurantId), eq(branches.isMain, true)))
     .limit(1);
   return rows[0] ?? null;
+}
+
+export type SelectableBranch = { id: string; name: string; isMain: boolean };
+
+/**
+ * Branches a user may switch between in the dashboard header (and filter
+ * Reports by) — every active branch of the restaurant, UNLESS this user's
+ * own role grant is locked to one specific branch (userRoles.branchId —
+ * see requireBranchAccess in rbac/guard.ts), in which case that's the only
+ * "selectable" branch. There's nothing to switch between for a
+ * branch-locked staff member, so the header switcher naturally disappears
+ * (DashboardShell only renders it when this list has more than one entry)
+ * rather than needing a separate permission check to hide it.
+ */
+export async function getSelectableBranches(
+  userId: string,
+  restaurantId: string,
+): Promise<SelectableBranch[]> {
+  const grantRows = await db
+    .select({ branchId: userRoles.branchId })
+    .from(userRoles)
+    .where(
+      and(
+        eq(userRoles.userId, userId),
+        eq(userRoles.restaurantId, restaurantId),
+        eq(userRoles.isActive, true),
+      ),
+    )
+    .limit(1);
+  const lockedBranchId = grantRows[0]?.branchId ?? null;
+
+  const rows = await db
+    .select({ id: branches.id, name: branches.name, isMain: branches.isMain })
+    .from(branches)
+    .where(
+      and(
+        eq(branches.restaurantId, restaurantId),
+        eq(branches.isActive, true),
+        ...(lockedBranchId ? [eq(branches.id, lockedBranchId)] : []),
+      ),
+    )
+    .orderBy(desc(branches.isMain), asc(branches.createdAt));
+
+  return rows;
 }

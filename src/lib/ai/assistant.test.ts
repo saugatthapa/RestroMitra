@@ -31,6 +31,7 @@ const groqTestConfig: GroqConfig = {
 
 const sampleSummary: ReportSummary = {
   range: { from: "2026-07-16", to: "2026-08-14" },
+  branchId: null,
   sales: {
     revenueInPaisa: 5_000_00,
     orderCount: 42,
@@ -114,6 +115,7 @@ describe("buildSystemPrompt", () => {
   it("handles an empty range gracefully (no crash on zero orders/payments/expenses)", () => {
     const empty: ReportSummary = {
       range: { from: "2026-08-01", to: "2026-08-14" },
+      branchId: null,
       sales: {
         revenueInPaisa: 0,
         orderCount: 0,

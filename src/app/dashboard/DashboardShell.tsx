@@ -13,6 +13,7 @@ import { useOnlineStatus } from "@/lib/use-online-status";
 import { DashboardServiceWorker } from "@/components/DashboardServiceWorker";
 import { InstallAppPrompt } from "@/components/InstallAppPrompt";
 import { NotificationPermissionGate } from "@/components/NotificationPermissionGate";
+import { BranchProvider, useActiveBranch, type SelectableBranch } from "@/lib/branch-context";
 
 // Nav is grouped (Overview / Front of house / Back office / Account) with an
 // icon per item, rather than one flat 16-item list — the flat list was the
@@ -108,7 +109,11 @@ type ServiceCallAlert = {
  * below sets. The actual shell markup lives in DashboardShellContent,
  * which reads that preference back out via `useDateSystemControl()`.
  */
-export function DashboardShell(props: {
+export function DashboardShell({
+  branches,
+  activeRestaurantId,
+  ...rest
+}: {
   ownerName: string;
   restaurantName: string;
   role: string;
@@ -118,12 +123,19 @@ export function DashboardShell(props: {
   logoUrl: string | null;
   restaurants: { id: string; name: string }[];
   activeRestaurantId: string;
+  /** Every branch this user may switch between in the header — see
+   *  getSelectableBranches. Feeds BranchProvider, which every screen under
+   *  `children` (Reports today, potentially others later) reads via
+   *  useActiveBranch() rather than this being threaded through as a prop. */
+  branches: SelectableBranch[];
   children: React.ReactNode;
 }) {
   return (
     <DateSystemProvider>
       <LocaleProvider>
-        <DashboardShellContent {...props} />
+        <BranchProvider restaurantId={activeRestaurantId} branches={branches}>
+          <DashboardShellContent activeRestaurantId={activeRestaurantId} {...rest} />
+        </BranchProvider>
       </LocaleProvider>
     </DateSystemProvider>
   );
@@ -895,6 +907,7 @@ function DashboardShellContent({
                 </span>
               </div>
             )}
+            <BranchSwitcher />
             {subscriptionStatus === "trialing" && days !== null && (
               <span className="hidden rounded-full bg-orange-50 px-3 py-1 text-xs font-medium text-orange-700 sm:inline-block">
                 {trialDaysLeftText(days, locale)}
@@ -1010,6 +1023,47 @@ function DashboardShellContent({
 
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Phase 24 — the header's branch switcher, right next to the restaurant
+ * switcher (same visual family, same "only render if there's more than one
+ * to switch to" rule — see restaurants.length > 1 above). Reads/writes
+ * BranchProvider's context directly rather than being threaded through
+ * DashboardShellContent's props, so any screen under `children` (Reports
+ * today) can independently read the same selection via useActiveBranch()
+ * without this component needing to know who's listening.
+ *
+ * Unlike the restaurant switcher, changing branch does NOT navigate or
+ * router.refresh() — it's a display filter, not a change of which tenant's
+ * data is being requested, so screens that care (Reports) just refetch
+ * their own data client-side when the context value changes.
+ */
+function BranchSwitcher() {
+  const { branches, activeBranchId, setActiveBranchId } = useActiveBranch();
+  if (branches.length <= 1) return null;
+
+  return (
+    <div className="relative">
+      <select
+        aria-label="Switch branch"
+        value={activeBranchId ?? "__all__"}
+        onChange={(e) => setActiveBranchId(e.target.value === "__all__" ? null : e.target.value)}
+        className="appearance-none rounded-full border border-neutral-200 bg-white py-1.5 pl-3 pr-7 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+      >
+        <option value="__all__">All branches</option>
+        {branches.map((b) => (
+          <option key={b.id} value={b.id}>
+            {b.name}
+            {b.isMain ? " (Main)" : ""}
+          </option>
+        ))}
+      </select>
+      <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 rotate-90 items-center text-neutral-400">
+        <NavIcon.ChevronRight />
+      </span>
     </div>
   );
 }
