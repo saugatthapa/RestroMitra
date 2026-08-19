@@ -14,13 +14,19 @@ export default async function StaffPage() {
   const active =
     restaurants.find((r) => r.id === session.activeRestaurantId) ?? restaurants[0];
 
-  // Staff roster/attendance is management-only data (contact info, pay-
-  // adjacent attendance records) — a role without MANAGE_STAFF shouldn't
-  // reach this page at all, not just see a read-only version of it. The
-  // sidebar (DashboardShell) already hides the nav link for these roles;
-  // this redirect is what actually enforces it if someone hits the URL
-  // directly.
-  if (!roleHasPermission(active.role, PERMISSIONS.MANAGE_STAFF)) {
+  const canManageStaff = roleHasPermission(active.role, PERMISSIONS.MANAGE_STAFF);
+  const canViewPayroll = roleHasPermission(active.role, PERMISSIONS.VIEW_PAYROLL);
+  const canManagePayroll = roleHasPermission(active.role, PERMISSIONS.MANAGE_PAYROLL);
+
+  // Phase 22 — this page now serves two different, deliberately separate
+  // permission grants: MANAGE_STAFF (Roster/Attendance) and VIEW_PAYROLL/
+  // MANAGE_PAYROLL (Payroll tab). An accountant holds the latter but NOT
+  // the former (see permissions.ts — salary access is intentionally never
+  // bundled with staff/roster management), so the gate below is an "any
+  // of" check; StaffBoard itself only renders the tab(s) the caller
+  // actually has rights to. The sidebar (DashboardShell) mirrors this same
+  // any-of rule for the nav link.
+  if (!canManageStaff && !canViewPayroll && !canManagePayroll) {
     redirect("/dashboard");
   }
 
@@ -29,10 +35,15 @@ export default async function StaffPage() {
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-neutral-900">Staff</h1>
         <p className="text-sm text-neutral-500">
-          Team roster and attendance for {active.name}.
+          Team roster, attendance, and payroll for {active.name}.
         </p>
       </div>
-      <StaffBoard slug={active.slug} canManageStaff={roleHasPermission(active.role, PERMISSIONS.MANAGE_STAFF)} />
+      <StaffBoard
+        slug={active.slug}
+        canManageStaff={canManageStaff}
+        canViewPayroll={canViewPayroll}
+        canManagePayroll={canManagePayroll}
+      />
     </div>
   );
 }

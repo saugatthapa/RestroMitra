@@ -1071,6 +1071,7 @@ export const ledgerCategoryEnum = pgEnum("ledger_category", [
   "due_settlement",
   "capital",
   "withdrawal",
+  "payroll",
   "other",
 ]);
 
@@ -1546,6 +1547,125 @@ export const expenses = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Payroll (Phase 22) — salary info captured per staff member and the
+// payout history when an owner/accountant actually pays it. Deliberately
+// two tables rather than one: staffSalaryConfigs is the standing "what do
+// we pay this person" record (edited rarely, once per raise), while
+// payrollPayments is an append-only receipt per actual payout (one row per
+// pay run) — same "config vs. event log" split used elsewhere (e.g.
+// restaurants.openingHours vs. attendanceRecords).
+//
+// Every payout also books a debit into the SAME Account Books ledger
+// expenses/purchases already use (see recordPayrollLedgerEntry in
+// ledger.ts) rather than a separate money trail — but with the staff
+// member's name deliberately left OUT of that shared ledger entry.
+// MANAGE_ACCOUNT_BOOKS is held by `manager`, who is explicitly NOT granted
+// VIEW_PAYROLL/MANAGE_PAYROLL (see permissions.ts's "salary information
+// must stay private" comment) — a named "Salary: John Doe — Rs 45,000"
+// line in the shared ledger would leak exactly what that boundary exists
+// to prevent. The ledger entry stays honest about aggregate cash movement
+// (so Account Books still reconciles) while only the payroll module itself
+// (VIEW_PAYROLL/MANAGE_PAYROLL-gated) ever shows who was paid what.
+// ---------------------------------------------------------------------------
+
+export const salaryTypeEnum = pgEnum("salary_type", ["monthly", "daily", "hourly"]);
+
+// 1:1 with a userRoles grant (a person's staff membership at THIS
+// restaurant) rather than with the user directly — the same person could
+// hold different salary terms at two different restaurants if RestroMitra
+// ever supports one account working multiple places, matching how `role`
+// itself is already per-userRoles-grant, not per-user.
+export const staffSalaryConfigs = pgTable(
+  "staff_salary_configs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userRoleId: uuid("user_role_id")
+      .notNull()
+      .references(() => userRoles.id, { onDelete: "cascade" }),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    salaryType: salaryTypeEnum("salary_type").notNull().default("monthly"),
+    amountInPaisa: integer("amount_in_paisa").notNull(),
+    // The method this person is USUALLY paid by — pre-fills the "Pay"
+    // form's method selector each pay run, but every individual payout can
+    // still choose a different one (see payrollPayments.paymentMethod)
+    // without editing this standing config. Reuses the exact same
+    // cash/bank_transfer/esewa/khalti/mobile_banking/other set as outgoing
+    // expense payments (see payout-methods.ts) — same "no payout API,
+    // every method is a manual human confirmation" reality applies here.
+    paymentMethod: expensePaymentMethodEnum("payment_method"),
+    bankName: varchar("bank_name", { length: 150 }),
+    bankAccountNumber: varchar("bank_account_number", { length: 50 }),
+    bankAccountHolder: varchar("bank_account_holder", { length: 200 }),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("staff_salary_configs_user_role_id_idx").on(table.userRoleId),
+    index("staff_salary_configs_restaurant_id_idx").on(table.restaurantId),
+  ],
+);
+
+export const payrollPayments = pgTable(
+  "payroll_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    // "restrict", not "cascade" — a payout receipt must survive even if
+    // the staff member is later deactivated (userRoles rows are soft-
+    // deleted via isActive, never hard-deleted in normal operation, so
+    // this should never actually block anything in practice).
+    userRoleId: uuid("user_role_id")
+      .notNull()
+      .references(() => userRoles.id, { onDelete: "restrict" }),
+    // Snapshot, same reasoning as orderItems.menuItemNameSnapshot — this
+    // receipt should keep reading correctly even if the person's account
+    // name is edited (or the userRoles row is one day hard-deleted) after
+    // the fact.
+    staffNameSnapshot: varchar("staff_name_snapshot", { length: 200 }).notNull(),
+    amountInPaisa: integer("amount_in_paisa").notNull(),
+    // Free-text label ("August 2026", "Aug 1-15 advance") shown on the
+    // receipt — kept separate from the optional structured
+    // periodStart/periodEnd so an ad-hoc payment (a bonus, an advance) that
+    // doesn't map to a clean date range can still be paid and labeled.
+    payPeriodLabel: varchar("pay_period_label", { length: 100 }),
+    periodStart: date("period_start"),
+    periodEnd: date("period_end"),
+    paymentMethod: expensePaymentMethodEnum("payment_method").notNull(),
+    note: text("note"),
+    // Same "reverse via a new ledger entry, never mutate/delete the
+    // original" pattern as expenses.isVoided — see reversePayrollLedgerEntry
+    // in ledger.ts.
+    isVoided: boolean("is_voided").notNull().default(false),
+    paidByUserId: uuid("paid_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    paidAt: timestamp("paid_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("payroll_payments_restaurant_id_idx").on(table.restaurantId),
+    index("payroll_payments_user_role_id_idx").on(table.userRoleId),
+    index("payroll_payments_paid_at_idx").on(table.paidAt),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Reservations (Phase 8d) — table bookings taken ahead of time (phone/
 // walk-in request), separate from the QR/POS order flow. A reservation
 // does NOT create an order; "seated" just marks that the party has
@@ -1724,7 +1844,7 @@ export const branchesRelations = relations(branches, ({ one }) => ({
   }),
 }));
 
-export const userRolesRelations = relations(userRoles, ({ one }) => ({
+export const userRolesRelations = relations(userRoles, ({ one, many }) => ({
   user: one(users, { fields: [userRoles.userId], references: [users.id] }),
   restaurant: one(restaurants, {
     fields: [userRoles.restaurantId],
@@ -1734,6 +1854,11 @@ export const userRolesRelations = relations(userRoles, ({ one }) => ({
     fields: [userRoles.branchId],
     references: [branches.id],
   }),
+  salaryConfig: one(staffSalaryConfigs, {
+    fields: [userRoles.id],
+    references: [staffSalaryConfigs.userRoleId],
+  }),
+  payrollPayments: many(payrollPayments),
 }));
 
 export const attendanceRecordsRelations = relations(attendanceRecords, ({ one }) => ({
@@ -1784,6 +1909,32 @@ export const expenseCategoriesRelations = relations(expenseCategories, ({ one, m
     references: [restaurants.id],
   }),
   expenses: many(expenses),
+}));
+
+export const staffSalaryConfigsRelations = relations(staffSalaryConfigs, ({ one }) => ({
+  userRole: one(userRoles, {
+    fields: [staffSalaryConfigs.userRoleId],
+    references: [userRoles.id],
+  }),
+  restaurant: one(restaurants, {
+    fields: [staffSalaryConfigs.restaurantId],
+    references: [restaurants.id],
+  }),
+}));
+
+export const payrollPaymentsRelations = relations(payrollPayments, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [payrollPayments.restaurantId],
+    references: [restaurants.id],
+  }),
+  userRole: one(userRoles, {
+    fields: [payrollPayments.userRoleId],
+    references: [userRoles.id],
+  }),
+  paidBy: one(users, {
+    fields: [payrollPayments.paidByUserId],
+    references: [users.id],
+  }),
 }));
 
 export const reservationsRelations = relations(reservations, ({ one }) => ({

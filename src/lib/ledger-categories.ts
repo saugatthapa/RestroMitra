@@ -20,6 +20,7 @@ export const LEDGER_CATEGORIES = [
   "due_settlement",
   "capital",
   "withdrawal",
+  "payroll",
   "other",
 ] as const;
 export type LedgerCategory = (typeof LEDGER_CATEGORIES)[number];
@@ -31,6 +32,7 @@ export const LEDGER_CATEGORY_LABELS: Record<LedgerCategory, string> = {
   due_settlement: "Due settled",
   capital: "Capital / owner investment",
   withdrawal: "Withdrawal",
+  payroll: "Payroll",
   other: "Other",
 };
 

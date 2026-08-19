@@ -28,8 +28,13 @@ type NavItem = {
    * reached directly by URL — this is the visibility half of that same
    * gate). Omitted for items every logged-in role can see (Dashboard,
    * Orders, KDS — screens the whole floor legitimately glances at even
-   * without permission to change anything on them). */
-  permission?: PermissionKey;
+   * without permission to change anything on them). An array means
+   * "any of" — e.g. Staff now serves both MANAGE_STAFF (roster/
+   * attendance) and VIEW_PAYROLL/MANAGE_PAYROLL (payroll), two
+   * deliberately separate grants (see StaffPage's own comment), so an
+   * accountant who holds only the payroll permissions still sees the
+   * link. */
+  permission?: PermissionKey | PermissionKey[];
 };
 
 type NavGroup = {
@@ -278,7 +283,7 @@ function DashboardShellContent({
           href: "/dashboard/staff",
           enabled: true,
           icon: <NavIcon.Staff />,
-          permission: PERMISSIONS.MANAGE_STAFF,
+          permission: [PERMISSIONS.MANAGE_STAFF, PERMISSIONS.VIEW_PAYROLL, PERMISSIONS.MANAGE_PAYROLL],
         },
         {
           label: "Customers",
@@ -347,7 +352,11 @@ function DashboardShellContent({
   // rather than rendering an empty section header.
   const NAV_GROUPS: NavGroup[] = ALL_NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter((item) => !item.permission || roleHasPermission(role, item.permission)),
+    items: group.items.filter((item) => {
+      if (!item.permission) return true;
+      const perms = Array.isArray(item.permission) ? item.permission : [item.permission];
+      return perms.some((p) => roleHasPermission(role, p));
+    }),
   })).filter((group) => group.items.length > 0);
 
   // Header page title — reuses ALL_NAV_GROUPS (not the role-filtered

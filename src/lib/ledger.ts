@@ -167,6 +167,72 @@ export async function reverseExpenseLedgerEntry(
   });
 }
 
+/**
+ * Called from the payroll payment-creation route, right after inserting
+ * the payrollPayments row. Deliberately does NOT include the staff
+ * member's name anywhere in this ledger entry (description or
+ * counterpartyName) — see the long comment above the payrollPayments table
+ * in schema.ts: MANAGE_ACCOUNT_BOOKS is held by `manager`, who is
+ * explicitly NOT granted VIEW_PAYROLL, so a named entry here would leak
+ * exactly what that permission boundary exists to protect. The generic
+ * `payPeriodLabel` (e.g. "August 2026") is safe to include since it says
+ * nothing about who was paid.
+ */
+export async function recordPayrollLedgerEntry(
+  tx: Transaction,
+  params: {
+    restaurantId: string;
+    payrollPaymentId: string;
+    amountInPaisa: number;
+    payPeriodLabel?: string | null;
+    paymentDate: string;
+    recordedByUserId?: string | null;
+  },
+) {
+  return recordLedgerEntry(tx, {
+    restaurantId: params.restaurantId,
+    direction: "debit",
+    category: "payroll",
+    amountInPaisa: params.amountInPaisa,
+    entryDate: params.paymentDate,
+    description: params.payPeriodLabel ? `Staff salary payment — ${params.payPeriodLabel}` : "Staff salary payment",
+    referenceType: "payroll_payment",
+    referenceId: params.payrollPaymentId,
+    recordedByUserId: params.recordedByUserId ?? null,
+  });
+}
+
+/**
+ * Reverses a previously-recorded payroll debit — called when a payroll
+ * payment is voided (e.g. paid to the wrong person, wrong amount). Same
+ * "new CREDIT entry, never mutate/delete the original" pattern as
+ * reverseExpenseLedgerEntry, and same no-name-leak rule as
+ * recordPayrollLedgerEntry above.
+ */
+export async function reversePayrollLedgerEntry(
+  tx: Transaction,
+  params: {
+    restaurantId: string;
+    payrollPaymentId: string;
+    amountInPaisa: number;
+    payPeriodLabel?: string | null;
+    recordedByUserId?: string | null;
+  },
+) {
+  return recordLedgerEntry(tx, {
+    restaurantId: params.restaurantId,
+    direction: "credit",
+    category: "payroll",
+    amountInPaisa: params.amountInPaisa,
+    description: params.payPeriodLabel
+      ? `Voided: Staff salary payment — ${params.payPeriodLabel}`
+      : "Voided: Staff salary payment",
+    referenceType: "payroll_payment",
+    referenceId: params.payrollPaymentId,
+    recordedByUserId: params.recordedByUserId ?? null,
+  });
+}
+
 /** Called from the purchase-creation route, right after the purchase transaction commits its header row. */
 export async function recordPurchaseLedgerEntry(
   tx: Transaction,

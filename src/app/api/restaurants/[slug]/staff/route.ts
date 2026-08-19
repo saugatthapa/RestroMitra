@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { and, count, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { users, userRoles, restaurants, branches } from "@/db/schema";
+import { users, userRoles, restaurants, branches, staffSalaryConfigs } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
+import { hasPermission } from "@/lib/rbac/guard";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { addStaffSchema } from "@/lib/validation/staff";
 import { hashPassword, validatePasswordStrength } from "@/lib/auth/password";
@@ -193,6 +194,40 @@ export async function POST(
       metadata: { staffUserId: userId, role: data.role, branchId },
     });
 
+    // Phase 22 — salary info is only ever persisted when the caller
+    // themselves holds MANAGE_PAYROLL, regardless of what the request body
+    // contains: a manager can add staff (MANAGE_STAFF) but must NOT be
+    // able to set pay info through this same form, since salary stays
+    // behind a stricter, separate permission wall (see permissions.ts).
+    // Decoupled from the userRoles insert above (not one shared
+    // transaction) — this route was already non-transactional for its
+    // other side effects (audit log, staff-count check), and a failed
+    // salary insert shouldn't roll back a staff account that was
+    // otherwise created successfully; the owner can just fill in salary
+    // again from the Payroll tab.
+    let salarySaved = false;
+    if (data.salary) {
+      const canManagePayroll = await hasPermission(
+        session.user.id,
+        restaurantId,
+        PERMISSIONS.MANAGE_PAYROLL,
+      );
+      if (canManagePayroll) {
+        await db.insert(staffSalaryConfigs).values({
+          userRoleId: grant.id,
+          restaurantId,
+          salaryType: data.salary.salaryType,
+          amountInPaisa: data.salary.amount,
+          paymentMethod: data.salary.paymentMethod ?? null,
+          bankName: data.salary.bankName || null,
+          bankAccountNumber: data.salary.bankAccountNumber || null,
+          bankAccountHolder: data.salary.bankAccountHolder || null,
+          note: data.salary.note || null,
+        });
+        salarySaved = true;
+      }
+    }
+
     const [staffUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
     return NextResponse.json(
@@ -207,6 +242,7 @@ export async function POST(
           phone: staffUser.phone,
           branchId: grant.branchId,
         },
+        salarySaved,
       },
       { status: 201 },
     );

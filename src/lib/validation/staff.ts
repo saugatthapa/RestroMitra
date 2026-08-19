@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ASSIGNABLE_STAFF_ROLES } from "@/lib/staff-roles";
+import { staffSalarySchema } from "@/lib/validation/staff-salary";
 
 // Nepal mobile numbers: 10 digits, commonly starting 9. Same pattern/regex
 // as src/lib/validation/auth.ts — kept in sync deliberately, since a staff
@@ -30,6 +31,13 @@ export const addStaffSchema = z.object({
   // grant. When set, verified server-side to belong to this restaurant
   // before it's stored (never trusted at face value).
   branchId: z.string().uuid().nullable().optional(),
+  // Phase 22 — optional salary info, collected in the same "add staff"
+  // submit so the owner fills it in once instead of a separate later
+  // step. Accepted here at the schema level regardless of caller, but the
+  // route only actually persists it when the caller holds MANAGE_PAYROLL
+  // (see staff/route.ts) — salary stays behind the same permission wall
+  // as every other payroll action, even when bundled into this form.
+  salary: staffSalarySchema.optional(),
 });
 
 export const updateStaffSchema = z
