@@ -68,6 +68,12 @@ export const PERMISSIONS = {
   // Kitchen
   VIEW_KDS: "view_kds",
   UPDATE_KDS_STATUS: "update_kds_status",
+
+  // Real-time service calls ("Call staff" from the QR menu) — floor-facing,
+  // so it's granted to the roles who actually walk over to a table
+  // (waiter/cashier/manager/owner), not kitchen_staff/inventory_manager/
+  // accountant, who have no reason to be paged for "guest needs water".
+  VIEW_SERVICE_CALLS: "view_service_calls",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -100,6 +106,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.VIEW_REPORTS]: "View analytics and reports",
   [PERMISSIONS.VIEW_KDS]: "View the Kitchen Display System",
   [PERMISSIONS.UPDATE_KDS_STATUS]: "Update order/ticket status from the KDS",
+  [PERMISSIONS.VIEW_SERVICE_CALLS]: "Receive and acknowledge \"Call staff\" alerts from tables",
 };
 
 /**
@@ -158,11 +165,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     PERMISSIONS.MANAGE_ACCOUNT_BOOKS,
     PERMISSIONS.VIEW_REPORTS,
     PERMISSIONS.VIEW_KDS,
+    PERMISSIONS.VIEW_SERVICE_CALLS,
   ],
   cashier: [
     PERMISSIONS.CREATE_ORDER,
     PERMISSIONS.EDIT_ORDER,
     PERMISSIONS.MANAGE_CUSTOMERS,
+    PERMISSIONS.VIEW_SERVICE_CALLS,
     // Reservations are a front-desk task (answering the phone, walk-ins
     // asking to book ahead) same trust level as the CRM grant just above
     // — not money/profit-sensitive the way MANAGE_EXPENSES is, so cashier
@@ -173,7 +182,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     // submit a request, cannot approve or pay it themselves.
     PERMISSIONS.CREATE_EXPENSE_REQUEST,
   ],
-  waiter: [PERMISSIONS.CREATE_ORDER, PERMISSIONS.EDIT_ORDER],
+  waiter: [PERMISSIONS.CREATE_ORDER, PERMISSIONS.EDIT_ORDER, PERMISSIONS.VIEW_SERVICE_CALLS],
   kitchen_staff: [PERMISSIONS.VIEW_KDS, PERMISSIONS.UPDATE_KDS_STATUS],
   inventory_manager: [
     PERMISSIONS.MANAGE_INVENTORY,

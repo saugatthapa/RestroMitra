@@ -101,14 +101,22 @@ export function OrdersBoard({
   }
 
   useEffect(() => {
-    // Mount-time fetch plus polling — Phase 4's "realtime" is polling, not
-    // push-based (no websocket/SSE infra yet); see PHASE_4_NOTES.md.
+    // Mount-time fetch, plus two refresh paths: DashboardShell's SSE
+    // listener rebroadcasts order.created/order.status_changed as this
+    // window event the instant they happen (see DashboardShell.tsx's own
+    // comment for why that's DB-polling-backed SSE, not true push — still
+    // real push to this component either way). The 5s poll stays as a
+    // backstop underneath it — a dropped/reconnecting SSE connection, or a
+    // change made through a path that doesn't publish an event, still
+    // surfaces within 5s instead of silently going stale.
     loadOrders();
     const poll = setInterval(loadOrders, 5000);
     const tick = setInterval(() => forceTick((n) => n + 1), 30_000);
+    window.addEventListener("dhankipos:orders-changed", loadOrders);
     return () => {
       clearInterval(poll);
       clearInterval(tick);
+      window.removeEventListener("dhankipos:orders-changed", loadOrders);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);

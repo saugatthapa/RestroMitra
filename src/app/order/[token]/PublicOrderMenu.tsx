@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatNPR } from "@/lib/money";
-import { apiPost, ApiError } from "@/lib/api-client";
+import { apiGet, apiPost, ApiError } from "@/lib/api-client";
 import { MenuItemThumb } from "@/components/MenuItemThumb";
 
 type Variant = { id: string; name: string; priceInPaisa: number };
@@ -57,6 +57,66 @@ export function PublicOrderMenu({
     orderNumber: string;
     totalInPaisa: number;
   } | null>(null);
+
+  // "Call staff" — see src/app/api/order/[token]/service-call/route.ts.
+  // `callStatus` null means no active call (either never called, or a
+  // previous one was resolved); "requesting" is the brief window between
+  // tapping the button and the POST resolving.
+  const [call, setCall] = useState<{ id: string; status: "pending" | "acknowledged" } | null>(
+    null,
+  );
+  const [callRequesting, setCallRequesting] = useState(false);
+  const [callError, setCallError] = useState<string | null>(null);
+
+  // Picks up an already-active call on page load/refresh (a guest who
+  // called staff, then re-scanned or reloaded, shouldn't lose the "staff
+  // have been notified" state), then short-polls while a call is active so
+  // the status line advances from "notified" to "on the way" without the
+  // guest having to do anything. 3s is plenty for a status a human is
+  // glancing at occasionally — see the route's doc comment for why this is
+  // plain polling rather than another SSE stream.
+  useEffect(() => {
+    let cancelled = false;
+    async function check() {
+      try {
+        const data = await apiGet<{
+          call: { id: string; status: "pending" | "acknowledged" | "resolved" } | null;
+        }>(`/api/order/${token}/service-call`);
+        if (cancelled) return;
+        if (data.call && data.call.status !== "resolved") {
+          setCall({ id: data.call.id, status: data.call.status });
+        } else {
+          setCall(null);
+        }
+      } catch {
+        // ignore — a failed background poll just leaves the last known
+        // state on screen, same as the header-status poll pattern used
+        // elsewhere in this app.
+      }
+    }
+    check();
+    const interval = setInterval(check, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [token]);
+
+  async function callStaff() {
+    setCallRequesting(true);
+    setCallError(null);
+    try {
+      const data = await apiPost<{ call: { id: string; status: "pending" | "acknowledged" } }>(
+        `/api/order/${token}/service-call`,
+        {},
+      );
+      setCall(data.call);
+    } catch (err) {
+      setCallError(err instanceof ApiError ? err.message : "Couldn't reach staff. Please try again.");
+    } finally {
+      setCallRequesting(false);
+    }
+  }
 
   const cartTotal = useMemo(() => cart.reduce((sum, l) => sum + cartLineTotal(l), 0), [cart]);
   const cartCount = useMemo(() => cart.reduce((sum, l) => sum + l.quantity, 0), [cart]);
@@ -138,9 +198,38 @@ export function PublicOrderMenu({
     // means a customer never lands on a screen that looks broken/half-
     // loaded just because it doesn't happen to fill their phone.
     <div className="min-h-full bg-neutral-50 pb-24">
-      <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white px-4 py-3">
-        <p className="text-sm font-semibold text-neutral-900">{restaurantName}</p>
-        <p className="text-xs text-neutral-500">{tableName}</p>
+      <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-neutral-900">{restaurantName}</p>
+          <p className="text-xs text-neutral-500">{tableName}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          {call ? (
+            <span
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${
+                call.status === "acknowledged"
+                  ? "bg-green-50 text-green-700"
+                  : "bg-orange-50 text-orange-700"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  call.status === "acknowledged" ? "bg-green-500" : "animate-pulse bg-orange-500"
+                }`}
+              />
+              {call.status === "acknowledged" ? "Staff on the way" : "Staff notified"}
+            </span>
+          ) : (
+            <button
+              onClick={callStaff}
+              disabled={callRequesting}
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 active:bg-neutral-50 disabled:opacity-50"
+            >
+              🔔 {callRequesting ? "Calling…" : "Call staff"}
+            </button>
+          )}
+          {callError && <p className="text-[11px] text-red-600">{callError}</p>}
+        </div>
       </header>
 
       {view === "menu" && (

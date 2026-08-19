@@ -12,6 +12,7 @@ import {
   index,
   primaryKey,
   date,
+  bigserial,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -2186,5 +2187,115 @@ export const recipeItemsRelations = relations(recipeItems, ({ one }) => ({
   inventoryItem: one(inventoryItems, {
     fields: [recipeItems.inventoryItemId],
     references: [inventoryItems.id],
+  }),
+}));
+
+// ---------------------------------------------------------------------------
+// Real-time: service calls ("Call staff") + the generic event log behind SSE
+// ---------------------------------------------------------------------------
+//
+// Deployment reality check (this drove the design below): this app ships as
+// serverless functions (see netlify.toml's @netlify/plugin-nextjs / Vercel),
+// not one long-running Node process — the same reason rate-limit.ts's
+// in-memory bucket map is documented as unsafe across instances. A naive
+// in-memory EventEmitter pub/sub for SSE would have the identical problem:
+// an event published from the invocation that handled the write would never
+// reach an SSE connection being held open on a different instance. So the
+// broadcast mechanism here is the database itself, not memory: every
+// real-time-worthy write also inserts one row into `realtime_events`, and
+// every SSE connection is a request handler that repeatedly polls that
+// table (short interval, e.g. 1s) and forwards new rows to the client as
+// they appear — see src/lib/realtime.ts. This is genuinely pushed to the
+// browser (the client never issues a request to learn about a new event,
+// the open connection delivers it), it's just backed by DB polling instead
+// of a live pub/sub channel, which is the honest, reliable option that
+// actually works on this hosting model. `id` is a bigserial specifically so
+// "everything after cursor X" is a cheap, safe indexed range scan.
+
+export const realtimeEvents = pgTable(
+  "realtime_events",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    // Null = restaurant-wide (every connected staff member should see it,
+    // regardless of which branch they're scoped to). Set for events tied to
+    // one branch's floor (an order, a service call) so a branch-scoped
+    // staff member's stream never has to fan out restaurant-wide.
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "cascade" }),
+    type: varchar("type", { length: 60 }).notNull(),
+    payload: jsonb("payload").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("realtime_events_restaurant_id_id_idx").on(table.restaurantId, table.id),
+  ],
+);
+
+export const serviceCallStatusEnum = pgEnum("service_call_status", [
+  "pending",
+  "acknowledged",
+  "resolved",
+]);
+
+// The "Call Servicemen" button on the public QR menu creates one of these.
+// Deliberately table-scoped, not order-scoped — a guest can call staff
+// before ordering, between courses, or just to ask for water, none of which
+// need to reference a specific order.
+export const serviceCalls = pgTable(
+  "service_calls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "cascade" }),
+    tableId: uuid("table_id")
+      .notNull()
+      .references(() => restaurantTables.id, { onDelete: "cascade" }),
+    status: serviceCallStatusEnum("status").notNull().default("pending"),
+    acknowledgedByUserId: uuid("acknowledged_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    resolvedByUserId: uuid("resolved_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("service_calls_restaurant_id_idx").on(table.restaurantId),
+    // Powers "does this table already have an active call" lookups — the
+    // create route uses this to return the existing call instead of
+    // spawning a duplicate every time an impatient guest taps twice.
+    index("service_calls_table_id_status_idx").on(table.tableId, table.status),
+  ],
+);
+
+export const serviceCallsRelations = relations(serviceCalls, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [serviceCalls.restaurantId],
+    references: [restaurants.id],
+  }),
+  branch: one(branches, {
+    fields: [serviceCalls.branchId],
+    references: [branches.id],
+  }),
+  table: one(restaurantTables, {
+    fields: [serviceCalls.tableId],
+    references: [restaurantTables.id],
+  }),
+  acknowledgedBy: one(users, {
+    fields: [serviceCalls.acknowledgedByUserId],
+    references: [users.id],
+  }),
+  resolvedBy: one(users, {
+    fields: [serviceCalls.resolvedByUserId],
+    references: [users.id],
   }),
 }));

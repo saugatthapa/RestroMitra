@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { apiGet, apiPost } from "@/lib/api-client";
+import { apiGet, apiPost, apiPatch } from "@/lib/api-client";
 import { NavIcon } from "@/components/NavIcon";
 import { formatAdDate, formatBsDate } from "@/lib/nepali-date";
 import { DateSystemProvider, useDateSystemControl, type DateSystem } from "@/lib/date-system";
@@ -86,6 +86,13 @@ type HeaderStatus = {
   kitchenBusy: boolean;
   lowStockCount: number;
   pendingReservationsCount: number;
+};
+
+type ServiceCallAlert = {
+  id: string;
+  tableId: string;
+  tableName: string;
+  status: "pending" | "acknowledged";
 };
 
 /**
@@ -211,6 +218,103 @@ function DashboardShellContent({
       clearInterval(interval);
     };
   }, [slug]);
+
+  const canViewServiceCalls = roleHasPermission(role, PERMISSIONS.VIEW_SERVICE_CALLS);
+  const [activeCalls, setActiveCalls] = useState<ServiceCallAlert[]>([]);
+  const [callActionBusy, setCallActionBusy] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    audioRef.current = new Audio("/sounds/service-call-alert.wav");
+  }, []);
+
+  // The real-time stream — see src/app/api/restaurants/[slug]/events and
+  // src/lib/realtime.ts for what's actually behind it (DB-polling under an
+  // SSE connection, not a live pub/sub channel — an honest tradeoff for a
+  // serverless deployment). Mounted once per dashboard session, here at the
+  // shell level (not per-page), so it keeps running as staff navigate
+  // between Orders/KDS/Staff/etc. without reopening a connection on every
+  // route change. Two things happen with what arrives:
+  //   1. order.created / order.status_changed — rebroadcast as a plain
+  //      window CustomEvent so OrdersBoard/KDSBoard (mounted as `children`
+  //      on their own pages) can react instantly on top of their existing
+  //      5s poll, without this shell needing to know either component's
+  //      internals.
+  //   2. service_call.* — handled directly here: a new call plays the
+  //      alert sound and adds a banner (only for roles holding
+  //      VIEW_SERVICE_CALLS — kitchen_staff etc. still need the order
+  //      events above off this same connection, so the stream itself isn't
+  //      gated by that permission, only what it visibly does with calls).
+  useEffect(() => {
+    const source = new EventSource(`/api/restaurants/${slug}/events`);
+
+    source.addEventListener("order.created", () => {
+      window.dispatchEvent(new CustomEvent("dhankipos:orders-changed"));
+    });
+    source.addEventListener("order.status_changed", () => {
+      window.dispatchEvent(new CustomEvent("dhankipos:orders-changed"));
+    });
+
+    source.addEventListener("service_call.created", (event) => {
+      if (!canViewServiceCalls) return;
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as {
+          callId: string;
+          tableId: string;
+          tableName: string;
+        };
+        setActiveCalls((prev) =>
+          prev.some((c) => c.id === data.callId)
+            ? prev
+            : [...prev, { id: data.callId, tableId: data.tableId, tableName: data.tableName, status: "pending" }],
+        );
+        audioRef.current?.play().catch(() => {
+          // Autoplay can be blocked until the user has interacted with the
+          // page at least once — nothing to do about that from here; the
+          // visible banner still shows regardless of whether sound played.
+        });
+      } catch {
+        // Malformed event payload — skip it rather than crash the stream.
+      }
+    });
+    source.addEventListener("service_call.acknowledged", (event) => {
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as { callId: string };
+        setActiveCalls((prev) =>
+          prev.map((c) => (c.id === data.callId ? { ...c, status: "acknowledged" } : c)),
+        );
+      } catch {
+        // ignore
+      }
+    });
+    source.addEventListener("service_call.resolved", (event) => {
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as { callId: string };
+        setActiveCalls((prev) => prev.filter((c) => c.id !== data.callId));
+      } catch {
+        // ignore
+      }
+    });
+
+    return () => source.close();
+  }, [slug, canViewServiceCalls]);
+
+  async function actOnCall(callId: string, action: "acknowledge" | "resolve") {
+    setCallActionBusy(callId);
+    try {
+      await apiPatch(`/api/restaurants/${slug}/service-calls/${callId}`, { action });
+      setActiveCalls((prev) =>
+        action === "resolve"
+          ? prev.filter((c) => c.id !== callId)
+          : prev.map((c) => (c.id === callId ? { ...c, status: "acknowledged" } : c)),
+      );
+    } catch {
+      // A failed tap just leaves the banner as-is — the SSE stream (or the
+      // next staff member) will catch it up; nothing silently breaks.
+    } finally {
+      setCallActionBusy(null);
+    }
+  }
 
   const ALL_NAV_GROUPS: NavGroup[] = [
     {
@@ -708,6 +812,51 @@ function DashboardShellContent({
             </Link>
           </div>
         </header>
+
+        {canViewServiceCalls && activeCalls.length > 0 && (
+          <div className="space-y-2 border-b border-orange-100 bg-orange-50 px-4 py-3 md:px-6">
+            {activeCalls.map((call) => (
+              <div
+                key={call.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 shadow-sm"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm ${
+                      call.status === "acknowledged" ? "bg-green-50" : "animate-pulse bg-orange-100"
+                    }`}
+                  >
+                    🔔
+                  </span>
+                  <span className="text-sm">
+                    <span className="font-semibold text-neutral-900">{call.tableName}</span>{" "}
+                    <span className="text-neutral-500">
+                      {call.status === "acknowledged" ? "— on the way" : "is calling for staff"}
+                    </span>
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  {call.status === "pending" && (
+                    <button
+                      onClick={() => actOnCall(call.id, "acknowledge")}
+                      disabled={callActionBusy === call.id}
+                      className="rounded-full bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      On my way
+                    </button>
+                  )}
+                  <button
+                    onClick={() => actOnCall(call.id, "resolve")}
+                    disabled={callActionBusy === call.id}
+                    className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 disabled:opacity-50"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>

@@ -15,6 +15,7 @@ import { recordSalesLedgerEntry } from "@/lib/ledger";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { syncTableStatusFromOrders } from "@/lib/tables";
+import { publishEvent } from "@/lib/realtime";
 
 /**
  * Advances (or cancels) an order's status. This is the one place the order
@@ -217,6 +218,19 @@ export async function PATCH(
         from: currentStatus,
         to: targetStatus,
         reason: parsed.data.reason ?? null,
+      },
+    });
+
+    await publishEvent(db, {
+      restaurantId,
+      branchId: updated.branchId,
+      type: "order.status_changed",
+      payload: {
+        orderId: updated.id,
+        orderNumber: updated.orderNumber,
+        tableId: updated.tableId,
+        from: currentStatus,
+        to: targetStatus,
       },
     });
 

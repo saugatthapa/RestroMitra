@@ -1,0 +1,171 @@
+import { NextResponse } from "next/server";
+import { and, eq, inArray } from "drizzle-orm";
+import { db } from "@/db";
+import { restaurantTables, restaurants, serviceCalls } from "@/db/schema";
+import { toErrorResponse } from "@/lib/api-route-helpers";
+import { recordAuditLog } from "@/lib/audit";
+import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { rateLimit } from "@/lib/rate-limit";
+import { publishEvent } from "@/lib/realtime";
+
+const ACTIVE_STATUSES = ["pending", "acknowledged"] as const;
+
+async function resolveTable(token: string) {
+  const rows = await db
+    .select({
+      tableId: restaurantTables.id,
+      tableName: restaurantTables.name,
+      branchId: restaurantTables.branchId,
+      tableIsActive: restaurantTables.isActive,
+      restaurantId: restaurants.id,
+      restaurantIsActive: restaurants.isActive,
+    })
+    .from(restaurantTables)
+    .innerJoin(restaurants, eq(restaurantTables.restaurantId, restaurants.id))
+    .where(eq(restaurantTables.qrToken, token))
+    .limit(1);
+  const resolved = rows[0];
+  if (!resolved || !resolved.tableIsActive || !resolved.restaurantIsActive) return null;
+  return resolved;
+}
+
+function serializeCall(call: typeof serviceCalls.$inferSelect) {
+  return {
+    id: call.id,
+    status: call.status,
+    createdAt: call.createdAt,
+    acknowledgedAt: call.acknowledgedAt,
+    resolvedAt: call.resolvedAt,
+  };
+}
+
+/**
+ * Public, UNAUTHENTICATED — the "Call staff" button on the QR menu. Same
+ * trust boundary as order placement (src/app/api/order/[token]/route.ts):
+ * the qrToken is the entire access control, so this is rate limited by both
+ * IP and table the same way. Idempotent by design: if this table already
+ * has an active (pending/acknowledged) call, that same call is returned
+ * instead of creating a duplicate — a guest double-tapping (or retrying
+ * after a flaky connection) doesn't spawn a second alert on staff screens.
+ */
+export async function POST(request: Request, ctx: { params: Promise<{ token: string }> }) {
+  if (!hasValidCsrfHeader(request)) {
+    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+  }
+  try {
+    const { token } = await ctx.params;
+
+    const ip = getClientIp(request) ?? "unknown";
+    const ipLimit = rateLimit(`service-call:ip:${ip}`, { limit: 10, windowMs: 10 * 60 * 1000 });
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait a few minutes and try again." },
+        { status: 429 },
+      );
+    }
+    const tokenLimit = rateLimit(`service-call:token:${token}`, {
+      limit: 6,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (!tokenLimit.allowed) {
+      return NextResponse.json(
+        { error: "Staff have already been called for this table. Please wait a moment." },
+        { status: 429 },
+      );
+    }
+
+    const resolved = await resolveTable(token);
+    if (!resolved) {
+      return NextResponse.json(
+        { error: "This table is not available right now." },
+        { status: 404 },
+      );
+    }
+
+    const existing = await db.query.serviceCalls.findFirst({
+      where: and(
+        eq(serviceCalls.tableId, resolved.tableId),
+        inArray(serviceCalls.status, ACTIVE_STATUSES),
+      ),
+      orderBy: (sc, { desc }) => [desc(sc.createdAt)],
+    });
+    if (existing) {
+      return NextResponse.json({ call: serializeCall(existing) }, { status: 200 });
+    }
+
+    const [created] = await db
+      .insert(serviceCalls)
+      .values({
+        restaurantId: resolved.restaurantId,
+        branchId: resolved.branchId,
+        tableId: resolved.tableId,
+        status: "pending",
+      })
+      .returning();
+
+    await publishEvent(db, {
+      restaurantId: resolved.restaurantId,
+      branchId: resolved.branchId,
+      type: "service_call.created",
+      payload: {
+        callId: created.id,
+        tableId: resolved.tableId,
+        tableName: resolved.tableName,
+        status: created.status,
+        createdAt: created.createdAt.toISOString(),
+      },
+    });
+
+    await recordAuditLog({
+      restaurantId: resolved.restaurantId,
+      userId: null,
+      action: "service_call.created",
+      resourceType: "service_call",
+      resourceId: created.id,
+      ipAddress: getClientIp(request),
+      metadata: { tableId: resolved.tableId, tableName: resolved.tableName },
+    });
+
+    return NextResponse.json({ call: serializeCall(created) }, { status: 201 });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+/**
+ * Lets the guest's own screen poll for the status of their table's active
+ * call ("Staff have been notified" -> "On the way" -> disappears once
+ * resolved). Deliberately a plain short-poll endpoint (the client polls
+ * this every few seconds) rather than a second SSE stream: the guest only
+ * ever needs to know about ONE call — their own — so there's nothing a
+ * push channel buys here that a 3s poll doesn't already deliver
+ * imperceptibly fast for a "someone's coming" status line. The SSE budget
+ * is spent where it matters operationally: the staff-side stream (see
+ * src/app/api/restaurants/[slug]/events/route.ts), which fans a single
+ * event out to every staff screen at once and is what the kitchen/counter/
+ * waiter alerting actually depends on.
+ */
+export async function GET(request: Request, ctx: { params: Promise<{ token: string }> }) {
+  try {
+    const { token } = await ctx.params;
+    const resolved = await resolveTable(token);
+    if (!resolved) {
+      return NextResponse.json(
+        { error: "This table is not available right now." },
+        { status: 404 },
+      );
+    }
+
+    const existing = await db.query.serviceCalls.findFirst({
+      where: and(
+        eq(serviceCalls.tableId, resolved.tableId),
+        inArray(serviceCalls.status, ACTIVE_STATUSES),
+      ),
+      orderBy: (sc, { desc }) => [desc(sc.createdAt)],
+    });
+
+    return NextResponse.json({ call: existing ? serializeCall(existing) : null });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}

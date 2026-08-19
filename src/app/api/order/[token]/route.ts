@@ -10,6 +10,7 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { rateLimit } from "@/lib/rate-limit";
 import { isUniqueViolation } from "@/lib/db-error";
 import { assertTableAcceptsOrders, syncTableStatusFromOrders } from "@/lib/tables";
+import { publishEvent } from "@/lib/realtime";
 
 /**
  * Public, UNAUTHENTICATED endpoint — a customer's phone hits this after
@@ -178,6 +179,20 @@ export async function POST(
         tableName: resolved.tableName,
         totalInPaisa: insertedOrder.totalInPaisa,
         itemCount: pricing.items.length,
+      },
+    });
+
+    await publishEvent(db, {
+      restaurantId: resolved.restaurantId,
+      branchId: resolved.branchId,
+      type: "order.created",
+      payload: {
+        orderId: insertedOrder.id,
+        orderNumber: insertedOrder.orderNumber,
+        tableId: resolved.tableId,
+        tableName: resolved.tableName,
+        status: insertedOrder.status,
+        totalInPaisa: insertedOrder.totalInPaisa,
       },
     });
 
