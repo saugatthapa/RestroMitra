@@ -4,6 +4,13 @@ import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api-client";
 
 const SNOOZE_KEY = "dhankipos:notif-gate-snoozed"; // sessionStorage — reappears next session, not gone forever
+const TEST_DISMISS_KEY = "dhankipos:notif-test-dismissed"; // sessionStorage — same "reappears next session" idea
+
+type TestOutcome =
+  | { status: "not_configured" }
+  | { status: "no_subscription" }
+  | { status: "sent"; results: { ok: boolean; expired?: boolean }[] }
+  | { status: "error" };
 
 function isNotificationSupported(): boolean {
   return typeof window !== "undefined" && "Notification" in window;
@@ -88,13 +95,35 @@ export function NotificationPermissionGate({ slug }: { slug: string }) {
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [dismissedThisSession, setDismissedThisSession] = useState(false);
   const [requesting, setRequesting] = useState(false);
+  const [testDismissed, setTestDismissed] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testOutcome, setTestOutcome] = useState<TestOutcome | null>(null);
 
   useEffect(() => {
     if (!isNotificationSupported()) return;
     setSupported(true);
     setPermission(Notification.permission);
     setDismissedThisSession(window.sessionStorage.getItem(SNOOZE_KEY) === "1");
+    setTestDismissed(window.sessionStorage.getItem(TEST_DISMISS_KEY) === "1");
   }, []);
+
+  async function runTest() {
+    setTesting(true);
+    setTestOutcome(null);
+    try {
+      const outcome = await apiPost<TestOutcome>(`/api/restaurants/${slug}/push-subscriptions/test`, {});
+      setTestOutcome(outcome);
+    } catch {
+      setTestOutcome({ status: "error" });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  function dismissTest() {
+    setTestDismissed(true);
+    window.sessionStorage.setItem(TEST_DISMISS_KEY, "1");
+  }
 
   // Opportunistic re-subscribe: covers both "permission was already granted
   // in an earlier session, before Web Push existed here" and "the OS/
@@ -133,7 +162,51 @@ export function NotificationPermissionGate({ slug }: { slug: string }) {
     window.sessionStorage.setItem(SNOOZE_KEY, "1");
   }
 
-  if (!supported || permission === "granted") return null;
+  if (!supported) return null;
+
+  // Permission is granted, meaning the loud "please turn this on" banner
+  // below has done its job — but that alone doesn't prove a push actually
+  // reaches this device (VAPID misconfiguration, a subscribe() that failed
+  // silently, etc. — see sendTestPush's doc comment in lib/push.ts for the
+  // three distinct ways this can be broken). A one-line, easy-to-ignore
+  // "Test" control replaces the banner here instead of just going silent,
+  // since a false "everything's fine" is worse than a small persistent
+  // affordance to actually check.
+  if (permission === "granted") {
+    if (testDismissed) return null;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-50 px-4 py-1.5 text-[11px] text-neutral-500 md:px-6">
+        <span className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-green-500" aria-hidden="true" />
+          Notifications are on for this device.
+          {testOutcome?.status === "sent" &&
+            (testOutcome.results.some((r) => r.ok)
+              ? " Test sent — check for it now."
+              : testOutcome.results.some((r) => r.expired)
+                ? " Your subscription expired — reload this page to renew it, then try again."
+                : " Send failed — see below.")}
+          {testOutcome?.status === "not_configured" &&
+            " Push isn't configured on this deployment yet (VAPID_* env vars)."}
+          {testOutcome?.status === "no_subscription" &&
+            " No subscription found for this device — try reloading the page."}
+          {testOutcome?.status === "error" && " Couldn't reach the server — try again."}
+        </span>
+        <span className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={runTest}
+            disabled={testing}
+            className="rounded-full border border-neutral-300 px-2.5 py-1 font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+          >
+            {testing ? "Sending…" : "Send test notification"}
+          </button>
+          <button type="button" onClick={dismissTest} className="px-1 py-1 text-neutral-400 hover:text-neutral-600">
+            ✕
+          </button>
+        </span>
+      </div>
+    );
+  }
 
   if (permission === "denied") {
     return (

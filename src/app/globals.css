@@ -28,6 +28,16 @@ body {
 }
 
 @layer components {
+  /* Public QR order menu's one deliberate typographic flourish — see
+     PublicOrderMenu.tsx's import comment for why this is a local
+     @fontsource import rather than next/font/google (build-time network
+     fetch risk). Scoped to a class, not swapped into --font-sans globally:
+     the rest of the app (dashboard, landing page) keeps its existing
+     system-font stack untouched. */
+  .font-display {
+    font-family: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+  }
+
   .input {
     @apply w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100;
   }

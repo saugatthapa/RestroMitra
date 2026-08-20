@@ -7,6 +7,7 @@ import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { rateLimit } from "@/lib/rate-limit";
 import { publishEvent } from "@/lib/realtime";
+import { sendPushToRestaurant } from "@/lib/push";
 
 const ACTIVE_STATUSES = ["pending", "acknowledged"] as const;
 
@@ -124,6 +125,19 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
       resourceId: created.id,
       ipAddress: getClientIp(request),
       metadata: { tableId: resolved.tableId, tableName: resolved.tableName },
+    });
+
+    // Same reasoning as order creation (see api/order/[token]/route.ts) —
+    // the SSE publish above only reaches an already-open dashboard tab;
+    // this is what reaches staff whose phone/app is fully closed. A guest
+    // tapping "call staff" and getting no response because everyone's
+    // screen happened to be off was exactly as real a gap as the missing
+    // order alert was, just never wired up when Web Push was first added.
+    void sendPushToRestaurant(resolved.restaurantId, {
+      title: "Table needs help",
+      body: `${resolved.tableName} is calling staff`,
+      url: "/dashboard/tables",
+      tag: "dhankipos-service-call",
     });
 
     return NextResponse.json({ call: serializeCall(created) }, { status: 201 });

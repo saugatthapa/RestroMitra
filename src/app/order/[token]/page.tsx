@@ -25,6 +25,7 @@ export default async function PublicOrderPage({
       tableIsActive: restaurantTables.isActive,
       restaurantId: restaurants.id,
       restaurantName: restaurants.name,
+      restaurantLogoUrl: restaurants.logoUrl,
       restaurantIsActive: restaurants.isActive,
     })
     .from(restaurantTables)
@@ -78,6 +79,7 @@ export default async function PublicOrderPage({
     <PublicOrderMenu
       token={token}
       restaurantName={resolved.restaurantName}
+      restaurantLogoUrl={resolved.restaurantLogoUrl}
       tableName={resolved.tableName}
       categories={categoriesWithItems}
     />

@@ -1,10 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+// A warm, slightly editorial serif for the restaurant's name, item names,
+// and prices — the one deliberate typographic flourish on this page. Menu
+// browsing is otherwise all system-sans (fast, familiar, easy to scan);
+// this face is reserved for the handful of moments that should feel like
+// they were designed for THIS restaurant rather than any generic app
+// screen. Imported from @fontsource (the font files ship inside the npm
+// package itself) rather than next/font/google, deliberately: next/font
+// fetches from Google Fonts AT BUILD TIME, and a build-time network hiccup
+// (this sandbox's own network policy blocks fonts.googleapis.com outright,
+// and there's no guarantee every hosting environment allows it either)
+// would fail `npm run build` entirely — see globals.css for the resulting
+// `.font-display` class. Only the two weights actually used are imported.
+import "@fontsource/fraunces/500.css";
+import "@fontsource/fraunces/600.css";
 import { formatNPR } from "@/lib/money";
 import { apiGet, apiPost, ApiError } from "@/lib/api-client";
 import { MenuItemThumb } from "@/components/MenuItemThumb";
 import { useGuestTranslation, cartItemCountText, type Locale, type TranslationKey } from "@/lib/i18n";
+
+const display = { className: "font-display" };
 
 type TFunc = (key: TranslationKey) => string;
 
@@ -46,15 +62,15 @@ function cartLineTotal(line: CartLine): number {
  * only the app's own surrounding UI text). */
 function GuestLanguageToggle({ locale, onChange }: { locale: Locale; onChange: (next: Locale) => void }) {
   return (
-    <div className="flex items-center rounded-full bg-neutral-100 p-0.5" role="group" aria-label="Language">
+    <div className="flex items-center rounded-full bg-black/[0.04] p-0.5 backdrop-blur-sm" role="group" aria-label="Language">
       {(["en", "ne"] as const).map((option) => (
         <button
           key={option}
           type="button"
           onClick={() => onChange(option)}
           aria-pressed={locale === option}
-          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ${
-            locale === option ? "bg-white text-orange-700 shadow-sm" : "text-neutral-400"
+          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-all ${
+            locale === option ? "bg-white text-orange-700 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
           }`}
         >
           {option === "en" ? "EN" : "ने"}
@@ -64,14 +80,44 @@ function GuestLanguageToggle({ locale, onChange }: { locale: Locale; onChange: (
   );
 }
 
+/** Restaurant's logo if they've set one; otherwise a warm monogram tile in
+ * the same visual family as MenuItemThumb's fallback, so a restaurant with
+ * no logo yet still gets a considered, on-brand hero rather than a blank
+ * space. */
+function BrandMark({ logoUrl, name }: { logoUrl: string | null; name: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!logoUrl || failed) {
+    const initial = name.trim().charAt(0).toUpperCase() || "?";
+    return (
+      <div
+        className={`${display.className} flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 text-2xl font-semibold text-white shadow-md shadow-orange-900/10`}
+        aria-hidden="true"
+      >
+        {initial}
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- arbitrary stored URL, see MenuItemThumb's identical reasoning
+    <img
+      src={logoUrl}
+      alt=""
+      onError={() => setFailed(true)}
+      className="h-14 w-14 shrink-0 rounded-2xl object-cover shadow-md shadow-orange-900/10 ring-1 ring-black/5"
+    />
+  );
+}
+
 export function PublicOrderMenu({
   token,
   restaurantName,
+  restaurantLogoUrl,
   tableName,
   categories,
 }: {
   token: string;
   restaurantName: string;
+  restaurantLogoUrl?: string | null;
   tableName: string;
   categories: Category[];
 }) {
@@ -170,9 +216,9 @@ export function PublicOrderMenu({
 
   if (categories.length === 0) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-neutral-50 p-6 text-center">
+      <div className={`flex min-h-screen items-center justify-center bg-stone-50 p-6 text-center`}>
         <div>
-          <p className="text-lg font-semibold text-neutral-900">{restaurantName}</p>
+          <p className={`${display.className} text-xl font-semibold text-neutral-900`}>{restaurantName}</p>
           <p className="mt-2 text-sm text-neutral-500">{t("publicMenu.menuUnavailable")}</p>
         </div>
       </div>
@@ -181,29 +227,38 @@ export function PublicOrderMenu({
 
   if (view === "confirmation" && confirmation) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-neutral-50 p-6 text-center">
-        <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-sm">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-2xl text-green-600">
-            ✓
+      <div className={`flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-orange-50/70 via-stone-50 to-stone-50 p-6 text-center`}>
+        <div className="w-full max-w-sm animate-hero-in rounded-3xl border border-stone-200/70 bg-white p-7 shadow-xl shadow-orange-900/5">
+          <div className="relative mx-auto mb-4 flex h-16 w-16 items-center justify-center">
+            <span className="absolute inset-0 animate-pulse-ring rounded-full bg-green-500/20" />
+            <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-green-50 text-3xl text-green-600 ring-1 ring-green-100">
+              ✓
+            </span>
           </div>
-          <p className="text-lg font-semibold text-neutral-900">{t("publicMenu.orderPlaced")}</p>
-          <p className="mt-1 text-sm text-neutral-500">{t("publicMenu.showScreenToStaff")}</p>
-          <div className="mt-4 space-y-1 rounded-xl bg-neutral-50 p-4 text-left text-sm">
-            <p>
-              <span className="text-neutral-500">{t("publicMenu.orderNumberLabel")}</span>{" "}
-              <span className="font-semibold">{confirmation.orderNumber}</span>
-            </p>
-            <p>
-              <span className="text-neutral-500">{t("publicMenu.tableLabel")}</span>{" "}
-              <span className="font-semibold">{tableName}</span>
-            </p>
-            <p>
-              <span className="text-neutral-500">{t("publicMenu.totalLabel")}</span>{" "}
-              <span className="font-semibold">{formatNPR(confirmation.totalInPaisa)}</span>
-            </p>
+          <p className={`${display.className} text-xl font-semibold text-neutral-900`}>
+            {t("publicMenu.orderPlaced")}
+          </p>
+          <p className="mt-1.5 text-sm text-neutral-500">{t("publicMenu.showScreenToStaff")}</p>
+          <div className="mt-5 space-y-2 rounded-2xl bg-stone-50 p-4 text-left text-sm">
+            <div className="flex items-baseline justify-between">
+              <span className="text-neutral-500">{t("publicMenu.orderNumberLabel")}</span>
+              <span className={`${display.className} text-base font-semibold text-neutral-900`}>
+                {confirmation.orderNumber}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between border-t border-dashed border-stone-200 pt-2">
+              <span className="text-neutral-500">{t("publicMenu.tableLabel")}</span>
+              <span className="font-semibold text-neutral-900">{tableName}</span>
+            </div>
+            <div className="flex items-baseline justify-between border-t border-dashed border-stone-200 pt-2">
+              <span className="text-neutral-500">{t("publicMenu.totalLabel")}</span>
+              <span className={`${display.className} text-base font-semibold text-orange-700`}>
+                {formatNPR(confirmation.totalInPaisa)}
+              </span>
+            </div>
           </div>
           <button
-            className="btn-secondary mt-5 w-full"
+            className="btn-secondary mt-6 w-full rounded-full"
             onClick={() => {
               setCart([]);
               setConfirmation(null);
@@ -224,14 +279,22 @@ export function PublicOrderMenu({
     // everything. Letting the page be exactly as tall as its content is
     // means a customer never lands on a screen that looks broken/half-
     // loaded just because it doesn't happen to fill their phone.
-    <div className="min-h-full bg-neutral-50 pb-24">
-      <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold text-neutral-900">{restaurantName}</p>
-          <p className="text-xs text-neutral-500">{tableName}</p>
-        </div>
-        <div className="flex flex-col items-end gap-1.5">
+    <div className={`min-h-full bg-stone-50 pb-28`}>
+      <header className="sticky top-0 z-10 border-b border-stone-200/80 bg-white/90 backdrop-blur-md">
+        <div className="flex items-center gap-3 px-4 pb-3 pt-4 sm:px-6">
+          <BrandMark logoUrl={restaurantLogoUrl ?? null} name={restaurantName} />
+          <div className="min-w-0 flex-1">
+            <p className={`${display.className} truncate text-lg font-semibold leading-tight text-neutral-900`}>
+              {restaurantName}
+            </p>
+            <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
+              {tableName}
+            </p>
+          </div>
           <GuestLanguageToggle locale={locale} onChange={setLocale} />
+        </div>
+
+        <div className="flex items-center justify-between gap-2 px-4 pb-3 sm:px-6">
           {call ? (
             <span
               className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${
@@ -251,7 +314,7 @@ export function PublicOrderMenu({
             <button
               onClick={callStaff}
               disabled={callRequesting}
-              className="flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 active:bg-neutral-50 disabled:opacity-50"
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-sm transition active:scale-[0.97] active:bg-stone-50 disabled:opacity-50"
             >
               🔔 {callRequesting ? t("publicMenu.calling") : t("publicMenu.callStaff")}
             </button>
@@ -263,15 +326,15 @@ export function PublicOrderMenu({
       {view === "menu" && (
         <>
           {categories.length > 1 && (
-            <div className="sticky top-[52px] z-10 flex gap-2 overflow-x-auto border-b border-neutral-200 bg-white px-4 py-2">
+            <div className="sticky top-[92px] z-10 flex gap-2 overflow-x-auto border-b border-stone-200/80 bg-stone-50/95 px-4 py-2.5 backdrop-blur-md sm:px-6">
               {categories.map((c) => (
                 <button
                   key={c.id}
                   onClick={() => setSelectedCategoryId(c.id)}
-                  className={`shrink-0 rounded-full border px-3 py-1.5 text-sm ${
+                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all ${
                     selectedCategoryId === c.id
-                      ? "border-orange-600 bg-orange-50 font-medium text-orange-700"
-                      : "border-neutral-200 text-neutral-600"
+                      ? "bg-neutral-900 text-white shadow-sm"
+                      : "border border-stone-200 bg-white text-neutral-600 hover:border-stone-300"
                   }`}
                 >
                   {c.name}
@@ -280,37 +343,39 @@ export function PublicOrderMenu({
             </div>
           )}
 
-          <div className="space-y-3 px-4 py-4">
+          <div className="space-y-3 px-4 py-4 sm:px-6">
             {categories
               .find((c) => c.id === selectedCategoryId)
               ?.menuItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setCustomizingItem(item)}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-neutral-200 bg-white p-3 text-left shadow-sm"
+                  className="group flex w-full items-center gap-3.5 rounded-2xl border border-stone-200/80 bg-white p-3 text-left shadow-sm shadow-stone-900/[0.03] transition-all active:scale-[0.99] active:shadow-none"
                 >
-                  <MenuItemThumb imageUrl={item.imageUrl} name={item.name} size="lg" />
+                  <MenuItemThumb imageUrl={item.imageUrl} name={item.name} size="lg" rounded="rounded-xl" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-neutral-900">{item.name}</p>
+                    <p className={`${display.className} truncate text-[15px] font-medium text-neutral-900`}>
+                      {item.name}
+                    </p>
                     {item.description && (
-                      <p className="mt-0.5 line-clamp-2 text-xs text-neutral-500">
+                      <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-neutral-500">
                         {item.description}
                       </p>
                     )}
-                    <p className="mt-1 text-sm font-medium text-orange-700">
+                    <p className={`${display.className} mt-1.5 text-sm font-semibold text-orange-700`}>
                       {item.variants.length > 0
                         ? priceRange(item.variants)
                         : formatNPR(item.basePriceInPaisa)}
                     </p>
                   </div>
-                  <span className="shrink-0 self-end rounded-full bg-orange-600 px-3 py-1 text-xs font-semibold text-white">
-                    {t("publicMenu.add")}
+                  <span className="flex shrink-0 h-8 w-8 items-center justify-center self-center rounded-full bg-stone-100 text-base font-semibold text-neutral-700 transition-colors group-hover:bg-orange-600 group-hover:text-white group-active:bg-orange-600 group-active:text-white">
+                    +
                   </span>
                 </button>
               ))}
           </div>
 
-          <p className="px-4 pb-2 pt-1 text-center text-[11px] text-neutral-400">
+          <p className="px-4 pb-2 pt-1 text-center text-[11px] text-neutral-400 sm:px-6">
             <a
               href="/"
               target="_blank"
@@ -360,12 +425,15 @@ export function PublicOrderMenu({
       {view === "menu" && cartCount > 0 && (
         <button
           onClick={() => setView("cart")}
-          className="fixed inset-x-4 bottom-4 z-20 flex items-center justify-between rounded-2xl bg-orange-600 px-5 py-3.5 text-sm font-semibold text-white shadow-lg"
+          className="fixed inset-x-4 bottom-4 z-20 flex animate-hero-in items-center justify-between rounded-2xl bg-gradient-to-r from-orange-600 to-orange-500 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-orange-900/25 transition active:scale-[0.98] sm:inset-x-auto sm:right-6 sm:w-96"
         >
-          <span>
+          <span className="flex items-center gap-2">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/25 text-[11px]">
+              {cartCount > 9 ? "9+" : cartCount}
+            </span>
             {t("publicMenu.viewCart")} · {cartItemCountText(cartCount, locale)}
           </span>
-          <span>{formatNPR(cartTotal)}</span>
+          <span className={`${display.className}`}>{formatNPR(cartTotal)}</span>
         </button>
       )}
     </div>
@@ -425,110 +493,141 @@ function CustomizeModal({
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 sm:items-center sm:p-4">
-      <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl">
-        {item.imageUrl && (
-          <div className="-mx-5 -mt-5 mb-4 aspect-[16/9] w-[calc(100%+2.5rem)] overflow-hidden bg-neutral-50 sm:rounded-t-2xl">
+    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="max-h-[88vh] w-full max-w-md animate-hero-in overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
+        {item.imageUrl ? (
+          <div className="relative aspect-[16/9] w-full overflow-hidden bg-stone-50 sm:rounded-t-3xl">
             <MenuItemThumb imageUrl={item.imageUrl} name={item.name} size="fill" rounded="rounded-none" />
+            <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/25 to-transparent" />
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-neutral-700 shadow-sm backdrop-blur-sm"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <div className="flex justify-end p-4 pb-0">
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 hover:bg-stone-100 hover:text-neutral-700"
+            >
+              ✕
+            </button>
           </div>
         )}
-        <div className="mb-3 flex items-start justify-between">
-          <div>
-            <p className="text-base font-semibold text-neutral-900">{item.name}</p>
-            {item.description && (
-              <p className="mt-0.5 text-xs text-neutral-500">{item.description}</p>
-            )}
+
+        <div className="p-5 pt-4">
+          <p className={`${display.className} text-lg font-semibold text-neutral-900`}>{item.name}</p>
+          {item.description && (
+            <p className="mt-1 text-sm leading-relaxed text-neutral-500">{item.description}</p>
+          )}
+
+          {item.variants.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
+                {t("publicMenu.chooseOption")}
+              </p>
+              <div className="space-y-1.5">
+                {item.variants.map((v) => (
+                  <label
+                    key={v.id}
+                    className={`flex cursor-pointer items-center justify-between rounded-xl border px-3.5 py-2.5 text-sm transition-colors ${
+                      variantId === v.id
+                        ? "border-orange-300 bg-orange-50/70"
+                        : "border-stone-200 hover:border-stone-300"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <input
+                        type="radio"
+                        name="variant"
+                        checked={variantId === v.id}
+                        onChange={() => setVariantId(v.id)}
+                        className="h-4 w-4 accent-orange-600"
+                      />
+                      <span className="font-medium text-neutral-800">{v.name}</span>
+                    </span>
+                    <span className="text-neutral-500">{formatNPR(v.priceInPaisa)}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {item.addons.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
+                {t("publicMenu.addons")}
+              </p>
+              <div className="space-y-1.5">
+                {item.addons.map((a) => (
+                  <label
+                    key={a.id}
+                    className={`flex cursor-pointer items-center justify-between rounded-xl border px-3.5 py-2.5 text-sm transition-colors ${
+                      addonIds.includes(a.id)
+                        ? "border-orange-300 bg-orange-50/70"
+                        : "border-stone-200 hover:border-stone-300"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={addonIds.includes(a.id)}
+                        onChange={() => toggleAddon(a.id)}
+                        className="h-4 w-4 rounded accent-orange-600"
+                      />
+                      <span className="font-medium text-neutral-800">{a.name}</span>
+                    </span>
+                    <span className="text-neutral-500">
+                      {a.priceInPaisa > 0 ? `+${formatNPR(a.priceInPaisa)}` : t("publicMenu.free")}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <textarea
+            className="input mt-4 rounded-xl"
+            rows={2}
+            placeholder={t("publicMenu.specialInstructions")}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+
+          <div className="mt-4 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+              {t("publicMenu.quantity")}
+            </p>
+            <div className="flex items-center gap-3 rounded-full border border-stone-200 px-1 py-1">
+              <button
+                className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-600 transition hover:bg-stone-100 active:scale-90"
+                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+              >
+                −
+              </button>
+              <span className="w-5 text-center text-sm font-semibold">{quantity}</span>
+              <button
+                className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-600 transition hover:bg-stone-100 active:scale-90"
+                onClick={() => setQuantity((q) => Math.min(50, q + 1))}
+              >
+                +
+              </button>
+            </div>
           </div>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700">
-            ✕
+
+          <button
+            onClick={handleAdd}
+            disabled={item.variants.length > 0 && !variantId}
+            className="mt-5 flex w-full items-center justify-between rounded-full bg-gradient-to-r from-orange-600 to-orange-500 px-5 py-3.5 text-sm font-semibold text-white shadow-md shadow-orange-900/20 transition active:scale-[0.98] disabled:opacity-50"
+          >
+            <span>{t("publicMenu.addToCart")}</span>
+            <span className={display.className}>{formatNPR(lineTotal)}</span>
           </button>
         </div>
-
-        {item.variants.length > 0 && (
-          <div className="mb-4">
-            <p className="mb-1.5 text-xs font-semibold text-neutral-700">{t("publicMenu.chooseOption")}</p>
-            <div className="space-y-1.5">
-              {item.variants.map((v) => (
-                <label
-                  key={v.id}
-                  className="flex items-center justify-between rounded-lg border border-neutral-200 px-3 py-2 text-sm"
-                >
-                  <span className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="variant"
-                      checked={variantId === v.id}
-                      onChange={() => setVariantId(v.id)}
-                    />
-                    {v.name}
-                  </span>
-                  <span className="text-neutral-500">{formatNPR(v.priceInPaisa)}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {item.addons.length > 0 && (
-          <div className="mb-4">
-            <p className="mb-1.5 text-xs font-semibold text-neutral-700">{t("publicMenu.addons")}</p>
-            <div className="space-y-1.5">
-              {item.addons.map((a) => (
-                <label
-                  key={a.id}
-                  className="flex items-center justify-between rounded-lg border border-neutral-200 px-3 py-2 text-sm"
-                >
-                  <span className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={addonIds.includes(a.id)}
-                      onChange={() => toggleAddon(a.id)}
-                    />
-                    {a.name}
-                  </span>
-                  <span className="text-neutral-500">
-                    {a.priceInPaisa > 0 ? `+${formatNPR(a.priceInPaisa)}` : t("publicMenu.free")}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <textarea
-          className="input mb-4"
-          rows={2}
-          placeholder={t("publicMenu.specialInstructions")}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-        />
-
-        <div className="mb-4 flex items-center justify-between">
-          <p className="text-xs font-semibold text-neutral-700">{t("publicMenu.quantity")}</p>
-          <div className="flex items-center gap-3">
-            <button
-              className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-600"
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-            >
-              −
-            </button>
-            <span className="w-6 text-center text-sm font-medium">{quantity}</span>
-            <button
-              className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-600"
-              onClick={() => setQuantity((q) => Math.min(50, q + 1))}
-            >
-              +
-            </button>
-          </div>
-        </div>
-
-        <button
-          onClick={handleAdd}
-          disabled={item.variants.length > 0 && !variantId}
-          className="btn-primary w-full disabled:opacity-50"
-        >
-          {t("publicMenu.addToCart")} · {formatNPR(lineTotal)}
-        </button>
       </div>
     </div>
   );
@@ -552,18 +651,20 @@ function CartView({
   const total = cart.reduce((sum, l) => sum + cartLineTotal(l), 0);
 
   return (
-    <div className="px-4 py-4">
-      <button onClick={onBack} className="mb-4 text-sm text-neutral-500">
+    <div className="px-4 py-4 sm:px-6">
+      <button onClick={onBack} className="mb-4 text-sm font-medium text-neutral-500 hover:text-neutral-800">
         {t("publicMenu.backToMenu")}
       </button>
-      <h1 className="mb-3 text-base font-semibold text-neutral-900">{t("publicMenu.yourOrder")}</h1>
+      <h1 className={`${display.className} mb-3 text-xl font-semibold text-neutral-900`}>
+        {t("publicMenu.yourOrder")}
+      </h1>
 
       {cart.length === 0 ? (
         <p className="text-sm text-neutral-500">{t("publicMenu.cartEmpty")}</p>
       ) : (
         <div className="space-y-3">
           {cart.map((line) => (
-            <div key={line.key} className="rounded-2xl border border-neutral-200 bg-white p-4">
+            <div key={line.key} className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm shadow-stone-900/[0.03]">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-neutral-900">
@@ -579,45 +680,48 @@ function CartView({
                 </div>
                 <button
                   onClick={() => onRemove(line.key)}
-                  className="text-xs text-neutral-400 hover:text-red-600"
+                  className="text-xs font-medium text-neutral-400 hover:text-red-600"
                 >
                   {t("publicMenu.remove")}
                 </button>
               </div>
-              <div className="mt-2 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="mt-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-3 rounded-full border border-stone-200 px-1 py-1">
                   <button
-                    className="h-7 w-7 rounded-full border border-neutral-300 text-neutral-600"
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-600 transition hover:bg-stone-100 active:scale-90"
                     onClick={() => onChangeQuantity(line.key, -1)}
                   >
                     −
                   </button>
-                  <span className="w-5 text-center text-sm">{line.quantity}</span>
+                  <span className="w-5 text-center text-sm font-medium">{line.quantity}</span>
                   <button
-                    className="h-7 w-7 rounded-full border border-neutral-300 text-neutral-600"
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-600 transition hover:bg-stone-100 active:scale-90"
                     onClick={() => onChangeQuantity(line.key, 1)}
                   >
                     +
                   </button>
                 </div>
-                <p className="text-sm font-semibold text-neutral-900">
+                <p className={`${display.className} text-sm font-semibold text-neutral-900`}>
                   {formatNPR(cartLineTotal(line))}
                 </p>
               </div>
             </div>
           ))}
 
-          <div className="border-t border-neutral-200 pt-3">
+          <div className="border-t border-dashed border-stone-300 pt-3">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-sm font-semibold text-neutral-900">{t("publicMenu.subtotal")}</span>
-              <span className="whitespace-nowrap text-sm font-semibold text-neutral-900">
+              <span className={`${display.className} whitespace-nowrap text-base font-semibold text-neutral-900`}>
                 {formatNPR(total)}
               </span>
             </div>
             <p className="mt-0.5 text-xs text-neutral-400">{t("publicMenu.taxAtCheckout")}</p>
           </div>
 
-          <button onClick={onCheckout} className="btn-primary w-full">
+          <button
+            onClick={onCheckout}
+            className="flex w-full items-center justify-center rounded-full bg-gradient-to-r from-orange-600 to-orange-500 px-5 py-3.5 text-sm font-semibold text-white shadow-md shadow-orange-900/20 transition active:scale-[0.98]"
+          >
             {t("publicMenu.checkout")}
           </button>
         </div>
@@ -674,46 +778,56 @@ function CheckoutView({
   }
 
   return (
-    <div className="px-4 py-4">
-      <button onClick={onBack} className="mb-4 text-sm text-neutral-500" disabled={submitting}>
+    <div className="px-4 py-4 sm:px-6">
+      <button
+        onClick={onBack}
+        className="mb-4 text-sm font-medium text-neutral-500 hover:text-neutral-800"
+        disabled={submitting}
+      >
         {t("publicMenu.backToCart")}
       </button>
-      <h1 className="mb-3 text-base font-semibold text-neutral-900">{t("publicMenu.checkout")}</h1>
+      <h1 className={`${display.className} mb-3 text-xl font-semibold text-neutral-900`}>
+        {t("publicMenu.checkout")}
+      </h1>
 
       <div className="space-y-3">
         <input
-          className="input"
+          className="input rounded-xl"
           placeholder={t("publicMenu.yourNameOptional")}
           value={customerName}
           onChange={(e) => setCustomerName(e.target.value)}
         />
         <input
-          className="input"
+          className="input rounded-xl"
           placeholder={t("publicMenu.phoneOptional")}
           value={customerPhone}
           onChange={(e) => setCustomerPhone(e.target.value)}
         />
         <textarea
-          className="input"
+          className="input rounded-xl"
           rows={2}
           placeholder={t("publicMenu.notesForKitchen")}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />
 
-        <div className="rounded-xl bg-neutral-50 px-4 py-3">
+        <div className="rounded-2xl bg-stone-100/80 px-4 py-3.5">
           <div className="flex items-baseline justify-between gap-3 text-sm">
             <span className="font-semibold text-neutral-900">{t("publicMenu.estimatedSubtotal")}</span>
-            <span className="whitespace-nowrap font-semibold text-neutral-900">
+            <span className={`${display.className} whitespace-nowrap text-base font-semibold text-neutral-900`}>
               {formatNPR(total)}
             </span>
           </div>
-          <p className="mt-0.5 text-xs text-neutral-400">{t("publicMenu.taxAddedOnSubmission")}</p>
+          <p className="mt-0.5 text-xs text-neutral-500">{t("publicMenu.taxAddedOnSubmission")}</p>
         </div>
 
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-700">{error}</p>}
 
-        <button onClick={handleSubmit} disabled={submitting} className="btn-primary w-full">
+        <button
+          onClick={handleSubmit}
+          disabled={submitting}
+          className="flex w-full items-center justify-center rounded-full bg-gradient-to-r from-orange-600 to-orange-500 px-5 py-3.5 text-sm font-semibold text-white shadow-md shadow-orange-900/20 transition active:scale-[0.98] disabled:opacity-60"
+        >
           {submitting ? t("publicMenu.placingOrder") : t("publicMenu.placeOrder")}
         </button>
       </div>

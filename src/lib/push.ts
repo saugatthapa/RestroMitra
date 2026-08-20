@@ -3,6 +3,7 @@ import webpush from "web-push";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { pushSubscriptions } from "@/db/schema";
+import { sendFallbackAlertEmail } from "@/lib/email";
 
 /**
  * Phase 25 — Web Push send path. This is what makes a new-order alert show
@@ -21,17 +22,40 @@ import { pushSubscriptions } from "@/db/schema";
  * "no push notifications," never take down order creation itself.
  */
 let configured = false;
+// Set once setVapidDetails has thrown — an invalid key is a deployment
+// misconfiguration that won't fix itself on the next request, so there's no
+// point re-attempting (and re-logging the same error) on every single order.
+let configFailed = false;
 function ensureConfigured(): boolean {
   if (configured) return true;
+  if (configFailed) return false;
   const publicKey = process.env.VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   const subject = process.env.VAPID_SUBJECT;
   if (!publicKey || !privateKey || !subject) {
     return false;
   }
-  webpush.setVapidDetails(subject, publicKey, privateKey);
-  configured = true;
-  return true;
+  // `sendPushToRestaurant` is always called with `void` (fire-and-forget) so
+  // an order/service-call write is never blocked by a slow push send — but
+  // that also means an exception thrown here has no caller left to catch
+  // it, and surfaces as an unhandled promise rejection instead. web-push's
+  // setVapidDetails() throws synchronously on a malformed key (wrong
+  // length, extra whitespace pasted in, a PEM-wrapped key instead of the
+  // raw base64url string, etc.) — a real and easy mistake to make copying
+  // keys into a hosting panel by hand — so this must never be allowed to
+  // escape uncaught.
+  try {
+    webpush.setVapidDetails(subject, publicKey, privateKey);
+    configured = true;
+    return true;
+  } catch (err) {
+    configFailed = true;
+    console.error(
+      "sendPushToRestaurant: VAPID_* env vars are set but invalid (setVapidDetails threw) — push notifications are disabled until this is fixed. Re-check the keys were pasted in exactly as generated, with no extra whitespace.",
+      err,
+    );
+    return false;
+  }
 }
 
 /** Exposed to the client-side subscribe flow via a small API route — the
@@ -48,6 +72,49 @@ export type PushPayload = {
   tag?: string;
 };
 
+export type PushSendResult = {
+  subscriptionId: string;
+  ok: boolean;
+  /** True when the push service itself said the subscription is gone
+   * (404/410) — expected/benign, not a config problem. */
+  expired?: boolean;
+  error?: string;
+};
+
+/** Shared send loop — same delivery + stale-subscription cleanup for every
+ * caller, whether it's a fire-and-forget restaurant-wide alert or an
+ * awaited single-device test send. */
+async function sendToSubscriptions(
+  subs: (typeof pushSubscriptions.$inferSelect)[],
+  payload: PushPayload,
+): Promise<PushSendResult[]> {
+  const body = JSON.stringify(payload);
+
+  return Promise.all(
+    subs.map(async (sub): Promise<PushSendResult> => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          body,
+        );
+        return { subscriptionId: sub.id, ok: true };
+      } catch (err) {
+        const statusCode = (err as { statusCode?: number }).statusCode;
+        if (statusCode === 404 || statusCode === 410) {
+          await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
+          return { subscriptionId: sub.id, ok: false, expired: true, error: "Subscription expired." };
+        }
+        console.error("Push send failed for subscription", sub.id, err);
+        return {
+          subscriptionId: sub.id,
+          ok: false,
+          error: err instanceof Error ? err.message : "Unknown error",
+        };
+      }
+    }),
+  );
+}
+
 /**
  * Sends `payload` as a push notification to every device subscribed for
  * `restaurantId`. Best-effort and fire-and-forget from the caller's
@@ -58,10 +125,19 @@ export type PushPayload = {
  * rotated) — those rows are deleted so this list doesn't grow stale
  * forever; any other error (network blip, 5xx) leaves the row alone since
  * it may well succeed next time.
+ *
+ * When push categorically can't reach anyone right now — VAPID was never
+ * configured on this deployment, or there's simply no live subscription —
+ * this falls back to emailing the restaurant's owner (see lib/email.ts)
+ * rather than the alert going out into the void with nobody ever knowing.
+ * That fallback is deliberately NOT attempted when individual sends fail
+ * despite subscriptions existing (a transient push-service 5xx, say) —
+ * only the two "there is definitionally no one to push to" cases below.
  */
 export async function sendPushToRestaurant(restaurantId: string, payload: PushPayload): Promise<void> {
   if (!ensureConfigured()) {
     console.warn("sendPushToRestaurant: VAPID keys not configured, skipping push send.");
+    void sendFallbackAlertEmail(restaurantId, payload.title, payload.body);
     return;
   }
 
@@ -70,28 +146,45 @@ export async function sendPushToRestaurant(restaurantId: string, payload: PushPa
     .from(pushSubscriptions)
     .where(eq(pushSubscriptions.restaurantId, restaurantId));
 
-  if (subs.length === 0) return;
+  if (subs.length === 0) {
+    void sendFallbackAlertEmail(restaurantId, payload.title, payload.body);
+    return;
+  }
 
-  const body = JSON.stringify(payload);
+  await sendToSubscriptions(subs, payload);
+}
 
-  await Promise.all(
-    subs.map(async (sub) => {
-      try {
-        await webpush.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: { p256dh: sub.p256dh, auth: sub.auth },
-          },
-          body,
-        );
-      } catch (err) {
-        const statusCode = (err as { statusCode?: number }).statusCode;
-        if (statusCode === 404 || statusCode === 410) {
-          await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
-        } else {
-          console.error("Push send failed for subscription", sub.id, err);
-        }
-      }
-    }),
-  );
+export type TestPushOutcome =
+  | { status: "not_configured" }
+  | { status: "no_subscription" }
+  | { status: "sent"; results: PushSendResult[] };
+
+/**
+ * "Send me a test notification" — lets a staff member (and, more
+ * importantly, an owner deploying this for the first time) verify their OWN
+ * device's push chain end to end without needing anyone to read server
+ * logs. Distinguishes the three ways this can be broken, since they need
+ * completely different fixes:
+ *   - not_configured: VAPID_* isn't set (or is invalid) on this deployment
+ *     — a hosting-panel/env-var problem, not a code bug.
+ *   - no_subscription: VAPID is fine, but this device never subscribed —
+ *     check that notification permission was actually granted on THIS
+ *     device/browser (see NotificationPermissionGate).
+ *   - sent: a push was actually dispatched to the push service; `results`
+ *     reports per-subscription success (delivery beyond that is outside
+ *     this app's visibility — the OS/browser takes it from here).
+ */
+export async function sendTestPush(userId: string): Promise<TestPushOutcome> {
+  if (!ensureConfigured()) return { status: "not_configured" };
+
+  const subs = await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+  if (subs.length === 0) return { status: "no_subscription" };
+
+  const results = await sendToSubscriptions(subs, {
+    title: "Test notification",
+    body: "If you can see this, push notifications are working on this device.",
+    url: "/dashboard",
+    tag: "dhankipos-test",
+  });
+  return { status: "sent", results };
 }
