@@ -93,9 +93,24 @@ async function sendToSubscriptions(
   return Promise.all(
     subs.map(async (sub): Promise<PushSendResult> => {
       try {
+        // urgency "high" + a short TTL: an order/service-call alert is
+        // time-sensitive and worthless once stale, so this asks the push
+        // service (and, on Android, the OS's Doze/App-Standby power
+        // management) to wake the device promptly rather than batching
+        // this with other low-priority background traffic — the default
+        // is "normal", which on battery-constrained devices can sit queued
+        // for minutes. TTL of 1 hour: if a device is offline longer than
+        // that, "new order from an hour ago" isn't useful to deliver late
+        // anyway, and letting it expire keeps the push service from
+        // holding/retrying it indefinitely. See PERFORMANCE_AUDIT.md-
+        // adjacent notification research for why urgency doesn't fix
+        // OEM-level background killing (Xiaomi/Vivo/Oppo etc.) — that's a
+        // device-settings problem this can't solve — but it's a real,
+        // free win on stock Android/Chrome.
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           body,
+          { urgency: "high", TTL: 3600 },
         );
         return { subscriptionId: sub.id, ok: true };
       } catch (err) {

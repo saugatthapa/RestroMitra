@@ -20,6 +20,34 @@ function isPushSupported(): boolean {
   return typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
 }
 
+// iPhone/iPad detection — deliberately simple regex + the iPadOS-masquerades-
+// as-desktop-Safari fallback (iPadOS 13+ reports as "MacIntel" with no
+// touch-point signal in the UA string itself, so touch points is the only
+// reliable tell). Good enough for "should we show the install-first hint,"
+// not meant to be bulletproof device fingerprinting.
+function isIOS(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = window.navigator.userAgent;
+  if (/iPad|iPhone|iPod/.test(ua)) return true;
+  return window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1;
+}
+
+// Apple only turns on the Push API (and, in practice, reliable background
+// delivery at all) once the site is launched from a Home Screen icon, not a
+// regular Safari tab — confirmed via research into current (2025-2026) iOS
+// Web Push behavior. `navigator.standalone` is Safari's own non-standard
+// property for exactly this; the matchMedia check is the standardized
+// equivalent other engines use. Requesting permission from inside a normal
+// Safari tab on iOS either silently does nothing useful or leaves staff
+// thinking they're covered when they're not — worth detecting explicitly
+// rather than showing the same "Turn on notifications" button that works
+// fine on Android/desktop.
+function isStandalone(): boolean {
+  if (typeof window === "undefined") return false;
+  const nav = window.navigator as Navigator & { standalone?: boolean };
+  return window.matchMedia("(display-mode: standalone)").matches || nav.standalone === true;
+}
+
 // Converts a URL-safe base64 VAPID public key (what web-push's
 // generateVAPIDKeys produces, and what the GET below returns) into the raw
 // Uint8Array pushManager.subscribe's applicationServerKey option requires —
@@ -98,8 +126,10 @@ export function NotificationPermissionGate({ slug }: { slug: string }) {
   const [testDismissed, setTestDismissed] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testOutcome, setTestOutcome] = useState<TestOutcome | null>(null);
+  const [iosNeedsInstall, setIosNeedsInstall] = useState(false);
 
   useEffect(() => {
+    setIosNeedsInstall(isIOS() && !isStandalone());
     if (!isNotificationSupported()) return;
     setSupported(true);
     setPermission(Notification.permission);
@@ -160,6 +190,33 @@ export function NotificationPermissionGate({ slug }: { slug: string }) {
   function dismiss() {
     setDismissedThisSession(true);
     window.sessionStorage.setItem(SNOOZE_KEY, "1");
+  }
+
+  // iOS/iPadOS in a regular Safari tab: Notification/PushManager may not
+  // even be present here (isNotificationSupported() below would just
+  // return null silently), so this has to be checked first and shown
+  // regardless — the fix is a completely different action (install to
+  // Home Screen) from the "tap this button" flow everywhere else.
+  if (iosNeedsInstall) {
+    if (dismissedThisSession) return null;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-orange-200 bg-orange-50 px-4 py-2.5 text-xs font-medium text-orange-900 md:px-6">
+        <span className="flex items-center gap-1.5">
+          <span className="text-sm" aria-hidden="true">
+            📲
+          </span>
+          On iPhone/iPad, order notifications only work after adding this to your Home Screen: tap the Share
+          icon, then &quot;Add to Home Screen,&quot; and open RestroMitra from that icon instead of Safari.
+        </span>
+        <button
+          type="button"
+          onClick={dismiss}
+          className="rounded-full px-2 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100"
+        >
+          Not now
+        </button>
+      </div>
+    );
   }
 
   if (!supported) return null;
