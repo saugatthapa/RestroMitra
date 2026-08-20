@@ -30,7 +30,7 @@ export async function PATCH(
   }
   try {
     const { slug, tableId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_TABLES,
     );
@@ -44,7 +44,10 @@ export async function PATCH(
     if (!existing) {
       return NextResponse.json({ error: "Table not found." }, { status: 404 });
     }
-    await requireBranchAccess(session.user.id, restaurantId, existing.branchId);
+    await requireBranchAccess(session.user.id, restaurantId, existing.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
 
     const parsed = await parseJsonBody(request, updateTableStatusSchema);
     if (!parsed.ok) return parsed.response;

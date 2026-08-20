@@ -19,7 +19,7 @@ export async function POST(
   }
   try {
     const { slug, itemId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.EDIT_MENU,
     );
@@ -31,7 +31,7 @@ export async function POST(
     if (!parsed.ok) return parsed.response;
 
     if (parsed.data.price > 0) {
-      await requirePermission(session.user.id, restaurantId, PERMISSIONS.EDIT_PRICE);
+      await requirePermission(session.user.id, restaurantId, PERMISSIONS.EDIT_PRICE, role);
     }
 
     const [{ total }] = await db

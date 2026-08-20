@@ -73,9 +73,27 @@ export async function computeOrderPricing(
 
   const menuItemIds = [...new Set(cartItems.map((c) => c.menuItemId))];
 
+  // Perf: this runs on every order submission (both the public QR route and
+  // staff POS), so it's the single hottest read in the app — and the
+  // default relational-query shape selects EVERY menuItems column,
+  // including `imageUrl` (a base64 data: URL that can be a few hundred KB
+  // PER item, see the schema/validation comments on it) and `description`,
+  // neither of which pricing needs at all. Explicitly projecting down to
+  // only the columns actually read below keeps this query's payload
+  // proportional to cart size, not to how many of the restaurant's menu
+  // photos happen to be attached to items in the cart.
   const rows = await db.query.menuItems.findMany({
     where: (mi, { and: and_, eq: eq_, inArray }) =>
       and_(eq_(mi.restaurantId, restaurantId), inArray(mi.id, menuItemIds)),
+    columns: {
+      id: true,
+      name: true,
+      basePriceInPaisa: true,
+      taxRateBasisPoints: true,
+      isActive: true,
+      isAvailable: true,
+      kitchenStationId: true,
+    },
     with: { variants: true, addons: true, kitchenStation: true },
   });
   const itemsById = new Map(rows.map((r) => [r.id, r]));

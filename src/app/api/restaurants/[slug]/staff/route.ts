@@ -73,7 +73,7 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_STAFF,
     );
@@ -211,6 +211,7 @@ export async function POST(
         session.user.id,
         restaurantId,
         PERMISSIONS.MANAGE_PAYROLL,
+        role,
       );
       if (canManagePayroll) {
         await db.insert(staffSalaryConfigs).values({

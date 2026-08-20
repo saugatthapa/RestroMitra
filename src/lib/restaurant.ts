@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { eq, and, asc, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { restaurants, userRoles, branches } from "@/db/schema";
@@ -18,8 +19,7 @@ export type OwnedRestaurant = {
   onboardingCompletedAt: Date | null;
 };
 
-/** All restaurants this user has an active role grant on. */
-export async function getUserRestaurants(
+async function getUserRestaurantsUncached(
   userId: string,
 ): Promise<OwnedRestaurant[]> {
   const rows = await db
@@ -41,6 +41,18 @@ export async function getUserRestaurants(
 
   return rows;
 }
+
+/**
+ * All restaurants this user has an active role grant on.
+ *
+ * Perf audit (PERFORMANCE_AUDIT.md, Phase 25) — dashboard/layout.tsx and
+ * dashboard/page.tsx both independently called this with the same userId
+ * during the same request's render. React's cache() dedupes that to one
+ * query per request; see the matching comment on getSession() in
+ * lib/auth/session.ts for why this is safe to also call from Route
+ * Handlers (it just runs uncached there, with no cross-request sharing).
+ */
+export const getUserRestaurants = cache(getUserRestaurantsUncached);
 
 export async function getRestaurantForUser(userId: string, restaurantId: string) {
   const rows = await db

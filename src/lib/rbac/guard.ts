@@ -142,12 +142,23 @@ export async function requireRestaurantAccess(
   return grant;
 }
 
+/**
+ * `knownRole` — perf: pass the role when the caller already resolved it in
+ * this same request (almost always via resolveRestaurantContext just
+ * before this call) to skip re-deriving it from scratch (isPlatformAdmin +
+ * a userRoles select). Every existing call site that omits it keeps
+ * behaving exactly as before — this is purely additive. See
+ * PERFORMANCE_AUDIT.md's §3 finding: this exact re-derivation, repeated 2-3x
+ * per request across nearly every route, was one of the most repeated
+ * avoidable costs in the app.
+ */
 export async function requirePermission(
   userId: string,
   restaurantId: string,
   permission: PermissionKey,
+  knownRole?: string,
 ): Promise<void> {
-  const { role } = await requireRestaurantAccess(userId, restaurantId);
+  const role = knownRole ?? (await requireRestaurantAccess(userId, restaurantId)).role;
 
   if (role === "platform_admin" || role === "owner") return;
 
@@ -178,16 +189,18 @@ export async function requirePermission(
  * narrower UPDATE_KDS_STATUS, held by kitchen_staff). Still fails closed:
  * an empty permissions list is always denied, never trivially satisfied.
  */
+/** `knownRole` — see requirePermission's doc comment; same perf rationale. */
 export async function requireAnyPermission(
   userId: string,
   restaurantId: string,
   permissions: PermissionKey[],
+  knownRole?: string,
 ): Promise<void> {
   if (permissions.length === 0) {
     throw new AuthError("No permission would satisfy this action.", 403);
   }
 
-  const { role } = await requireRestaurantAccess(userId, restaurantId);
+  const role = knownRole ?? (await requireRestaurantAccess(userId, restaurantId)).role;
 
   if (role === "platform_admin" || role === "owner") return;
 
@@ -219,13 +232,15 @@ export async function requireAnyPermission(
  * whenever the answer is "reject the request" rather than "adjust what
  * comes back".
  */
+/** `knownRole` — see requirePermission's doc comment; same perf rationale. */
 export async function hasPermission(
   userId: string,
   restaurantId: string,
   permission: PermissionKey,
+  knownRole?: string,
 ): Promise<boolean> {
   try {
-    await requirePermission(userId, restaurantId, permission);
+    await requirePermission(userId, restaurantId, permission, knownRole);
     return true;
   } catch (err) {
     if (err instanceof AuthError) return false;
@@ -254,15 +269,20 @@ export async function requireRestaurantBySlug(
   return { restaurantId: restaurant.id, ...grant };
 }
 
+/**
+ * `knownGrant` — perf: pass `{ role, branchId }` when the caller already
+ * resolved it this request (typically resolveRestaurantContext's return
+ * value) to skip re-deriving it from scratch. See requirePermission's doc
+ * comment for the same rationale; omitting this behaves exactly as before.
+ */
 export async function requireBranchAccess(
   userId: string,
   restaurantId: string,
   branchId: string,
+  knownGrant?: { role: string; branchId: string | null },
 ): Promise<void> {
-  const { role, branchId: grantedBranchId } = await requireRestaurantAccess(
-    userId,
-    restaurantId,
-  );
+  const { role, branchId: grantedBranchId } =
+    knownGrant ?? (await requireRestaurantAccess(userId, restaurantId));
 
   // Owners/managers/platform admins with a NULL branchId on their grant
   // have access to all branches of the restaurant. Staff scoped to a

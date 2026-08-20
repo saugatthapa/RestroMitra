@@ -31,7 +31,7 @@ export async function PATCH(
   }
   try {
     const { slug, itemId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.EDIT_MENU,
     );
@@ -49,7 +49,7 @@ export async function PATCH(
     // someone who already has edit_menu (e.g. a manager, per the default
     // role matrix, can restructure the menu but not change prices).
     if (data.price !== undefined) {
-      await requirePermission(session.user.id, restaurantId, PERMISSIONS.EDIT_PRICE);
+      await requirePermission(session.user.id, restaurantId, PERMISSIONS.EDIT_PRICE, role);
     }
 
     if (data.categoryId) {

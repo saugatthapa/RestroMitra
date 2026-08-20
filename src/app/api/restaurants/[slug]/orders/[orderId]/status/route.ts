@@ -45,7 +45,7 @@ export async function PATCH(
   }
   try {
     const { slug, orderId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(slug);
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(slug);
 
     const parsed = await parseJsonBody(request, updateOrderStatusSchema);
     if (!parsed.ok) return parsed.response;
@@ -68,7 +68,13 @@ export async function PATCH(
     // belonging to a DIFFERENT branch of the same restaurant. An
     // unrestricted owner/manager/platform_admin grant (branchId === null)
     // still passes through untouched.
-    await requireBranchAccess(session.user.id, restaurantId, existing.branchId);
+    // Perf: pass the grant resolveRestaurantContext already fetched above
+    // instead of re-deriving it twice more (once per call below) — see
+    // guard.ts's requireBranchAccess/requireAnyPermission doc comments.
+    await requireBranchAccess(session.user.id, restaurantId, existing.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
 
     const allowedPermissions =
       targetStatus === "cancelled"
@@ -76,7 +82,7 @@ export async function PATCH(
         : isKitchenTransition(currentStatus, targetStatus)
           ? [PERMISSIONS.EDIT_ORDER, PERMISSIONS.UPDATE_KDS_STATUS]
           : [PERMISSIONS.EDIT_ORDER];
-    await requireAnyPermission(session.user.id, restaurantId, allowedPermissions);
+    await requireAnyPermission(session.user.id, restaurantId, allowedPermissions, role);
 
     if (!canTransition(currentStatus, targetStatus)) {
       return NextResponse.json(

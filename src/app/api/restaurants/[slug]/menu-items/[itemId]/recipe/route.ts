@@ -38,7 +38,7 @@ export async function GET(
 ) {
   try {
     const { slug, itemId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_INVENTORY,
     );
@@ -53,7 +53,7 @@ export async function GET(
       with: { inventoryItem: true },
     });
 
-    const canViewProfit = await hasPermission(session.user.id, restaurantId, PERMISSIONS.VIEW_PROFIT);
+    const canViewProfit = await hasPermission(session.user.id, restaurantId, PERMISSIONS.VIEW_PROFIT, role);
 
     const items = rows.map((line) => ({
       id: line.id,

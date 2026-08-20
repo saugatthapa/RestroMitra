@@ -19,9 +19,9 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, branchId: grantedBranchId } = await resolveRestaurantContext(slug);
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(slug);
 
-    const canViewAll = await hasPermission(session.user.id, restaurantId, PERMISSIONS.MANAGE_STAFF);
+    const canViewAll = await hasPermission(session.user.id, restaurantId, PERMISSIONS.MANAGE_STAFF, role);
 
     // Phase 11a: a branch-scoped viewer's own grant always wins; an
     // unrestricted manager/owner can narrow the roster to one branch via
@@ -31,7 +31,10 @@ export async function GET(
     const requestedBranchId = url.searchParams.get("branchId");
     const effectiveBranchId = grantedBranchId ?? requestedBranchId;
     if (effectiveBranchId) {
-      await requireBranchAccess(session.user.id, restaurantId, effectiveBranchId);
+      await requireBranchAccess(session.user.id, restaurantId, effectiveBranchId, {
+        role,
+        branchId: grantedBranchId,
+      });
     }
 
     const rows = await db

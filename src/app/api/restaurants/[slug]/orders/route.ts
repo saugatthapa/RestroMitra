@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { orders, orderItems, orderItemAddons, restaurantTables, customers, branches } from "@/db/schema";
@@ -38,7 +39,7 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, branchId: grantedBranchId } = await resolveRestaurantContext(slug);
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(slug);
 
     const url = new URL(request.url);
     const statusParam = url.searchParams.get("status");
@@ -53,7 +54,10 @@ export async function GET(
     const requestedBranchId = url.searchParams.get("branchId");
     const effectiveBranchId = grantedBranchId ?? requestedBranchId;
     if (effectiveBranchId) {
-      await requireBranchAccess(session.user.id, restaurantId, effectiveBranchId);
+      await requireBranchAccess(session.user.id, restaurantId, effectiveBranchId, {
+        role,
+        branchId: grantedBranchId,
+      });
     }
 
     const cutoff = new Date(Date.now() - ORDER_LIST_WINDOW_MS);
@@ -98,7 +102,7 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, branchId: grantedBranchId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.CREATE_ORDER,
     );
@@ -154,7 +158,10 @@ export async function POST(
       branchId = main.id;
     }
 
-    await requireBranchAccess(session.user.id, restaurantId, branchId);
+    await requireBranchAccess(session.user.id, restaurantId, branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
 
     // A client-supplied customerId is never trusted at face value — verify
     // it actually belongs to this restaurant before it can be attached to
@@ -224,6 +231,7 @@ export async function POST(
         session.user.id,
         restaurantId,
         PERMISSIONS.APPLY_DISCOUNT,
+        role,
       );
       if (!canApplyDiscount) {
         return NextResponse.json(
@@ -267,6 +275,7 @@ export async function POST(
         session.user.id,
         restaurantId,
         PERMISSIONS.MANAGE_CUSTOMERS,
+        role,
       );
       if (!canManageCustomers) {
         return NextResponse.json(
@@ -363,36 +372,39 @@ export async function POST(
             });
           }
 
-          for (const item of pricing.items) {
-            const [insertedItem] = await tx
-              .insert(orderItems)
-              .values({
-                orderId: order.id,
-                menuItemId: item.menuItemId,
-                menuItemNameSnapshot: item.menuItemNameSnapshot,
-                variantId: item.variantId,
-                variantNameSnapshot: item.variantNameSnapshot,
-                kitchenStationId: item.kitchenStationId,
-                kitchenStationNameSnapshot: item.kitchenStationNameSnapshot,
-                unitPriceInPaisa: item.unitPriceInPaisa,
-                quantity: item.quantity,
-                lineSubtotalInPaisa: item.lineSubtotalInPaisa,
-                addonsTotalInPaisa: item.addonsTotalInPaisa,
-                lineTotalInPaisa: item.lineTotalInPaisa,
-                notes: item.notes,
-              })
-              .returning();
+          // Perf: batched the same way as the public QR order route (see
+          // that file's comment, and PERFORMANCE_AUDIT.md) — one insert for
+          // every item, one insert for every addon across the whole order,
+          // instead of a per-item loop that cost up to 2 round trips PER
+          // cart item.
+          const itemRows = pricing.items.map((item) => ({
+            id: randomUUID(),
+            orderId: order.id,
+            menuItemId: item.menuItemId,
+            menuItemNameSnapshot: item.menuItemNameSnapshot,
+            variantId: item.variantId,
+            variantNameSnapshot: item.variantNameSnapshot,
+            kitchenStationId: item.kitchenStationId,
+            kitchenStationNameSnapshot: item.kitchenStationNameSnapshot,
+            unitPriceInPaisa: item.unitPriceInPaisa,
+            quantity: item.quantity,
+            lineSubtotalInPaisa: item.lineSubtotalInPaisa,
+            addonsTotalInPaisa: item.addonsTotalInPaisa,
+            lineTotalInPaisa: item.lineTotalInPaisa,
+            notes: item.notes,
+          }));
+          await tx.insert(orderItems).values(itemRows);
 
-            if (item.addons.length > 0) {
-              await tx.insert(orderItemAddons).values(
-                item.addons.map((addon) => ({
-                  orderItemId: insertedItem.id,
-                  addonId: addon.addonId,
-                  nameSnapshot: addon.nameSnapshot,
-                  priceInPaisaSnapshot: addon.priceInPaisaSnapshot,
-                })),
-              );
-            }
+          const addonRows = pricing.items.flatMap((item, index) =>
+            item.addons.map((addon) => ({
+              orderItemId: itemRows[index].id,
+              addonId: addon.addonId,
+              nameSnapshot: addon.nameSnapshot,
+              priceInPaisaSnapshot: addon.priceInPaisaSnapshot,
+            })),
+          );
+          if (addonRows.length > 0) {
+            await tx.insert(orderItemAddons).values(addonRows);
           }
 
           await syncTableStatusFromOrders(tx, tableId);

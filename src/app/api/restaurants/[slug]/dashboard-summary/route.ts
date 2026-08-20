@@ -39,7 +39,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
     if (grantedBranchId) {
       effectiveBranchId = grantedBranchId;
     } else if (branchIdParam) {
-      await requireBranchAccess(session.user.id, restaurantId, branchIdParam);
+      await requireBranchAccess(session.user.id, restaurantId, branchIdParam, {
+        role,
+        branchId: grantedBranchId,
+      });
       effectiveBranchId = branchIdParam;
     }
 

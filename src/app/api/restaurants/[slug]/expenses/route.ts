@@ -43,12 +43,12 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(slug);
-    await requireAnyPermission(session.user.id, restaurantId, ANY_EXPENSE_PERMISSION);
+    const { session, restaurantId, role } = await resolveRestaurantContext(slug);
+    await requireAnyPermission(session.user.id, restaurantId, ANY_EXPENSE_PERMISSION, role);
 
-    const canSeeAll = await hasPermission(session.user.id, restaurantId, PERMISSIONS.MANAGE_EXPENSES) ||
-      await hasPermission(session.user.id, restaurantId, PERMISSIONS.APPROVE_EXPENSE) ||
-      await hasPermission(session.user.id, restaurantId, PERMISSIONS.PAY_EXPENSE);
+    const canSeeAll = await hasPermission(session.user.id, restaurantId, PERMISSIONS.MANAGE_EXPENSES, role) ||
+      await hasPermission(session.user.id, restaurantId, PERMISSIONS.APPROVE_EXPENSE, role) ||
+      await hasPermission(session.user.id, restaurantId, PERMISSIONS.PAY_EXPENSE, role);
 
     const url = new URL(request.url);
     const categoryId = url.searchParams.get("categoryId");
@@ -105,8 +105,8 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(slug);
-    await requireAnyPermission(session.user.id, restaurantId, ANY_EXPENSE_PERMISSION);
+    const { session, restaurantId, role } = await resolveRestaurantContext(slug);
+    await requireAnyPermission(session.user.id, restaurantId, ANY_EXPENSE_PERMISSION, role);
 
     const parsed = await parseJsonBody(request, createExpenseSchema);
     if (!parsed.ok) return parsed.response;
@@ -129,8 +129,8 @@ export async function POST(
     }
 
     const [canApprove, canPay] = await Promise.all([
-      hasPermission(session.user.id, restaurantId, PERMISSIONS.APPROVE_EXPENSE),
-      hasPermission(session.user.id, restaurantId, PERMISSIONS.PAY_EXPENSE),
+      hasPermission(session.user.id, restaurantId, PERMISSIONS.APPROVE_EXPENSE, role),
+      hasPermission(session.user.id, restaurantId, PERMISSIONS.PAY_EXPENSE, role),
     ]);
     const status = resolveInitialExpenseStatus({ canApprove, canPay });
 

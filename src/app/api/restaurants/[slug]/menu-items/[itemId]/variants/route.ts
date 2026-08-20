@@ -21,11 +21,11 @@ export async function POST(
     const { slug, itemId } = await ctx.params;
     // Creating a variant sets its price, so this needs both edit_menu
     // (adding a menu structure element) and edit_price (it has a price).
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.EDIT_MENU,
     );
-    await requirePermission(session.user.id, restaurantId, PERMISSIONS.EDIT_PRICE);
+    await requirePermission(session.user.id, restaurantId, PERMISSIONS.EDIT_PRICE, role);
 
     const item = await getOwnedMenuItem(restaurantId, itemId);
     if (!item) {

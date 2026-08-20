@@ -43,7 +43,7 @@ export async function PATCH(
   }
   try {
     const { slug, orderId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.APPLY_DISCOUNT,
     );
@@ -68,7 +68,10 @@ export async function PATCH(
       if (order.status === "cancelled") {
         return { error: "Cannot adjust a cancelled order.", status: 400 } as const;
       }
-      await requireBranchAccess(session.user.id, restaurantId, order.branchId);
+      await requireBranchAccess(session.user.id, restaurantId, order.branchId, {
+        role,
+        branchId: grantedBranchId,
+      });
 
       const totals = computeOrderTotals({
         subtotalInPaisa: order.subtotalInPaisa,

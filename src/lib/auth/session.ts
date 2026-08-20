@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { randomBytes, createHash } from "crypto";
 import { eq } from "drizzle-orm";
@@ -64,7 +65,7 @@ export async function createSession(params: {
  * — everything downstream (which restaurants this user can act on, with
  * which role) is derived from this session lookup against the database.
  */
-export async function getSession(): Promise<SessionContext | null> {
+async function getSessionUncached(): Promise<SessionContext | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
@@ -106,6 +107,24 @@ export async function getSession(): Promise<SessionContext | null> {
     },
   };
 }
+
+/**
+ * Perf audit (PERFORMANCE_AUDIT.md, Phase 25) — dashboard/layout.tsx and
+ * dashboard/page.tsx both independently called getSession() (a DB round
+ * trip) during the same request's render. Wrapping it in React's cache()
+ * deduplicates that to a single lookup per request.
+ *
+ * This is safe on a shared, persistent Node process: React's cache()
+ * dispatcher only exists while a Server Component tree is actively
+ * rendering, and Next.js resets/tears it down when that render finishes —
+ * it is NOT a global or cross-request cache. Called from anywhere outside
+ * an active render (e.g. requireAuth() in rbac/guard.ts, invoked from
+ * nearly every API Route Handler) there is no active dispatcher, so the
+ * call just falls through to getSessionUncached() directly, uncached,
+ * exactly as before this change. There is no code path by which one
+ * request's session data can be returned to a different request.
+ */
+export const getSession = cache(getSessionUncached);
 
 export async function destroySession(): Promise<void> {
   const cookieStore = await cookies();

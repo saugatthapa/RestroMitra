@@ -35,7 +35,7 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, branchId: grantedBranchId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_RESERVATIONS,
     );
@@ -44,7 +44,10 @@ export async function GET(
     const requestedBranchId = url.searchParams.get("branchId");
     const effectiveBranchId = grantedBranchId ?? requestedBranchId;
     if (effectiveBranchId) {
-      await requireBranchAccess(session.user.id, restaurantId, effectiveBranchId);
+      await requireBranchAccess(session.user.id, restaurantId, effectiveBranchId, {
+        role,
+        branchId: grantedBranchId,
+      });
     }
 
     const dateParam = url.searchParams.get("date");
@@ -91,7 +94,7 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, branchId: grantedBranchId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_RESERVATIONS,
     );
@@ -156,7 +159,10 @@ export async function POST(
         branchId = grantedBranchId ?? null;
       }
       if (branchId) {
-        await requireBranchAccess(session.user.id, restaurantId, branchId);
+        await requireBranchAccess(session.user.id, restaurantId, branchId, {
+          role,
+          branchId: grantedBranchId,
+        });
       }
 
       const [inserted] = await tx

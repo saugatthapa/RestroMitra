@@ -25,13 +25,16 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, branchId: grantedBranchId } = await resolveRestaurantContext(slug);
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(slug);
 
     const url = new URL(request.url);
     const requestedBranchId = url.searchParams.get("branchId");
     const effectiveBranchId = grantedBranchId ?? requestedBranchId;
     if (effectiveBranchId) {
-      await requireBranchAccess(session.user.id, restaurantId, effectiveBranchId);
+      await requireBranchAccess(session.user.id, restaurantId, effectiveBranchId, {
+        role,
+        branchId: grantedBranchId,
+      });
     }
 
     const rows = await db
@@ -59,7 +62,7 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, branchId: grantedBranchId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_TABLES,
     );
@@ -93,7 +96,10 @@ export async function POST(
       branchId = main.id;
     }
 
-    await requireBranchAccess(session.user.id, restaurantId, branchId);
+    await requireBranchAccess(session.user.id, restaurantId, branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
 
     // Token collisions are astronomically unlikely (32 random bytes) but a
     // unique index backs this regardless — retry once on the off chance.

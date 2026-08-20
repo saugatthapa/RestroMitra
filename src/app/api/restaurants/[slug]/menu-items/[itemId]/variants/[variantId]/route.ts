@@ -28,7 +28,7 @@ export async function PATCH(
   }
   try {
     const { slug, itemId, variantId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.EDIT_MENU,
     );
@@ -46,7 +46,7 @@ export async function PATCH(
 
     const { price, ...rest } = parsed.data;
     if (price !== undefined) {
-      await requirePermission(session.user.id, restaurantId, PERMISSIONS.EDIT_PRICE);
+      await requirePermission(session.user.id, restaurantId, PERMISSIONS.EDIT_PRICE, role);
     }
 
     const [updated] = await db

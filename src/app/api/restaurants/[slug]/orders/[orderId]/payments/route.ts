@@ -46,7 +46,7 @@ export async function POST(
   }
   try {
     const { slug, orderId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.EDIT_ORDER,
     );
@@ -76,7 +76,10 @@ export async function POST(
       // missed payments/refunds — a branch-scoped waiter/cashier could
       // record a payment against an order belonging to a DIFFERENT branch
       // of the same restaurant. Same fix, same reasoning, applied here.
-      await requireBranchAccess(session.user.id, restaurantId, order.branchId);
+      await requireBranchAccess(session.user.id, restaurantId, order.branchId, {
+        role,
+        branchId: grantedBranchId,
+      });
 
       const existingPayments = await tx
         .select({ amountInPaisa: payments.amountInPaisa, tipInPaisa: payments.tipInPaisa })

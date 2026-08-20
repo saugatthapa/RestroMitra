@@ -55,7 +55,7 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, branchId: grantedBranchId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.VIEW_REPORTS,
     );
@@ -78,7 +78,10 @@ export async function GET(
     if (grantedBranchId) {
       effectiveBranchId = grantedBranchId;
     } else if (branchIdParam) {
-      await requireBranchAccess(session.user.id, restaurantId, branchIdParam);
+      await requireBranchAccess(session.user.id, restaurantId, branchIdParam, {
+        role,
+        branchId: grantedBranchId,
+      });
       effectiveBranchId = branchIdParam;
     }
 

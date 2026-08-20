@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { restaurantTables, restaurants, orders, orderItems, orderItemAddons } from "@/db/schema";
@@ -117,36 +118,46 @@ export async function POST(
             })
             .returning();
 
-          for (const item of pricing.items) {
-            const [insertedItem] = await tx
-              .insert(orderItems)
-              .values({
-                orderId: order.id,
-                menuItemId: item.menuItemId,
-                menuItemNameSnapshot: item.menuItemNameSnapshot,
-                variantId: item.variantId,
-                variantNameSnapshot: item.variantNameSnapshot,
-                kitchenStationId: item.kitchenStationId,
-                kitchenStationNameSnapshot: item.kitchenStationNameSnapshot,
-                unitPriceInPaisa: item.unitPriceInPaisa,
-                quantity: item.quantity,
-                lineSubtotalInPaisa: item.lineSubtotalInPaisa,
-                addonsTotalInPaisa: item.addonsTotalInPaisa,
-                lineTotalInPaisa: item.lineTotalInPaisa,
-                notes: item.notes,
-              })
-              .returning();
+          // Perf: previously this looped one cart item at a time — insert
+          // the item, then (if it had addons) a second insert for those —
+          // meaning a 5-item order with addons on every item cost up to 10
+          // sequential round trips here alone, scaling linearly with cart
+          // size. Generating each item's id up front (instead of relying on
+          // the column default + a `.returning()` round trip to learn it)
+          // lets every item go in ONE batched insert, and every addon
+          // across the whole order go in a second batched insert — this
+          // section is now exactly 2 round trips (1 if nothing in the cart
+          // has addons), regardless of how many items are in the cart. See
+          // PERFORMANCE_AUDIT.md — this was the single biggest lever in how
+          // long it takes before the new-order alert can fire.
+          const itemRows = pricing.items.map((item) => ({
+            id: randomUUID(),
+            orderId: order.id,
+            menuItemId: item.menuItemId,
+            menuItemNameSnapshot: item.menuItemNameSnapshot,
+            variantId: item.variantId,
+            variantNameSnapshot: item.variantNameSnapshot,
+            kitchenStationId: item.kitchenStationId,
+            kitchenStationNameSnapshot: item.kitchenStationNameSnapshot,
+            unitPriceInPaisa: item.unitPriceInPaisa,
+            quantity: item.quantity,
+            lineSubtotalInPaisa: item.lineSubtotalInPaisa,
+            addonsTotalInPaisa: item.addonsTotalInPaisa,
+            lineTotalInPaisa: item.lineTotalInPaisa,
+            notes: item.notes,
+          }));
+          await tx.insert(orderItems).values(itemRows);
 
-            if (item.addons.length > 0) {
-              await tx.insert(orderItemAddons).values(
-                item.addons.map((addon) => ({
-                  orderItemId: insertedItem.id,
-                  addonId: addon.addonId,
-                  nameSnapshot: addon.nameSnapshot,
-                  priceInPaisaSnapshot: addon.priceInPaisaSnapshot,
-                })),
-              );
-            }
+          const addonRows = pricing.items.flatMap((item, index) =>
+            item.addons.map((addon) => ({
+              orderItemId: itemRows[index].id,
+              addonId: addon.addonId,
+              nameSnapshot: addon.nameSnapshot,
+              priceInPaisaSnapshot: addon.priceInPaisaSnapshot,
+            })),
+          );
+          if (addonRows.length > 0) {
+            await tx.insert(orderItemAddons).values(addonRows);
           }
 
           await syncTableStatusFromOrders(tx, resolved.tableId);
@@ -168,35 +179,43 @@ export async function POST(
       throw lastError ?? new Error("Failed to create order after retries.");
     }
 
-    await recordAuditLog({
-      restaurantId: resolved.restaurantId,
-      userId: null,
-      action: "order.placed",
-      resourceType: "order",
-      resourceId: insertedOrder.id,
-      ipAddress: getClientIp(request),
-      metadata: {
-        source: "qr_customer",
-        tableId: resolved.tableId,
-        tableName: resolved.tableName,
-        totalInPaisa: insertedOrder.totalInPaisa,
-        itemCount: pricing.items.length,
-      },
-    });
-
-    await publishEvent(db, {
-      restaurantId: resolved.restaurantId,
-      branchId: resolved.branchId,
-      type: "order.created",
-      payload: {
-        orderId: insertedOrder.id,
-        orderNumber: insertedOrder.orderNumber,
-        tableId: resolved.tableId,
-        tableName: resolved.tableName,
-        status: insertedOrder.status,
-        totalInPaisa: insertedOrder.totalInPaisa,
-      },
-    });
+    // Perf: the audit log write and the realtime publish are independent —
+    // neither reads the other's result — but were previously awaited one
+    // after another, adding a full extra round trip before the SSE event
+    // (and therefore the dashboard alarm) could fire. Both use the plain
+    // `db` pool handle (not a shared transaction), so running them via
+    // Promise.all is a genuine second connection in parallel, not just
+    // pipelined on one — this is a real, not illusory, latency win.
+    await Promise.all([
+      recordAuditLog({
+        restaurantId: resolved.restaurantId,
+        userId: null,
+        action: "order.placed",
+        resourceType: "order",
+        resourceId: insertedOrder.id,
+        ipAddress: getClientIp(request),
+        metadata: {
+          source: "qr_customer",
+          tableId: resolved.tableId,
+          tableName: resolved.tableName,
+          totalInPaisa: insertedOrder.totalInPaisa,
+          itemCount: pricing.items.length,
+        },
+      }),
+      publishEvent(db, {
+        restaurantId: resolved.restaurantId,
+        branchId: resolved.branchId,
+        type: "order.created",
+        payload: {
+          orderId: insertedOrder.id,
+          orderNumber: insertedOrder.orderNumber,
+          tableId: resolved.tableId,
+          tableName: resolved.tableName,
+          status: insertedOrder.status,
+          totalInPaisa: insertedOrder.totalInPaisa,
+        },
+      }),
+    ]);
 
     // Phase 25 — the SSE publish above only reaches a tab/app that's
     // currently open; Web Push is what reaches staff whose phone has the

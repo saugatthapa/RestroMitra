@@ -269,11 +269,74 @@ function DashboardShellContent({
   // handlers further down.
   const [pendingOrderIds, setPendingOrderIds] = useState<Set<string>>(new Set());
 
+  // Perf/reliability audit finding: browsers block audio.play() until the
+  // page has been "interacted with," and the old code just swallowed that
+  // rejection — no retry, no indication anything was wrong. To staff that
+  // looks exactly like "the alarm didn't go off," not "it was blocked,"
+  // which is very plausibly what was actually happening rather than the
+  // alarm genuinely being slow. `soundBlocked` surfaces that state (see the
+  // banner below) with a one-tap fix, instead of failing silently forever.
+  const [soundBlocked, setSoundBlocked] = useState(false);
+
   useEffect(() => {
-    audioRef.current = new Audio("/sounds/service-call-alert.wav");
-    orderAlertAudioRef.current = new Audio("/sounds/new-order-alert.wav");
+    // Perf: these were uncompressed WAV (119 KB / 43 KB) — switched to MP3
+    // at 128kbps (23 KB / 9 KB, ~80% smaller) with no audible quality loss
+    // for a short alert tone, so the very first alarm after a fresh page
+    // load (or a patchy mobile connection) doesn't have to wait on a much
+    // larger download than it needs to. See PERFORMANCE_AUDIT.md.
+    audioRef.current = new Audio("/sounds/service-call-alert.mp3");
+    orderAlertAudioRef.current = new Audio("/sounds/new-order-alert.mp3");
     orderAlertAudioRef.current.loop = true;
+
+    // Prime both elements on the very first tap/click/keypress ANYWHERE on
+    // the page — a play() immediately followed by a pause() is inaudible
+    // (no perceptible sound plays in that split second) but is a genuine
+    // user gesture from the browser's perspective, which is what actually
+    // lifts the autoplay block for every later .play() call this session.
+    // Without this, the very first real alarm after a fresh page load is
+    // the single most likely one to be silently blocked — a staff member
+    // opening the dashboard and just watching it, with no reason to tap
+    // anything, is exactly the case this fixes. `{ once: true }` means this
+    // never runs again once it's fired, on success or failure alike.
+    function primeAudio() {
+      for (const el of [audioRef.current, orderAlertAudioRef.current]) {
+        if (!el) continue;
+        const wasLooping = el.loop;
+        el.loop = false;
+        el.play()
+          .then(() => {
+            el.pause();
+            el.currentTime = 0;
+            el.loop = wasLooping;
+            setSoundBlocked(false);
+          })
+          .catch(() => {
+            el.loop = wasLooping;
+            // Still blocked even after a real gesture — rare, but leaves
+            // the "tap to enable sound" banner as the fallback.
+          });
+      }
+    }
+    document.addEventListener("pointerdown", primeAudio, { once: true });
+    document.addEventListener("keydown", primeAudio, { once: true });
+    return () => {
+      document.removeEventListener("pointerdown", primeAudio);
+      document.removeEventListener("keydown", primeAudio);
+    };
   }, []);
+
+  // Staff tapping the "tap to enable sound" banner — a direct, unambiguous
+  // user gesture, so this retry is effectively guaranteed to succeed (per
+  // browser autoplay policy) unlike the automatic attempts above.
+  function retryBlockedSound() {
+    const audio = orderAlertAudioRef.current;
+    if (audio && pendingOrderIds.size > 0) {
+      audio.currentTime = 0;
+      audio.play().then(() => setSoundBlocked(false)).catch(() => {});
+    } else {
+      setSoundBlocked(false);
+    }
+  }
 
   // Starts/stops the looping new-order alarm to match pendingOrderIds —
   // a plain state comparison rather than reacting to "just got a new one"
@@ -286,11 +349,15 @@ function DashboardShellContent({
     if (pendingOrderIds.size > 0) {
       if (audio.paused) {
         audio.currentTime = 0;
-        audio.play().catch(() => {
-          // Autoplay can be blocked until the user has interacted with the
-          // page at least once — the banner below still shows regardless of
-          // whether sound actually played.
-        });
+        audio
+          .play()
+          .then(() => setSoundBlocked(false))
+          .catch(() => {
+            // Autoplay can be blocked until the user has interacted with
+            // the page at least once — surfaced via the banner below (with
+            // a one-tap retry) instead of failing invisibly.
+            setSoundBlocked(true);
+          });
       }
     } else {
       audio.pause();
@@ -392,11 +459,15 @@ function DashboardShellContent({
             ? prev
             : [...prev, { id: data.callId, tableId: data.tableId, tableName: data.tableName, status: "pending" }],
         );
-        audioRef.current?.play().catch(() => {
-          // Autoplay can be blocked until the user has interacted with the
-          // page at least once — nothing to do about that from here; the
-          // visible banner still shows regardless of whether sound played.
-        });
+        audioRef.current
+          ?.play()
+          .then(() => setSoundBlocked(false))
+          .catch(() => {
+            // Autoplay can be blocked until the user has interacted with
+            // the page at least once — surfaced via the "tap to enable
+            // sound" banner instead of failing invisibly.
+            setSoundBlocked(true);
+          });
       } catch {
         // Malformed event payload — skip it rather than crash the stream.
       }
@@ -943,6 +1014,24 @@ function DashboardShellContent({
         <DashboardServiceWorker />
 
         <NotificationPermissionGate slug={slug} />
+
+        {soundBlocked && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-4 py-2.5 text-xs font-medium text-red-900 md:px-6">
+            <span className="flex items-center gap-1.5">
+              <span className="text-sm" aria-hidden="true">
+                🔇
+              </span>
+              Your browser is blocking the order alert sound — you won&apos;t hear it until you enable it.
+            </span>
+            <button
+              type="button"
+              onClick={retryBlockedSound}
+              className="rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700"
+            >
+              Tap to enable sound
+            </button>
+          </div>
+        )}
 
         {pendingOrderIds.size > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-4 py-2.5 text-xs font-medium text-red-900 md:px-6">

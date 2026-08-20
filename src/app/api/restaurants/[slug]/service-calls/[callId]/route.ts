@@ -31,7 +31,7 @@ export async function PATCH(
   }
   try {
     const { slug, callId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.VIEW_SERVICE_CALLS,
     );
@@ -47,7 +47,10 @@ export async function PATCH(
       return NextResponse.json({ error: "Service call not found." }, { status: 404 });
     }
 
-    await requireBranchAccess(session.user.id, restaurantId, existing.branchId);
+    await requireBranchAccess(session.user.id, restaurantId, existing.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
 
     if (action === "acknowledge" && existing.status !== "pending") {
       throw new HttpError(`Cannot acknowledge a call that is already "${existing.status}".`);

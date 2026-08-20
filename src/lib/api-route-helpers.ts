@@ -66,7 +66,12 @@ export async function resolveRestaurantContext(
     await requireActiveSubscription(restaurantId);
   }
   if (permission) {
-    await requirePermission(session.user.id, restaurantId, permission);
+    // Perf: `role` was already resolved by requireRestaurantBySlug above
+    // (which itself calls requireRestaurantAccess) — passing it through
+    // skips requirePermission re-deriving the identical answer via a
+    // second isPlatformAdmin + userRoles round trip. See guard.ts's
+    // requirePermission doc comment and PERFORMANCE_AUDIT.md.
+    await requirePermission(session.user.id, restaurantId, permission, role);
   }
   return { session, restaurantId, role, branchId };
 }
