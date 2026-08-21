@@ -3,6 +3,7 @@ import {
   PLANS,
   PLAN_MAP,
   getPlanByKey,
+  getEffectivePlan,
   maxStaffForRestaurant,
   TRIAL_MAX_STAFF,
   maxBranchesForRestaurant,
@@ -78,6 +79,30 @@ describe("getPlanByKey", () => {
     expect(getPlanByKey(null)).toBeNull();
     expect(getPlanByKey(undefined)).toBeNull();
     expect(getPlanByKey("not-a-real-plan")).toBeNull();
+  });
+});
+
+describe("getEffectivePlan", () => {
+  it("returns the catalog plan unchanged when no price is locked", () => {
+    const effective = getEffectivePlan({ planKey: "growth", lockedMonthlyPriceInPaisa: null });
+    expect(effective?.priceInPaisaMonthly).toBe(PLAN_MAP.growth.priceInPaisaMonthly);
+  });
+
+  it("overrides only the price when a lock is set, keeping every other field", () => {
+    const effective = getEffectivePlan({ planKey: "growth", lockedMonthlyPriceInPaisa: 179_900 });
+    expect(effective?.priceInPaisaMonthly).toBe(179_900);
+    expect(effective?.name).toBe(PLAN_MAP.growth.name);
+    expect(effective?.features).toEqual(PLAN_MAP.growth.features);
+    expect(effective?.maxStaff).toBe(PLAN_MAP.growth.maxStaff);
+  });
+
+  it("downstream price helpers respect the lock automatically", () => {
+    const effective = getEffectivePlan({ planKey: "growth", lockedMonthlyPriceInPaisa: 179_900 });
+    expect(yearlyPriceInPaisa(effective!)).toBe(1_799_000);
+  });
+
+  it("returns null for an unassigned/unknown plan regardless of any lock", () => {
+    expect(getEffectivePlan({ planKey: null, lockedMonthlyPriceInPaisa: 179_900 })).toBeNull();
   });
 });
 

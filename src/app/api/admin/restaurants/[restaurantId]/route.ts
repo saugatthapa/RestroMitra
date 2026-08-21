@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { restaurants, userRoles, users, subscriptionEvents } from "@/db/schema";
 import { requirePlatformAdmin } from "@/lib/rbac/guard";
 import { toErrorResponse } from "@/lib/api-route-helpers";
-import { getPlanByKey } from "@/lib/plans";
+import { getEffectivePlan } from "@/lib/plans";
 
 const EVENT_HISTORY_LIMIT = 50;
 
@@ -70,7 +70,8 @@ export async function GET(
         subscriptionStatus: restaurant.subscriptionStatus,
         trialEndsAt: restaurant.trialEndsAt,
         planKey: restaurant.planKey,
-        plan: getPlanByKey(restaurant.planKey),
+        plan: getEffectivePlan(restaurant),
+        lockedMonthlyPriceInPaisa: restaurant.lockedMonthlyPriceInPaisa,
         isActive: restaurant.isActive,
         createdAt: restaurant.createdAt,
       },

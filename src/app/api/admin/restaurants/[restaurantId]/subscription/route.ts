@@ -51,6 +51,12 @@ export async function PATCH(
     let toStatus = fromStatus;
     let newTrialEndsAt = existing.trialEndsAt;
     let newPlanKey = existing.planKey;
+    // Cleared (never carried forward) on assign_plan below — a fresh plan
+    // assignment always means "charge today's catalog price," never "keep
+    // whatever lock happened to be sitting on this row." See
+    // src/lib/plans.ts's getEffectivePlan() and the schema comment on
+    // restaurants.lockedMonthlyPriceInPaisa.
+    let newLockedMonthlyPriceInPaisa: number | null | undefined = undefined;
     let eventType: string;
 
     switch (body.action) {
@@ -67,6 +73,7 @@ export async function PATCH(
       }
       case "assign_plan": {
         newPlanKey = body.planKey;
+        newLockedMonthlyPriceInPaisa = null;
         toStatus = body.activate ? "active" : fromStatus;
         eventType = body.activate ? "activated" : "plan_assigned";
         break;
@@ -95,6 +102,12 @@ export async function PATCH(
           subscriptionStatus: toStatus,
           trialEndsAt: newTrialEndsAt,
           planKey: newPlanKey,
+          // Only assign_plan sets this (to null); every other action
+          // leaves it as `undefined`, which Drizzle's .set() treats as
+          // "don't touch this column" — never coerced into a NULL write.
+          ...(newLockedMonthlyPriceInPaisa !== undefined
+            ? { lockedMonthlyPriceInPaisa: newLockedMonthlyPriceInPaisa }
+            : {}),
           updatedAt: new Date(),
         })
         .where(eq(restaurants.id, restaurantId))

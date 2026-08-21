@@ -183,6 +183,13 @@
       "when": 1787174604705,
       "tag": "0025_gigantic_marten_broadcloak",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1787344530052,
+      "tag": "0026_cheerful_snowbird",
+      "breakpoints": true
     }
   ]
 }

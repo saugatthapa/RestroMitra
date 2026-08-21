@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { restaurants, subscriptionEvents } from "@/db/schema";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
 import { computeSubscriptionAccess } from "@/lib/subscription";
-import { getPlanByKey } from "@/lib/plans";
+import { getEffectivePlan } from "@/lib/plans";
 
 const EVENT_HISTORY_LIMIT = 20;
 
@@ -37,6 +37,7 @@ export async function GET(
         subscriptionStatus: restaurants.subscriptionStatus,
         trialEndsAt: restaurants.trialEndsAt,
         planKey: restaurants.planKey,
+        lockedMonthlyPriceInPaisa: restaurants.lockedMonthlyPriceInPaisa,
       })
       .from(restaurants)
       .where(eq(restaurants.id, restaurantId))
@@ -65,7 +66,7 @@ export async function GET(
       subscriptionStatus: restaurant.subscriptionStatus,
       trialEndsAt: restaurant.trialEndsAt,
       planKey: restaurant.planKey,
-      plan: getPlanByKey(restaurant.planKey),
+      plan: getEffectivePlan(restaurant),
       access: computeSubscriptionAccess(restaurant),
       canManageSubscription: role === "owner" || role === "platform_admin",
       events,

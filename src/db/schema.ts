@@ -248,6 +248,19 @@ export const restaurants = pgTable(
     // that apply in the meantime). Set once a platform admin assigns/
     // activates a plan (src/app/api/admin/restaurants/[id]/subscription).
     planKey: planKeyEnum("plan_key"),
+    // Phase 25c — price grandfathering. Null means "use whatever
+    // src/lib/plans.ts's catalog currently charges for planKey" (the
+    // normal case, including every brand-new plan assignment). Set only
+    // when a restaurant was already paying a price the catalog has since
+    // moved on from — e.g. the Aug 2026 Growth reprice (Rs 1,799 → Rs
+    // 1,399/mo) locked every restaurant already on Growth at Rs 1,799/mo
+    // so a live catalog price cut never silently changes what an existing
+    // customer is actually being billed. Cleared back to null whenever a
+    // platform admin makes a fresh assign_plan call (see the admin
+    // subscription route) — a new assignment always means "charge
+    // whatever the catalog says today," never "keep the old lock." See
+    // src/lib/plans.ts's getEffectivePlan().
+    lockedMonthlyPriceInPaisa: integer("locked_monthly_price_in_paisa"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

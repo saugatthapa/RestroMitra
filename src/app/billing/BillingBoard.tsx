@@ -6,6 +6,7 @@ import {
   PLANS,
   yearlyPriceInPaisa,
   monthlyEquivalentWhenYearlyInPaisa,
+  type Plan,
   type PlanKey,
 } from "@/lib/plans";
 import { SUBSCRIPTION_STATUS_LABELS, daysRemaining, type SubscriptionStatus } from "@/lib/subscription";
@@ -14,6 +15,12 @@ type BillingInfo = {
   subscriptionStatus: SubscriptionStatus;
   trialEndsAt: string | null;
   planKey: PlanKey | null;
+  // The plan this restaurant is ACTUALLY being charged — same features as
+  // the matching PLANS entry, but its priceInPaisaMonthly may be locked to
+  // an older rate (see getEffectivePlan() in lib/plans.ts). Only trust
+  // this for "what am I currently paying" — for "what would a new/switched
+  // plan cost," the live PLANS catalog below is the correct source.
+  plan: Plan | null;
   access: { allowed: boolean; reason: string };
   canManageSubscription: boolean;
   events: {
@@ -135,7 +142,8 @@ export function BillingBoard({ slug }: { slug: string }) {
             )}
             {data.subscriptionStatus === "active" && data.planKey && (
               <p className="mt-1 text-sm text-neutral-600">
-                You&apos;re on the {PLANS.find((p) => p.key === data.planKey)?.name} plan.
+                You&apos;re on the {PLANS.find((p) => p.key === data.planKey)?.name} plan
+                {data.plan && ` at ${formatRupees(data.plan.priceInPaisaMonthly)}/mo`}.
               </p>
             )}
             {data.subscriptionStatus === "past_due" && (
@@ -189,6 +197,11 @@ export function BillingBoard({ slug }: { slug: string }) {
         {PLANS.map((plan) => {
           const isCurrent = data.planKey === plan.key && data.subscriptionStatus === "active";
           const alreadyRequested = requestedPlans.has(plan.key);
+          // Current plan: show what this restaurant is ACTUALLY paying
+          // (may be locked to an older rate). Every other card is a
+          // potential switch, so it always shows today's live catalog
+          // price — never a lock that wouldn't apply to it.
+          const displayPlan = isCurrent && data.plan ? data.plan : plan;
           return (
             <div
               key={plan.key}
@@ -204,19 +217,24 @@ export function BillingBoard({ slug }: { slug: string }) {
               <h3 className="text-base font-semibold text-neutral-900">{plan.name}</h3>
               {billingCycle === "monthly" ? (
                 <p className="mt-1 text-2xl font-bold text-neutral-900">
-                  {formatRupees(plan.priceInPaisaMonthly)}
+                  {formatRupees(displayPlan.priceInPaisaMonthly)}
                   <span className="text-sm font-normal text-neutral-500">/mo</span>
                 </p>
               ) : (
                 <>
                   <p className="mt-1 text-2xl font-bold text-neutral-900">
-                    {formatRupees(monthlyEquivalentWhenYearlyInPaisa(plan))}
+                    {formatRupees(monthlyEquivalentWhenYearlyInPaisa(displayPlan))}
                     <span className="text-sm font-normal text-neutral-500">/mo</span>
                   </p>
                   <p className="text-xs text-neutral-500">
-                    {formatRupees(yearlyPriceInPaisa(plan))} billed yearly
+                    {formatRupees(yearlyPriceInPaisa(displayPlan))} billed yearly
                   </p>
                 </>
+              )}
+              {isCurrent && data.plan && data.plan.priceInPaisaMonthly !== plan.priceInPaisaMonthly && (
+                <p className="mt-1 text-[11px] text-neutral-400">
+                  Locked-in rate — new subscribers pay {formatRupees(plan.priceInPaisaMonthly)}/mo.
+                </p>
               )}
               <p className="mt-2 text-xs text-neutral-500">{plan.tagline}</p>
               <ul className="mt-4 flex-1 space-y-1.5 text-sm text-neutral-600">

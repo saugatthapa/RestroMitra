@@ -23,6 +23,29 @@
  * advertise — an AI assistant, offline-capable POS, eSewa/Khalti payment
  * gateways included rather than gated, a website builder), not above it.
  *
+ * PHASE 25c RECALIBRATION (Aug 2026) — Growth only, Rs 1,799 → Rs 1,399/mo.
+ * RestroHub (a real, active competitor not covered in the pass above)
+ * publishes a Standard tier — the direct feature-equivalent of Growth — at
+ * Rs 15,400/yr, and the broader "full toolkit, single outlet" cluster
+ * (Restronp Premium, NRestro's promo tier, RestroHub Standard) sits Rs
+ * 12,000–15,400/yr. Growth's old Rs 17,990/yr was the most expensive plan
+ * in that entire comparison set, ~17% above RestroHub, despite Growth
+ * genuinely outfeaturing it. Rs 1,399/mo (Rs 13,990/yr, same "10x monthly"
+ * yearly framing) undercuts RestroHub by ~9% and lands mid-cluster instead
+ * of above it. Starter and Pro are untouched — Starter already undercuts
+ * LekhaPatra's own top tier, and Pro (unlimited staff/branches) has no
+ * published competitor equivalent to benchmark against (RestroHub's only
+ * tier above Standard is custom-quoted Enterprise).
+ *
+ * This is a live catalog, and existing restaurants already active on
+ * Growth must NOT have their bill silently drop (or rise) just because
+ * this file changed — see restaurants.lockedMonthlyPriceInPaisa in
+ * src/db/schema.ts and getEffectivePlan() below, which every price-
+ * displaying route/component should read through rather than a raw
+ * getPlanByKey() when rendering a SPECIFIC restaurant's current plan.
+ * PLANS/getPlanByKey() alone are still correct for "what would a NEW
+ * signup pay" (the plan-picker grid, the marketing page).
+ *
  * Yearly = 10x the monthly price (2 months free) at every tier — the same
  * "pay 10, get 12" framing LekhaPatra and most SaaS pricing uses, simple
  * enough to explain to a non-technical owner without a discount-percent
@@ -71,7 +94,7 @@ export const PLANS: Plan[] = [
     key: "growth",
     name: "Growth",
     tagline: "For a busy restaurant that needs the full toolkit.",
-    priceInPaisaMonthly: 179_900, // Rs 1,799/mo
+    priceInPaisaMonthly: 139_900, // Rs 1,399/mo — see PHASE 25c RECALIBRATION above
     maxStaff: 15,
     maxBranches: 3,
     highlight: true,
@@ -124,6 +147,34 @@ export const PLAN_MAP: Record<PlanKey, Plan> = Object.fromEntries(
 export function getPlanByKey(key: string | null | undefined): Plan | null {
   if (!key) return null;
   return PLAN_MAP[key as PlanKey] ?? null;
+}
+
+/**
+ * The plan a SPECIFIC restaurant is actually being charged — same features
+ * and limits as the catalog entry, but with priceInPaisaMonthly overridden
+ * to `lockedMonthlyPriceInPaisa` when one is set (see the schema comment
+ * on that column: it exists so a catalog price cut/raise, like Growth's
+ * Aug 2026 recalibration, never silently changes what an already-active
+ * restaurant is billed). Every derived helper here (yearlyPriceInPaisa,
+ * monthlyEquivalentWhenYearlyInPaisa) takes a Plan and reads
+ * priceInPaisaMonthly, so they automatically respect the lock once called
+ * on the object this returns — no separate "locked yearly price" needed.
+ *
+ * Use this (not getPlanByKey) anywhere a specific restaurant's own current
+ * plan/price is being displayed — e.g. the billing page's "you're on
+ * Growth at Rs X/mo" line, or a platform admin's restaurant detail view.
+ * getPlanByKey/PLANS are still correct for "what would a new signup pay"
+ * (the plan-picker grid, the marketing page) — those should always show
+ * today's catalog price, never a lock that doesn't apply to them.
+ */
+export function getEffectivePlan(restaurant: {
+  planKey: string | null | undefined;
+  lockedMonthlyPriceInPaisa?: number | null;
+}): Plan | null {
+  const plan = getPlanByKey(restaurant.planKey);
+  if (!plan) return null;
+  if (restaurant.lockedMonthlyPriceInPaisa == null) return plan;
+  return { ...plan, priceInPaisaMonthly: restaurant.lockedMonthlyPriceInPaisa };
 }
 
 /**
