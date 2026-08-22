@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { userRoles, rolePermissions, restaurants, branches } from "@/db/schema";
 import { getSession, type SessionContext } from "@/lib/auth/session";
@@ -120,6 +120,18 @@ export async function requireRestaurantAccess(
     return { role: "platform_admin", branchId: null };
   }
 
+  // .limit(1) here relies on a real invariant, not luck: at most one
+  // ACTIVE user_roles row can ever exist for a given (userId,
+  // restaurantId) — enforced both where a grant is created (the staff
+  // POST route's existingGrant check) and where one is reactivated (the
+  // staff PATCH route's matching check), and backstopped at the DB level
+  // by user_roles_one_active_per_restaurant_unique (see schema.ts). The
+  // ORDER BY is cheap extra insurance, not the load-bearing guarantee: if
+  // that invariant were ever violated some other way (a manual DB edit, a
+  // future code path that forgets the check), this at least resolves
+  // deterministically to the most recently granted role instead of
+  // whatever order Postgres happens to return, rather than silently
+  // depending on row-storage order.
   const rows = await db
     .select({ role: userRoles.role, branchId: userRoles.branchId })
     .from(userRoles)
@@ -130,6 +142,7 @@ export async function requireRestaurantAccess(
         eq(userRoles.isActive, true),
       ),
     )
+    .orderBy(desc(userRoles.createdAt))
     .limit(1);
 
   const grant = rows[0];
@@ -251,13 +264,19 @@ export async function hasPermission(
 /**
  * Resolves a restaurant by slug and confirms the given user has access to
  * it. Use this instead of trusting a restaurant_id posted from the client.
+ *
+ * Also returns `timezone` — free, since this already SELECTs the
+ * restaurant row to resolve the slug — so every route going through
+ * resolveRestaurantContext() gets it for "what day is it for this
+ * restaurant" computations (see src/lib/restaurant-date.ts) without a
+ * second query.
  */
 export async function requireRestaurantBySlug(
   userId: string,
   slug: string,
-): Promise<{ restaurantId: string; role: string; branchId: string | null }> {
+): Promise<{ restaurantId: string; role: string; branchId: string | null; timezone: string }> {
   const rows = await db
-    .select({ id: restaurants.id })
+    .select({ id: restaurants.id, timezone: restaurants.timezone })
     .from(restaurants)
     .where(eq(restaurants.slug, slug))
     .limit(1);
@@ -266,7 +285,7 @@ export async function requireRestaurantBySlug(
   if (!restaurant) throw new AuthError("Restaurant not found", 404);
 
   const grant = await requireRestaurantAccess(userId, restaurant.id);
-  return { restaurantId: restaurant.id, ...grant };
+  return { restaurantId: restaurant.id, timezone: restaurant.timezone, ...grant };
 }
 
 /**

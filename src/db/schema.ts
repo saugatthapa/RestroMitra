@@ -353,6 +353,26 @@ export const userRoles = pgTable(
       table.branchId,
       table.role,
     ),
+    // At most one ACTIVE grant per (user, restaurant) — see the staff
+    // POST route's own comment: the rest of the app (requireRestaurantAccess's
+    // single-row lookup, the dashboard's `role` display, branch scoping)
+    // assumes exactly one active role per person per restaurant, and a
+    // second active grant would make "which one wins" ambiguous rather
+    // than additive. The staff-add route already checked for this before
+    // inserting, but the staff PATCH route's reactivation path (isActive:
+    // true on a previously-deactivated grant) did NOT check for another
+    // already-active grant on the same user+restaurant first — this index
+    // is the actual backstop that makes the invariant hold everywhere,
+    // present and future, not just at the one call site that happened to
+    // remember to check. Partial (WHERE is_active) so a user can freely
+    // accumulate deactivated history rows (removed, re-added elsewhere,
+    // etc.) — only concurrently-ACTIVE rows are constrained. Excludes
+    // restaurantId IS NULL (platform_admin grants, which aren't scoped to
+    // one restaurant) since a unique index never treats multiple NULLs as
+    // colliding.
+    uniqueIndex("user_roles_one_active_per_restaurant_unique")
+      .on(table.userId, table.restaurantId)
+      .where(sql`${table.isActive} = true AND ${table.restaurantId} IS NOT NULL`),
   ],
 );
 

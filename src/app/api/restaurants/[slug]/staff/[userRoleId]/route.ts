@@ -62,6 +62,39 @@ export async function PATCH(
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
 
+    // Reactivating a previously-deactivated grant needs the same "at most
+    // one active grant per user per restaurant" check the staff-add route
+    // does on create — otherwise reactivating grant A while this same
+    // user already holds a separate active grant B here (e.g. removed as
+    // waiter@BranchA, re-added as manager@BranchB, then the old
+    // waiter@BranchA row gets reactivated too) would silently leave two
+    // active roles for one person, which the rest of this app (a single
+    // requireRestaurantAccess row, the dashboard's role display) isn't
+    // built to handle. See user_roles_one_active_per_restaurant_unique in
+    // schema.ts for the DB-level backstop this mirrors.
+    if (data.isActive === true && !existing.isActive) {
+      const conflicting = await db
+        .select({ id: userRoles.id })
+        .from(userRoles)
+        .where(
+          and(
+            eq(userRoles.userId, existing.userId),
+            eq(userRoles.restaurantId, restaurantId),
+            eq(userRoles.isActive, true),
+          ),
+        )
+        .limit(1);
+      if (conflicting.length > 0) {
+        return NextResponse.json(
+          {
+            error:
+              "This person already has a separate active role at this restaurant. Deactivate that one first.",
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     // Reassigning to a specific branch (or back to unrestricted, via an
     // explicit null) — same "resolve, don't trust" verification as the
     // create path.
