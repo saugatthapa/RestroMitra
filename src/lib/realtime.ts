@@ -1,6 +1,6 @@
 import "server-only";
 import { EventEmitter } from "node:events";
-import { and, asc, desc, eq, gt, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, like, lt, or, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db";
 import { db } from "@/db";
 import { realtimeEvents } from "@/db/schema";
@@ -150,26 +150,38 @@ export async function getLatestEventId(restaurantId: string): Promise<number> {
  * events (branchId IS NULL) and this caller's own branch's events pass;
  * a branch-scoped caller (waiter, kitchen_staff) only ever sees
  * restaurant-wide events plus their own branch's.
+ *
+ * The branch condition is applied IN THE SQL WHERE clause, before LIMIT
+ * 200 — not filtered in JS afterward. Filtering after the limit meant a
+ * branch-scoped caller could silently miss events: if 200+ OTHER
+ * branches' events landed between this caller's last-seen id and now, the
+ * query would already have cut off at row 200 before the JS filter ever
+ * saw this caller's own (rarer, in a busy multi-branch restaurant) events
+ * — and since the caller's next poll advances past whatever id it last
+ * saw, those events are gone for good, not just delayed.
  */
 export function fetchEventsForRestaurant(restaurantId: string, callerBranchId: string | null) {
   return async (afterId: number): Promise<StoredEvent[]> => {
     const rows = await db
       .select({
         id: realtimeEvents.id,
-        branchId: realtimeEvents.branchId,
         type: realtimeEvents.type,
         payload: realtimeEvents.payload,
       })
       .from(realtimeEvents)
-      .where(and(eq(realtimeEvents.restaurantId, restaurantId), gt(realtimeEvents.id, afterId)))
+      .where(
+        and(
+          eq(realtimeEvents.restaurantId, restaurantId),
+          gt(realtimeEvents.id, afterId),
+          callerBranchId
+            ? or(isNull(realtimeEvents.branchId), eq(realtimeEvents.branchId, callerBranchId))
+            : undefined,
+        ),
+      )
       .orderBy(asc(realtimeEvents.id))
       .limit(200);
 
-    const scoped = callerBranchId
-      ? rows.filter((r) => r.branchId === null || r.branchId === callerBranchId)
-      : rows;
-
-    return scoped.map((r) => ({ id: r.id, type: r.type, payload: r.payload }));
+    return rows.map((r) => ({ id: r.id, type: r.type, payload: r.payload }));
   };
 }
 
@@ -179,6 +191,13 @@ export function fetchEventsForRestaurant(restaurantId: string, callerBranchId: s
  * types only — a guest's stream must never leak order-lifecycle events for
  * other guests' orders at the same restaurant, even though those events
  * technically flow through the same restaurant-scoped log.
+ *
+ * Both the event-type prefix and the payload's tableId are matched IN THE
+ * SQL WHERE clause, before LIMIT 200 — same reasoning as
+ * fetchEventsForRestaurant above: filtering in JS after the limit meant a
+ * busy restaurant's other tables'/order events could push this table's own
+ * service-call events outside the 200-row window before the JS filter
+ * ever got to look at them.
  */
 export function fetchServiceCallEventsForTable(restaurantId: string, tableId: string) {
   return async (afterId: number): Promise<StoredEvent[]> => {
@@ -189,15 +208,18 @@ export function fetchServiceCallEventsForTable(restaurantId: string, tableId: st
         payload: realtimeEvents.payload,
       })
       .from(realtimeEvents)
-      .where(and(eq(realtimeEvents.restaurantId, restaurantId), gt(realtimeEvents.id, afterId)))
+      .where(
+        and(
+          eq(realtimeEvents.restaurantId, restaurantId),
+          gt(realtimeEvents.id, afterId),
+          like(realtimeEvents.type, "service_call.%"),
+          sql`${realtimeEvents.payload} ->> 'tableId' = ${tableId}`,
+        ),
+      )
       .orderBy(asc(realtimeEvents.id))
       .limit(200);
 
-    return rows.filter((r) => {
-      if (!r.type.startsWith("service_call.")) return false;
-      const payload = r.payload as { tableId?: string } | null;
-      return payload?.tableId === tableId;
-    });
+    return rows.map((r) => ({ id: r.id, type: r.type, payload: r.payload }));
   };
 }
 
