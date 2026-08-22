@@ -12,6 +12,7 @@ import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { recordExpenseLedgerEntry } from "@/lib/ledger";
 import { HttpError } from "@/lib/http-error";
+import { restaurantDate } from "@/lib/restaurant-date";
 
 const EXPENSE_LIST_LIMIT = 500;
 
@@ -105,7 +106,7 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, role } = await resolveRestaurantContext(slug);
+    const { session, restaurantId, role, timezone } = await resolveRestaurantContext(slug);
     await requireAnyPermission(session.user.id, restaurantId, ANY_EXPENSE_PERMISSION, role);
 
     const parsed = await parseJsonBody(request, createExpenseSchema);
@@ -138,7 +139,7 @@ export async function POST(
       throw new HttpError("A payment method is required to record this as paid.");
     }
 
-    const expenseDate = data.expenseDate ?? new Date().toISOString().slice(0, 10);
+    const expenseDate = data.expenseDate ?? restaurantDate(timezone);
     const now = new Date();
 
     // Committed together — an expense should never exist without its
@@ -173,6 +174,7 @@ export async function POST(
           categoryLabel: category.name,
           description: row.description,
           expenseDate,
+          timezone,
           recordedByUserId: session.user.id,
         });
       }

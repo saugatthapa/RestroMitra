@@ -7,6 +7,7 @@ import { isBirthdayToday } from "@/lib/loyalty-birthday";
 import { VISIT_STREAK_MILESTONE_INTERVAL } from "@/lib/loyalty-streaks";
 import { useDateSystem } from "@/lib/date-system";
 import { formatBsHint } from "@/lib/nepali-date";
+import { localDateIso } from "@/lib/local-date";
 
 type Customer = {
   id: string;
@@ -179,7 +180,7 @@ function CustomerList({
               )}
               {customers.map((c) => {
                 const tier = tierForPoints(c.lifetimePointsEarned);
-                const birthday = isBirthdayToday(c.dateOfBirth, new Date().toISOString().slice(0, 10));
+                const birthday = isBirthdayToday(c.dateOfBirth, localDateIso());
                 return (
                   <tr
                     key={c.id}
@@ -377,7 +378,7 @@ function CustomerDetail({
 
   const tier = tierForPoints(customer.lifetimePointsEarned);
   const toNext = pointsToNextTier(customer.lifetimePointsEarned);
-  const birthday = isBirthdayToday(customer.dateOfBirth, new Date().toISOString().slice(0, 10));
+  const birthday = isBirthdayToday(customer.dateOfBirth, localDateIso());
 
   return (
     <div className="space-y-4">

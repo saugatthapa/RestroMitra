@@ -22,7 +22,7 @@ export async function POST(
   }
   try {
     const { slug, entryId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_ACCOUNT_BOOKS,
     );
@@ -37,6 +37,7 @@ export async function POST(
         entryId,
         amountInPaisa: data.amount,
         note: data.note || null,
+        timezone,
         recordedByUserId: session.user.id,
       }),
     );

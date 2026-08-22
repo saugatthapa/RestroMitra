@@ -9,17 +9,12 @@ import { getReportSummary } from "@/lib/reports";
 import { buildSystemPrompt, askAssistant, AssistantApiError } from "@/lib/ai/assistant";
 import { hasValidCsrfHeader } from "@/lib/request";
 import { rateLimit } from "@/lib/rate-limit";
+import { restaurantDate } from "@/lib/restaurant-date";
 
 const RANGE_DAYS = 30;
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function daysAgoIso(days: number) {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - days);
-  return d.toISOString().slice(0, 10);
+function daysAgoIso(timezone: string, days: number) {
+  return restaurantDate(timezone, new Date(Date.now() - days * 86_400_000));
 }
 
 /**
@@ -45,7 +40,7 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.VIEW_REPORTS,
     );
@@ -71,8 +66,8 @@ export async function POST(
       .where(eq(restaurants.id, restaurantId))
       .limit(1);
 
-    const range = { from: daysAgoIso(RANGE_DAYS - 1), to: todayIso() };
-    const summary = await getReportSummary(restaurantId, range);
+    const range = { from: daysAgoIso(timezone, RANGE_DAYS - 1), to: restaurantDate(timezone) };
+    const summary = await getReportSummary(restaurantId, range, timezone);
     const systemPrompt = buildSystemPrompt(restaurant?.name ?? "your restaurant", summary);
 
     try {

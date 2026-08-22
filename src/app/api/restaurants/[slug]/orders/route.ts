@@ -102,7 +102,7 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.CREATE_ORDER,
     );
@@ -332,7 +332,7 @@ export async function POST(
               restaurantId,
               branchId: branchId!,
               tableId,
-              orderNumber: generateOrderNumber(),
+              orderNumber: generateOrderNumber(timezone),
               source: "pos",
               status: "pending",
               customerName: body.customerName || null,

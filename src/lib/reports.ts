@@ -12,6 +12,7 @@ import {
   type DailySeriesPoint,
 } from "@/lib/reports-helpers";
 import type { PaymentMethod } from "@/lib/payments";
+import { restaurantStartOfDay } from "@/lib/restaurant-date";
 
 export type ReportDateRange = {
   /** YYYY-MM-DD, inclusive. */
@@ -29,23 +30,26 @@ export type ReportDateRange = {
  * Every query here is scoped by orders.placedAt using a half-open
  * [dayStart, dayAfterEnd) range rather than a literal `<=` boundary on the
  * "to" day, so a timestamp exactly at midnight on the boundary day is
- * never ambiguously included/excluded. Dates are UTC calendar days, same
- * simplification flagged in the live dashboard's own comment — restaurants
- * table has a timezone column that isn't threaded through yet.
+ * never ambiguously included/excluded. `range.from`/`range.to` are
+ * calendar days in the RESTAURANT's own timezone (restaurants.timezone —
+ * see restaurant-date.ts), not UTC's — a restaurant on Asia/Kathmandu
+ * (UTC+5:45) asking for "today" means its own midnight-to-midnight, which
+ * is 18:15 UTC the previous day to 18:15 UTC today, not literal UTC
+ * midnight.
  */
-function dayBounds(range: ReportDateRange) {
-  const dayStart = new Date(`${range.from}T00:00:00.000Z`);
-  const dayAfterEnd = new Date(`${range.to}T00:00:00.000Z`);
-  dayAfterEnd.setUTCDate(dayAfterEnd.getUTCDate() + 1);
+function dayBounds(range: ReportDateRange, timezone: string) {
+  const dayStart = restaurantStartOfDay(timezone, range.from);
+  const dayAfterEnd = new Date(restaurantStartOfDay(timezone, range.to).getTime() + 24 * 60 * 60 * 1000);
   return { dayStart, dayAfterEnd };
 }
 
 export async function getSalesSummary(
   restaurantId: string,
   range: ReportDateRange,
+  timezone: string,
   branchId?: string,
 ) {
-  const { dayStart, dayAfterEnd } = dayBounds(range);
+  const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
   const [completedRow] = await db
     .select({
@@ -105,9 +109,10 @@ export async function getSalesSummary(
 export async function getTipsSummary(
   restaurantId: string,
   range: ReportDateRange,
+  timezone: string,
   branchId?: string,
 ): Promise<{ totalTipsInPaisa: number }> {
-  const { dayStart, dayAfterEnd } = dayBounds(range);
+  const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
   // payments has no branchId column of its own (see schema.ts) — every
   // payment belongs to exactly one order (orderId is NOT NULL), so an
@@ -134,9 +139,9 @@ export async function getTipsSummary(
 }
 
 export type PeakHourStats = {
-  /** 0–23, UTC hour-of-day (same simplification as dayBounds — see its
-   *  comment; restaurants.timezone isn't threaded through yet). Null when
-   *  there are no completed orders in range at all. */
+  /** 0–23, the restaurant's own local hour-of-day (restaurants.timezone —
+   *  see dayBounds's comment). Null when there are no completed orders in
+   *  range at all. */
   peakOrdersHour: number | null;
   peakOrdersCount: number;
   peakSalesHour: number | null;
@@ -148,20 +153,21 @@ export type PeakHourStats = {
  * order count and separately by revenue (the two don't have to agree — a
  * lunch rush might win on order count while a big evening party wins on
  * revenue). Scoped to completed orders only, same as getSalesSummary,
- * bucketed by orders.placedAt's UTC hour-of-day, summed across every day in
- * the range (i.e. "which hour tends to be busiest," not a single day's
- * hour-by-hour breakdown).
+ * bucketed by orders.placedAt's LOCAL (restaurant-timezone) hour-of-day,
+ * summed across every day in the range (i.e. "which hour tends to be
+ * busiest," not a single day's hour-by-hour breakdown).
  */
 export async function getPeakHourStats(
   restaurantId: string,
   range: ReportDateRange,
+  timezone: string,
   branchId?: string,
 ): Promise<PeakHourStats> {
-  const { dayStart, dayAfterEnd } = dayBounds(range);
+  const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
   const rows = await db
     .select({
-      hour: sql<string>`extract(hour from ${orders.placedAt} at time zone 'UTC')`,
+      hour: sql<string>`extract(hour from ${orders.placedAt} at time zone ${timezone})`,
       orderCount: sql<string>`count(*)`,
       revenueInPaisa: sql<string>`coalesce(sum(${orders.totalInPaisa}), 0)`,
     })
@@ -197,9 +203,11 @@ export async function getPeakHourStats(
 }
 
 export type HourlyHeatmapCell = {
-  /** Postgres extract(dow) convention: 0 = Sunday .. 6 = Saturday. */
+  /** Postgres extract(dow) convention: 0 = Sunday .. 6 = Saturday, computed
+   *  in the restaurant's own local timezone (so a 12:30am order reads as
+   *  the day staff actually experienced it as, not UTC's day). */
   dayOfWeek: number;
-  /** 0-23, UTC hour-of-day — same simplification as the rest of this file. */
+  /** 0-23, the restaurant's own local hour-of-day. */
   hour: number;
   orderCount: number;
   revenueInPaisa: number;
@@ -209,7 +217,7 @@ export type HourlyHeatmapCell = {
  * The hour-by-day-of-week grid behind Reports' heatmap — a finer-grained
  * sibling of getPeakHourStats (which only surfaces the single busiest
  * hour). Same scoping as every other query here (completed orders only,
- * bucketed by placedAt's UTC hour), just grouped by day-of-week too so
+ * bucketed by placedAt's LOCAL hour), just grouped by day-of-week too so
  * "Friday dinner rush" and "Tuesday lunch" can show up as separate cells
  * instead of collapsing into one "7pm" bucket for the whole range.
  * Sparse by construction — only cells with at least one order are
@@ -218,14 +226,15 @@ export type HourlyHeatmapCell = {
 export async function getHourlyHeatmap(
   restaurantId: string,
   range: ReportDateRange,
+  timezone: string,
   branchId?: string,
 ): Promise<HourlyHeatmapCell[]> {
-  const { dayStart, dayAfterEnd } = dayBounds(range);
+  const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
   const rows = await db
     .select({
-      dayOfWeek: sql<string>`extract(dow from ${orders.placedAt} at time zone 'UTC')`,
-      hour: sql<string>`extract(hour from ${orders.placedAt} at time zone 'UTC')`,
+      dayOfWeek: sql<string>`extract(dow from ${orders.placedAt} at time zone ${timezone})`,
+      hour: sql<string>`extract(hour from ${orders.placedAt} at time zone ${timezone})`,
       orderCount: sql<string>`count(*)`,
       revenueInPaisa: sql<string>`coalesce(sum(${orders.totalInPaisa}), 0)`,
     })
@@ -275,8 +284,9 @@ export type BranchComparisonRow = {
 export async function getBranchComparison(
   restaurantId: string,
   range: ReportDateRange,
+  timezone: string,
 ): Promise<BranchComparisonRow[]> {
-  const { dayStart, dayAfterEnd } = dayBounds(range);
+  const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
   const branchRows = await db
     .select({ id: branches.id, name: branches.name, isMain: branches.isMain })
@@ -344,9 +354,10 @@ export type CompletionStats = {
 export async function getCompletionStats(
   restaurantId: string,
   range: ReportDateRange,
+  timezone: string,
   branchId?: string,
 ): Promise<CompletionStats> {
-  const { dayStart, dayAfterEnd } = dayBounds(range);
+  const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
   const [totalRow] = await db
     .select({ count: sql<string>`count(*)` })
@@ -403,6 +414,13 @@ export async function getCompletionStats(
 export async function getTotalExpensesInPaisa(
   restaurantId: string,
   range: ReportDateRange,
+  // Not used for the date comparison below — expenses.expenseDate is
+  // already a plain restaurant-local calendar date (see the expenses
+  // route's own use of restaurantDate()), so no UTC conversion is needed
+  // here. Accepted anyway to keep this function's signature consistent
+  // with the rest of the module, all of which getReportSummary calls
+  // uniformly.
+  _timezone: string,
   branchId?: string,
 ): Promise<number> {
   const [row] = await db
@@ -440,13 +458,14 @@ export async function getTotalExpensesInPaisa(
 export async function getDailyRevenueVsExpenses(
   restaurantId: string,
   range: ReportDateRange,
+  timezone: string,
   branchId?: string,
 ): Promise<DailySeriesPoint[]> {
-  const { dayStart, dayAfterEnd } = dayBounds(range);
+  const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
   const revenueRows = await db
     .select({
-      day: sql<string>`to_char(${orders.placedAt} at time zone 'UTC', 'YYYY-MM-DD')`,
+      day: sql<string>`to_char(${orders.placedAt} at time zone ${timezone}, 'YYYY-MM-DD')`,
       revenueInPaisa: sql<string>`coalesce(sum(${orders.totalInPaisa}), 0)`,
     })
     .from(orders)
@@ -508,10 +527,11 @@ export type TopMenuItemRow = {
 export async function getTopMenuItems(
   restaurantId: string,
   range: ReportDateRange,
+  timezone: string,
   limit = 10,
   branchId?: string,
 ): Promise<TopMenuItemRow[]> {
-  const { dayStart, dayAfterEnd } = dayBounds(range);
+  const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
   const rows = await db
     .select({
@@ -552,9 +572,10 @@ export type PaymentBreakdownRow = { method: PaymentMethod; totalInPaisa: number 
 export async function getPaymentMethodBreakdown(
   restaurantId: string,
   range: ReportDateRange,
+  timezone: string,
   branchId?: string,
 ): Promise<PaymentBreakdownRow[]> {
-  const { dayStart, dayAfterEnd } = dayBounds(range);
+  const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
   // Same unconditional join-to-orders rationale as getTipsSummary above —
   // payments has no branchId of its own.
@@ -587,6 +608,9 @@ export type ExpenseBreakdownRow = { category: string; totalInPaisa: number };
 export async function getExpenseCategoryBreakdown(
   restaurantId: string,
   range: ReportDateRange,
+  // See getTotalExpensesInPaisa's comment — not used here either, kept for
+  // signature consistency across this module.
+  _timezone: string,
   branchId?: string,
 ): Promise<ExpenseBreakdownRow[]> {
   const rows = await db
@@ -636,6 +660,7 @@ export type PeriodComparison = {
 export async function getReportSummary(
   restaurantId: string,
   range: ReportDateRange,
+  timezone: string,
   branchId?: string,
 ) {
   const [
@@ -651,21 +676,23 @@ export async function getReportSummary(
     hourlyHeatmap,
     branchComparison,
   ] = await Promise.all([
-    getSalesSummary(restaurantId, range, branchId),
-    getTotalExpensesInPaisa(restaurantId, range, branchId),
-    getDailyRevenueVsExpenses(restaurantId, range, branchId),
-    getTopMenuItems(restaurantId, range, 10, branchId),
-    getPaymentMethodBreakdown(restaurantId, range, branchId),
-    getExpenseCategoryBreakdown(restaurantId, range, branchId),
-    getTipsSummary(restaurantId, range, branchId),
-    getPeakHourStats(restaurantId, range, branchId),
-    getCompletionStats(restaurantId, range, branchId),
-    getHourlyHeatmap(restaurantId, range, branchId),
+    getSalesSummary(restaurantId, range, timezone, branchId),
+    getTotalExpensesInPaisa(restaurantId, range, timezone, branchId),
+    getDailyRevenueVsExpenses(restaurantId, range, timezone, branchId),
+    getTopMenuItems(restaurantId, range, timezone, 10, branchId),
+    getPaymentMethodBreakdown(restaurantId, range, timezone, branchId),
+    getExpenseCategoryBreakdown(restaurantId, range, timezone, branchId),
+    getTipsSummary(restaurantId, range, timezone, branchId),
+    getPeakHourStats(restaurantId, range, timezone, branchId),
+    getCompletionStats(restaurantId, range, timezone, branchId),
+    getHourlyHeatmap(restaurantId, range, timezone, branchId),
     // A branch-vs-branch comparison is meaningless once the whole report
     // is already scoped to one branch — skip the query entirely rather
     // than compute a comparison table that would just get discarded (the
     // UI already hides this section once it has 1 or fewer rows).
-    branchId ? Promise.resolve([] as BranchComparisonRow[]) : getBranchComparison(restaurantId, range),
+    branchId
+      ? Promise.resolve([] as BranchComparisonRow[])
+      : getBranchComparison(restaurantId, range, timezone),
   ]);
 
   const netProfitInPaisa = computeNetProfitInPaisa(sales.revenueInPaisa, totalExpensesInPaisa);
@@ -678,8 +705,8 @@ export async function getReportSummary(
   // each other without complicating the primary batch above.
   const previousRange = previousPeriodRange(range);
   const [previousSales, previousExpensesInPaisa] = await Promise.all([
-    getSalesSummary(restaurantId, previousRange, branchId),
-    getTotalExpensesInPaisa(restaurantId, previousRange, branchId),
+    getSalesSummary(restaurantId, previousRange, timezone, branchId),
+    getTotalExpensesInPaisa(restaurantId, previousRange, timezone, branchId),
   ]);
   const previousNetProfitInPaisa = computeNetProfitInPaisa(
     previousSales.revenueInPaisa,

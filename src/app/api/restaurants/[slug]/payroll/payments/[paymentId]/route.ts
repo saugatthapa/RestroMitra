@@ -25,7 +25,7 @@ export async function PATCH(
   }
   try {
     const { slug, paymentId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_PAYROLL,
     );
@@ -60,6 +60,7 @@ export async function PATCH(
         payrollPaymentId: row.id,
         amountInPaisa: row.amountInPaisa,
         payPeriodLabel: row.payPeriodLabel,
+        timezone,
         recordedByUserId: session.user.id,
       });
 

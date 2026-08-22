@@ -94,7 +94,7 @@ describe.skipIf(!hasDb)("order status permissions + tenant isolation (integratio
         restaurantId: restaurantAId,
         branchId: branchAId,
         tableId: table.id,
-        orderNumber: generateOrderNumber(),
+        orderNumber: generateOrderNumber("UTC"),
         source: "qr_customer",
         status: "pending",
         subtotalInPaisa: 10_000,

@@ -5,6 +5,7 @@ import { customers, loyaltyTransactions } from "@/db/schema";
 import { HttpError } from "@/lib/http-error";
 import { computeVisitStreakUpdate, VISIT_STREAK_MILESTONE_POINTS } from "@/lib/loyalty-streaks";
 import { BIRTHDAY_BONUS_POINTS, shouldAwardBirthdayBonus } from "@/lib/loyalty-birthday";
+import { restaurantDate } from "@/lib/restaurant-date";
 
 export class LoyaltyError extends HttpError {
   constructor(message: string) {
@@ -87,10 +88,6 @@ export async function recordLoyaltyTransaction(
   return { transaction, customer: updatedCustomer };
 }
 
-function todayIsoUtc(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 /**
  * Awards the once-per-year birthday bonus, or does nothing if it's already
  * been claimed this year. The UPDATE's WHERE clause re-checks
@@ -151,6 +148,12 @@ export async function awardBirthdayBonus(
  * an order that exact day. Cheap no-op on every other call: one date
  * comparison, no write, when it's not their birthday or this year's bonus
  * is already claimed.
+ *
+ * `timezone` is the RESTAURANT's own timezone (restaurants.timezone — see
+ * restaurant-date.ts), not the server process's — "today" for a birthday
+ * check has to mean today in Kathmandu, not today in UTC, or a customer
+ * whose birthday falls in the gap between the two clocks could be checked
+ * on the wrong calendar day.
  */
 export async function reconcileBirthdayBonus(
   tx: Transaction,
@@ -160,8 +163,9 @@ export async function reconcileBirthdayBonus(
     dateOfBirth: string | null;
     lastBirthdayBonusYear: number | null;
   },
+  timezone: string,
 ): Promise<boolean> {
-  const todayIso = todayIsoUtc();
+  const todayIso = restaurantDate(timezone);
   if (
     !shouldAwardBirthdayBonus({
       dateOfBirth: customer.dateOfBirth,
@@ -201,6 +205,11 @@ export async function reconcileBirthdayBonus(
  * totalOrdersCount/totalSpentInPaisa/the visit streak — those update
  * unconditionally, since "did they earn a point" and "did they visit" are
  * different questions).
+ *
+ * `timezone` is the RESTAURANT's own timezone, used for both the visit
+ * streak's "is this a new calendar day" check and the birthday check below
+ * — see reconcileBirthdayBonus's comment on why the server's own clock
+ * (always UTC) isn't the right one here.
  */
 export async function recordOrderCompletionLoyalty(
   tx: Transaction,
@@ -209,6 +218,7 @@ export async function recordOrderCompletionLoyalty(
     customerId: string;
     orderId: string;
     totalInPaisa: number;
+    timezone: string;
     recordedByUserId?: string | null;
   },
 ) {
@@ -224,7 +234,7 @@ export async function recordOrderCompletionLoyalty(
     .where(and(eq(customers.id, params.customerId), eq(customers.restaurantId, params.restaurantId)))
     .limit(1);
 
-  const todayIso = todayIsoUtc();
+  const todayIso = restaurantDate(params.timezone);
   const streak = customer
     ? computeVisitStreakUpdate({
         lastVisitDate: customer.lastVisitDate,

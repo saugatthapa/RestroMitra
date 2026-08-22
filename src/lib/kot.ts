@@ -2,11 +2,7 @@ import "server-only";
 import { eq, sql } from "drizzle-orm";
 import type { Transaction } from "@/db";
 import { kotCounters, orders } from "@/db/schema";
-
-/** UTC calendar day — same simplification as reports.ts's dayBounds and orders.ts's generateOrderNumber. */
-function todayIsoUtc(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { restaurantDate } from "@/lib/restaurant-date";
 
 export type KotSequenceAssignment = {
   sequence: number;
@@ -31,10 +27,17 @@ export type KotSequenceAssignment = {
  * (`INSERT ... ON CONFLICT DO UPDATE SET last_number = last_number + 1`) —
  * two tickets racing to be "today's first" still each get a distinct
  * number, since Postgres serializes the two UPDATEs on that row.
+ *
+ * `ticketDate` — and so which day's counter this ticket draws from — is
+ * computed in the RESTAURANT's own timezone, not the server's UTC clock;
+ * otherwise a ticket cut just after local midnight in Kathmandu (still
+ * "yesterday" in UTC until 5:45am local) would draw from the wrong day's
+ * counter and its number could collide with, or gap from, the previous
+ * day's sequence.
  */
 export async function assignKotSequence(
   tx: Transaction,
-  params: { restaurantId: string; orderId: string },
+  params: { restaurantId: string; orderId: string; timezone: string },
 ): Promise<KotSequenceAssignment> {
   const [existing] = await tx
     .select({ kotSequence: orders.kotSequence, kotPrintedAt: orders.kotPrintedAt })
@@ -46,7 +49,7 @@ export async function assignKotSequence(
     return { sequence: existing.kotSequence, printedAt: existing.kotPrintedAt };
   }
 
-  const ticketDate = todayIsoUtc();
+  const ticketDate = restaurantDate(params.timezone);
   const [counter] = await tx
     .insert(kotCounters)
     .values({ restaurantId: params.restaurantId, ticketDate, lastNumber: 1 })

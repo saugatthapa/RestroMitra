@@ -16,6 +16,7 @@ import {
   markTableReservedIfAvailable,
 } from "@/lib/tables";
 import { HttpError } from "@/lib/http-error";
+import { restaurantDate, restaurantStartOfDay } from "@/lib/restaurant-date";
 
 const RESERVATION_LIST_LIMIT = 300;
 
@@ -35,7 +36,7 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_RESERVATIONS,
     );
@@ -53,8 +54,8 @@ export async function GET(
     const dateParam = url.searchParams.get("date");
     const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
       ? dateParam
-      : new Date().toISOString().slice(0, 10);
-    const dayStart = new Date(`${date}T00:00:00.000Z`);
+      : restaurantDate(timezone);
+    const dayStart = restaurantStartOfDay(timezone, date);
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
 
     const statusParam = url.searchParams.get("status");

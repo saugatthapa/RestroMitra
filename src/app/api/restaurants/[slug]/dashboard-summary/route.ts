@@ -7,6 +7,7 @@ import { requireBranchAccess } from "@/lib/rbac/guard";
 import { PERMISSIONS, roleHasPermission } from "@/lib/rbac/permissions";
 import { getReportSummary } from "@/lib/reports";
 import { isLowStock } from "@/lib/inventory";
+import { restaurantDate, restaurantStartOfDay } from "@/lib/restaurant-date";
 
 /**
  * Powers the Dashboard home page's stat tiles and "This month's
@@ -30,7 +31,13 @@ import { isLowStock } from "@/lib/inventory";
 export async function GET(request: Request, ctx: { params: Promise<{ slug: string }> }) {
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(slug);
+    const {
+      session,
+      restaurantId,
+      role,
+      branchId: grantedBranchId,
+      timezone,
+    } = await resolveRestaurantContext(slug);
 
     const url = new URL(request.url);
     const branchIdParam = url.searchParams.get("branchId");
@@ -49,8 +56,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
     const canViewSales = roleHasPermission(role, PERMISSIONS.VIEW_SALES);
     const canViewReports = roleHasPermission(role, PERMISSIONS.VIEW_REPORTS);
 
-    const todayStart = new Date();
-    todayStart.setUTCHours(0, 0, 0, 0);
+    const todayStart = restaurantStartOfDay(timezone);
 
     const orderScope = effectiveBranchId
       ? and(eq(orders.restaurantId, restaurantId), eq(orders.branchId, effectiveBranchId))
@@ -87,12 +93,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
     ]);
     const lowStockCount = activeInventoryItems.filter(isLowStock).length;
 
+    const todayLocal = restaurantDate(timezone);
     const monthToDateRange = {
-      from: `${todayStart.getUTCFullYear()}-${String(todayStart.getUTCMonth() + 1).padStart(2, "0")}-01`,
-      to: todayStart.toISOString().slice(0, 10),
+      from: `${todayLocal.slice(0, 7)}-01`,
+      to: todayLocal,
     };
     const monthly = canViewReports
-      ? await getReportSummary(restaurantId, monthToDateRange, effectiveBranchId)
+      ? await getReportSummary(restaurantId, monthToDateRange, timezone, effectiveBranchId)
       : null;
 
     return NextResponse.json({

@@ -24,7 +24,7 @@ export async function GET(
 ) {
   try {
     const { slug, customerId } = await ctx.params;
-    const { restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_CUSTOMERS);
+    const { restaurantId, timezone } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_CUSTOMERS);
 
     let customer = await db.query.customers.findFirst({
       where: (c, { and: dAnd, eq: dEq }) =>
@@ -39,7 +39,7 @@ export async function GET(
     // customer's CRM profile on their birthday should trigger the bonus
     // even if the list view above wasn't the entry point (e.g. reached
     // directly from a reservation or an order's linked customer).
-    const awarded = await db.transaction((tx) => reconcileBirthdayBonus(tx, customer!));
+    const awarded = await db.transaction((tx) => reconcileBirthdayBonus(tx, customer!, timezone));
     if (awarded) {
       const refreshed = await db.query.customers.findFirst({
         where: (c, { and: dAnd, eq: dEq }) =>

@@ -186,6 +186,7 @@ describe.skipIf(!hasDb)("Customers + loyalty permissions (integration)", () => {
         customerId: customerAId,
         orderId: fakeOrderId,
         totalInPaisa: 125_000, // Rs 1250 -> floor(125000/1000) = 125 points
+        timezone: "UTC",
       }),
     );
 
@@ -211,6 +212,7 @@ describe.skipIf(!hasDb)("Customers + loyalty permissions (integration)", () => {
         customerId: customerAId,
         orderId: fakeOrderId,
         totalInPaisa: 500, // Rs 5 -> floor(500/1000) = 0 points
+        timezone: "UTC",
       }),
     );
 

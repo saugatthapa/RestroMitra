@@ -3,19 +3,14 @@ import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpe
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { requireBranchAccess } from "@/lib/rbac/guard";
 import { getReportSummary } from "@/lib/reports";
+import { restaurantDate } from "@/lib/restaurant-date";
 
 const MAX_RANGE_DAYS = 366;
 const DEFAULT_RANGE_DAYS = 30;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function daysAgoIso(days: number) {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - days);
-  return d.toISOString().slice(0, 10);
+function daysAgoIso(timezone: string, days: number) {
+  return restaurantDate(timezone, new Date(Date.now() - days * 86_400_000));
 }
 
 /**
@@ -55,23 +50,31 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
-      slug,
-      PERMISSIONS.VIEW_REPORTS,
-    );
+    const {
+      session,
+      restaurantId,
+      role,
+      branchId: grantedBranchId,
+      timezone,
+    } = await resolveRestaurantContext(slug, PERMISSIONS.VIEW_REPORTS);
 
     const url = new URL(request.url);
     const fromParam = url.searchParams.get("from");
     const toParam = url.searchParams.get("to");
     const branchIdParam = url.searchParams.get("branchId");
 
-    let from = fromParam && DATE_RE.test(fromParam) ? fromParam : daysAgoIso(DEFAULT_RANGE_DAYS - 1);
-    let to = toParam && DATE_RE.test(toParam) ? toParam : todayIso();
+    let from = fromParam && DATE_RE.test(fromParam) ? fromParam : daysAgoIso(timezone, DEFAULT_RANGE_DAYS - 1);
+    let to = toParam && DATE_RE.test(toParam) ? toParam : restaurantDate(timezone);
 
+    // Span check stays in plain UTC-midnight arithmetic on the date
+    // STRINGS themselves (not an actual restaurant-local instant) — this
+    // is only measuring "how many calendar days apart are these two
+    // labels," which is timezone-independent by construction as long as
+    // both ends are read the same way.
     const spanDays = (new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86_400_000;
     if (Number.isNaN(spanDays) || spanDays < 0 || spanDays > MAX_RANGE_DAYS) {
-      from = daysAgoIso(DEFAULT_RANGE_DAYS - 1);
-      to = todayIso();
+      from = daysAgoIso(timezone, DEFAULT_RANGE_DAYS - 1);
+      to = restaurantDate(timezone);
     }
 
     let effectiveBranchId: string | undefined;
@@ -85,7 +88,7 @@ export async function GET(
       effectiveBranchId = branchIdParam;
     }
 
-    const summary = await getReportSummary(restaurantId, { from, to }, effectiveBranchId);
+    const summary = await getReportSummary(restaurantId, { from, to }, timezone, effectiveBranchId);
 
     return NextResponse.json(summary);
   } catch (err) {

@@ -222,7 +222,7 @@ describe.skipIf(!hasDb)("KDS permissions + kitchen station snapshot (integration
         restaurantId: restaurantAId,
         branchId: branchAId,
         tableId: null,
-        orderNumber: generateOrderNumber(),
+        orderNumber: generateOrderNumber("UTC"),
         source: "pos",
         status: "pending",
         subtotalInPaisa: pricing.subtotalInPaisa,

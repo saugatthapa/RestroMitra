@@ -39,6 +39,15 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
   let marketingCategoryId: string;
 
   const RANGE = { from: "2026-06-01", to: "2026-06-07" };
+  // This fixture's timestamps (e.g. "2026-06-02T10:00:00Z") were authored
+  // as literal UTC instants deliberately landing on specific calendar days
+  // — the exact per-day assertions below (byDate["2026-06-01"], etc.) only
+  // hold if day boundaries are computed in UTC. Passing "Asia/Kathmandu"
+  // here would shift every boundary by 5:45 and break those exact-value
+  // assertions without indicating any real bug — Nepal-specific correctness
+  // of the day-boundary math itself is already covered by the dedicated
+  // src/lib/restaurant-date.test.ts unit tests.
+  const TZ = "UTC";
 
   beforeAll(async () => {
     db = (await import("@/db")).db;
@@ -110,7 +119,7 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
           restaurantId: restaurantAId,
           branchId,
           tableId: null,
-          orderNumber: generateOrderNumber(),
+          orderNumber: generateOrderNumber("UTC"),
           source: "pos",
           status,
           subtotalInPaisa: totalInPaisa,
@@ -289,7 +298,7 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
   });
 
   it("getSalesSummary counts only completed orders inside the range, excludes cancelled and out-of-range", async () => {
-    const summary = await reports.getSalesSummary(restaurantAId, RANGE);
+    const summary = await reports.getSalesSummary(restaurantAId, RANGE, TZ);
     // 100_000 (branch A) + 50_000 (branch A) + 60_000 (branch B), not the
     // 777_777 out-of-range or 999_999 cancelled order.
     expect(summary.revenueInPaisa).toBe(210_000);
@@ -299,22 +308,22 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
   });
 
   it("getSalesSummary with a branchId only counts that branch's orders", async () => {
-    const branchA = await reports.getSalesSummary(restaurantAId, RANGE, branchAId);
+    const branchA = await reports.getSalesSummary(restaurantAId, RANGE, TZ, branchAId);
     expect(branchA.revenueInPaisa).toBe(150_000); // 100_000 + 50_000, branch B's 60_000 excluded
     expect(branchA.orderCount).toBe(2);
 
-    const branchB = await reports.getSalesSummary(restaurantAId, RANGE, branchBId);
+    const branchB = await reports.getSalesSummary(restaurantAId, RANGE, TZ, branchBId);
     expect(branchB.revenueInPaisa).toBe(60_000);
     expect(branchB.orderCount).toBe(1);
   });
 
   it("getTotalExpensesInPaisa excludes voided and out-of-range expenses", async () => {
-    const total = await reports.getTotalExpensesInPaisa(restaurantAId, RANGE);
+    const total = await reports.getTotalExpensesInPaisa(restaurantAId, RANGE, TZ);
     expect(total).toBe(55_000); // 40_000 + 15_000, not the voided 999_999 or out-of-range 888_888
   });
 
   it("getDailyRevenueVsExpenses produces one point per day in the range with correct daily totals and real zeros elsewhere", async () => {
-    const series = await reports.getDailyRevenueVsExpenses(restaurantAId, RANGE);
+    const series = await reports.getDailyRevenueVsExpenses(restaurantAId, RANGE, TZ);
     expect(series).toHaveLength(7); // June 1 through June 7 inclusive
 
     const byDate = Object.fromEntries(series.map((p) => [p.date, p]));
@@ -326,7 +335,7 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
   });
 
   it("getTopMenuItems ranks by revenue and aggregates quantity across orders", async () => {
-    const topItems = await reports.getTopMenuItems(restaurantAId, RANGE);
+    const topItems = await reports.getTopMenuItems(restaurantAId, RANGE, TZ);
     expect(topItems).toEqual([
       { name: "TEST Momo", quantitySold: 2, revenueInPaisa: 130_000 },
       { name: "TEST Cold Drink", quantitySold: 1, revenueInPaisa: 20_000 },
@@ -334,14 +343,14 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
   });
 
   it("getPaymentMethodBreakdown nets refunds automatically via signed amounts", async () => {
-    const breakdown = await reports.getPaymentMethodBreakdown(restaurantAId, RANGE);
+    const breakdown = await reports.getPaymentMethodBreakdown(restaurantAId, RANGE, TZ);
     const byMethod = Object.fromEntries(breakdown.map((r) => [r.method, r.totalInPaisa]));
     expect(byMethod.cash).toBe(100_000);
     expect(byMethod.card).toBe(20_000); // 30_000 payment - 10_000 refund
   });
 
   it("getExpenseCategoryBreakdown excludes voided rows and sums per category", async () => {
-    const breakdown = await reports.getExpenseCategoryBreakdown(restaurantAId, RANGE);
+    const breakdown = await reports.getExpenseCategoryBreakdown(restaurantAId, RANGE, TZ);
     const byCategory = Object.fromEntries(breakdown.map((r) => [r.category, r.totalInPaisa]));
     expect(byCategory["TEST Rent"]).toBe(40_000);
     expect(byCategory["TEST Supplies"]).toBe(15_000); // not 15_000 + 999_999 voided
@@ -349,7 +358,7 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
   });
 
   it("getReportSummary bundles everything and computes net profit as revenue minus expenses", async () => {
-    const summary = await reports.getReportSummary(restaurantAId, RANGE);
+    const summary = await reports.getReportSummary(restaurantAId, RANGE, TZ);
     expect(summary.sales.revenueInPaisa).toBe(210_000);
     expect(summary.totalExpensesInPaisa).toBe(55_000);
     expect(summary.netProfitInPaisa).toBe(155_000);
@@ -358,7 +367,7 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
   });
 
   it("getReportSummary with a branchId scopes every figure to that branch and skips branch comparison", async () => {
-    const summary = await reports.getReportSummary(restaurantAId, RANGE, branchAId);
+    const summary = await reports.getReportSummary(restaurantAId, RANGE, TZ, branchAId);
     expect(summary.branchId).toBe(branchAId);
     expect(summary.sales.revenueInPaisa).toBe(150_000); // branch B's order excluded
     expect(summary.sales.orderCount).toBe(2);
@@ -375,11 +384,11 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
   });
 
   it("restaurant B sees none of restaurant A's report data — tenant isolation holds for aggregation queries", async () => {
-    const summary = await reports.getSalesSummary(restaurantBId, RANGE);
+    const summary = await reports.getSalesSummary(restaurantBId, RANGE, TZ);
     expect(summary.revenueInPaisa).toBe(0);
     expect(summary.orderCount).toBe(0);
 
-    const expensesTotal = await reports.getTotalExpensesInPaisa(restaurantBId, RANGE);
+    const expensesTotal = await reports.getTotalExpensesInPaisa(restaurantBId, RANGE, TZ);
     expect(expensesTotal).toBe(0);
   });
 });

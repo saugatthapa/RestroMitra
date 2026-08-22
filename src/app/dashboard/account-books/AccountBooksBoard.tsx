@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiGet, apiPost, ApiError } from "@/lib/api-client";
+import { localDateIso } from "@/lib/local-date";
 import { formatNPR } from "@/lib/money";
 import { useDateSystem, type DateSystem } from "@/lib/date-system";
 import { formatDate, formatBsHint, formatBsMonthYear, formatBsYear, formatTimeOfDay } from "@/lib/nepali-date";
@@ -47,7 +48,7 @@ function base(slug: string) {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateIso();
 }
 
 function shiftDate(iso: string, days: number): string {

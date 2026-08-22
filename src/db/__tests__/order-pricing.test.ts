@@ -249,8 +249,8 @@ describe.skipIf(!hasDb)("computeOrderPricing (integration)", () => {
   });
 
   it("generateOrderNumber produces a YYYYMMDD-XXXX shaped, non-colliding-in-practice number", () => {
-    const a = orders.generateOrderNumber();
-    const b = orders.generateOrderNumber();
+    const a = orders.generateOrderNumber("UTC");
+    const b = orders.generateOrderNumber("UTC");
     expect(a).toMatch(/^\d{8}-[0-9A-F]{4}$/);
     expect(b).toMatch(/^\d{8}-[0-9A-F]{4}$/);
     // Not a strict uniqueness guarantee (that's the DB unique index's job —

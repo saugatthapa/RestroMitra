@@ -29,7 +29,7 @@ export async function POST(
   }
   try {
     const { slug, expenseId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.PAY_EXPENSE,
     );
@@ -79,6 +79,7 @@ export async function POST(
         categoryLabel: category?.name ?? "Expense",
         description: row.description,
         expenseDate: row.expenseDate,
+        timezone,
         recordedByUserId: session.user.id,
       });
 

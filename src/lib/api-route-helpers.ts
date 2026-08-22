@@ -34,6 +34,9 @@ export type RestaurantContext = {
   restaurantId: string;
   role: string;
   branchId: string | null;
+  /** For "what day is it for this restaurant" computations — see
+   * src/lib/restaurant-date.ts. Never UTC's calendar day. */
+  timezone: string;
 };
 
 /**
@@ -58,7 +61,7 @@ export async function resolveRestaurantContext(
   opts?: { allowInactiveSubscription?: boolean },
 ): Promise<RestaurantContext> {
   const session = await requireAuth();
-  const { restaurantId, role, branchId } = await requireRestaurantBySlug(
+  const { restaurantId, role, branchId, timezone } = await requireRestaurantBySlug(
     session.user.id,
     slug,
   );
@@ -73,7 +76,7 @@ export async function resolveRestaurantContext(
     // requirePermission doc comment and PERFORMANCE_AUDIT.md.
     await requirePermission(session.user.id, restaurantId, permission, role);
   }
-  return { session, restaurantId, role, branchId };
+  return { session, restaurantId, role, branchId, timezone };
 }
 
 /** Parses and validates a JSON request body, or returns a 400 response. */

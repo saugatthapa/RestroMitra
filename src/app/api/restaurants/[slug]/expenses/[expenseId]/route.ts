@@ -32,7 +32,7 @@ export async function PATCH(
   }
   try {
     const { slug, expenseId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_EXPENSES,
     );
@@ -108,6 +108,7 @@ export async function PATCH(
             amountInPaisa: row.amountInPaisa,
             categoryLabel,
             description: row.description,
+            timezone,
             recordedByUserId: session.user.id,
           });
         } else {
@@ -118,6 +119,7 @@ export async function PATCH(
             categoryLabel,
             description: row.description,
             expenseDate: row.expenseDate,
+            timezone,
             recordedByUserId: session.user.id,
           });
         }

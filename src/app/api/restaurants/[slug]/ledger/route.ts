@@ -74,7 +74,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ slug: stri
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_ACCOUNT_BOOKS,
     );
@@ -90,6 +90,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ slug: stri
         category: data.category as (typeof LEDGER_CATEGORIES)[number],
         amountInPaisa: data.amount,
         entryDate: data.entryDate,
+        timezone,
         counterpartyName: data.counterpartyName || null,
         description: data.description,
         note: data.note || null,

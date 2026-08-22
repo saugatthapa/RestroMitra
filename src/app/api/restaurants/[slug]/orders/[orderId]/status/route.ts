@@ -45,7 +45,7 @@ export async function PATCH(
   }
   try {
     const { slug, orderId } = await ctx.params;
-    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(slug);
+    const { session, restaurantId, role, branchId: grantedBranchId, timezone } = await resolveRestaurantContext(slug);
 
     const parsed = await parseJsonBody(request, updateOrderStatusSchema);
     if (!parsed.ok) return parsed.response;
@@ -144,7 +144,7 @@ export async function PATCH(
       // openKotTicket in kot-print-client.ts) — a web app can't silently
       // print to a physical printer without that.
       if (currentStatus === "pending" && targetStatus === "confirmed") {
-        const kot = await assignKotSequence(tx, { restaurantId, orderId });
+        const kot = await assignKotSequence(tx, { restaurantId, orderId, timezone });
         row.kotSequence = kot.sequence;
         row.kotPrintedAt = kot.printedAt;
       }
@@ -171,6 +171,7 @@ export async function PATCH(
           customerId: row.customerId,
           orderId,
           totalInPaisa: row.totalInPaisa,
+          timezone,
           recordedByUserId: session.user.id,
         });
       }
@@ -188,6 +189,7 @@ export async function PATCH(
           totalInPaisa: row.totalInPaisa,
           paymentStatus: row.paymentStatus,
           customerName: row.customerName,
+          timezone,
           recordedByUserId: session.user.id,
         });
       }

@@ -10,6 +10,7 @@ import {
 import { EXPENSE_STATUS_LABELS, type ExpenseStatus } from "@/lib/finance/expense-status";
 import { useDateSystem } from "@/lib/date-system";
 import { formatDate, formatBsHint } from "@/lib/nepali-date";
+import { localDateIso } from "@/lib/local-date";
 
 type ExpenseCategory = { id: string; name: string; isActive: boolean };
 type Branch = { id: string; name: string };
@@ -40,7 +41,7 @@ function formatRupees(paisa: number) {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateIso();
 }
 
 const STATUS_TONE: Record<ExpenseStatus, string> = {

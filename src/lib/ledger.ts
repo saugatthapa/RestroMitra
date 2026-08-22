@@ -4,15 +4,12 @@ import type { Transaction } from "@/db";
 import { ledgerEntries } from "@/db/schema";
 import { HttpError } from "@/lib/http-error";
 import type { LedgerCategory, LedgerDirection } from "@/lib/ledger-categories";
+import { restaurantDate } from "@/lib/restaurant-date";
 
 export class LedgerError extends HttpError {
   constructor(message: string, status = 400) {
     super(message, status);
   }
-}
-
-function todayIsoUtc(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 /**
@@ -21,6 +18,14 @@ function todayIsoUtc(): string {
  * (loyalty.ts) / recordStockMovement (inventory.ts). amountInPaisa is
  * always positive here; direction carries the sign (see the comment block
  * above ledgerEntries in schema.ts).
+ *
+ * `timezone` is the RESTAURANT's own timezone — used only as the fallback
+ * for `entryDate` when a caller doesn't supply one explicitly (e.g. "today"
+ * for a reversal or a purchase). Required on every call, even when
+ * `entryDate` is always supplied by that particular caller, so this
+ * function's signature can't silently drift back to the server's own UTC
+ * clock — see restaurant-date.ts's doc comment for why that clock is wrong
+ * for "what day is it for this restaurant."
  */
 export async function recordLedgerEntry(
   tx: Transaction,
@@ -30,6 +35,7 @@ export async function recordLedgerEntry(
     category: LedgerCategory;
     amountInPaisa: number;
     entryDate?: string;
+    timezone: string;
     counterpartyName?: string | null;
     description: string;
     note?: string | null;
@@ -47,7 +53,7 @@ export async function recordLedgerEntry(
     .insert(ledgerEntries)
     .values({
       restaurantId: params.restaurantId,
-      entryDate: params.entryDate ?? todayIsoUtc(),
+      entryDate: params.entryDate ?? restaurantDate(params.timezone),
       direction: params.direction,
       category: params.category,
       amountInPaisa: params.amountInPaisa,
@@ -89,6 +95,7 @@ export async function recordSalesLedgerEntry(
     paymentStatus: "unpaid" | "partially_paid" | "paid";
     customerName?: string | null;
     entryDate?: string;
+    timezone: string;
     recordedByUserId?: string | null;
   },
 ) {
@@ -100,6 +107,7 @@ export async function recordSalesLedgerEntry(
     category: "sales",
     amountInPaisa: params.totalInPaisa,
     entryDate: params.entryDate,
+    timezone: params.timezone,
     counterpartyName: params.customerName ?? null,
     description: `Order #${params.orderNumber}`,
     referenceType: "order",
@@ -119,6 +127,10 @@ export async function recordExpenseLedgerEntry(
     categoryLabel: string;
     description: string;
     expenseDate: string;
+    // Not used for a fallback here — expenseDate is always supplied — kept
+    // for signature consistency with recordLedgerEntry, same reasoning as
+    // reports.ts's unused-timezone functions.
+    timezone: string;
     recordedByUserId?: string | null;
   },
 ) {
@@ -128,6 +140,7 @@ export async function recordExpenseLedgerEntry(
     category: "expense",
     amountInPaisa: params.amountInPaisa,
     entryDate: params.expenseDate,
+    timezone: params.timezone,
     description: `${params.categoryLabel}: ${params.description}`,
     referenceType: "expense",
     referenceId: params.expenseId,
@@ -152,6 +165,7 @@ export async function reverseExpenseLedgerEntry(
     amountInPaisa: number;
     categoryLabel: string;
     description: string;
+    timezone: string;
     recordedByUserId?: string | null;
   },
 ) {
@@ -160,6 +174,7 @@ export async function reverseExpenseLedgerEntry(
     direction: "credit",
     category: "expense",
     amountInPaisa: params.amountInPaisa,
+    timezone: params.timezone,
     description: `Voided: ${params.categoryLabel}: ${params.description}`,
     referenceType: "expense",
     referenceId: params.expenseId,
@@ -186,6 +201,9 @@ export async function recordPayrollLedgerEntry(
     amountInPaisa: number;
     payPeriodLabel?: string | null;
     paymentDate: string;
+    // Not used for a fallback here — paymentDate is always supplied — kept
+    // for signature consistency with recordLedgerEntry.
+    timezone: string;
     recordedByUserId?: string | null;
   },
 ) {
@@ -195,6 +213,7 @@ export async function recordPayrollLedgerEntry(
     category: "payroll",
     amountInPaisa: params.amountInPaisa,
     entryDate: params.paymentDate,
+    timezone: params.timezone,
     description: params.payPeriodLabel ? `Staff salary payment — ${params.payPeriodLabel}` : "Staff salary payment",
     referenceType: "payroll_payment",
     referenceId: params.payrollPaymentId,
@@ -216,6 +235,7 @@ export async function reversePayrollLedgerEntry(
     payrollPaymentId: string;
     amountInPaisa: number;
     payPeriodLabel?: string | null;
+    timezone: string;
     recordedByUserId?: string | null;
   },
 ) {
@@ -224,6 +244,7 @@ export async function reversePayrollLedgerEntry(
     direction: "credit",
     category: "payroll",
     amountInPaisa: params.amountInPaisa,
+    timezone: params.timezone,
     description: params.payPeriodLabel
       ? `Voided: Staff salary payment — ${params.payPeriodLabel}`
       : "Voided: Staff salary payment",
@@ -242,6 +263,7 @@ export async function recordPurchaseLedgerEntry(
     totalInPaisa: number;
     supplierName?: string | null;
     invoiceNumber?: string | null;
+    timezone: string;
     recordedByUserId?: string | null;
   },
 ) {
@@ -252,6 +274,7 @@ export async function recordPurchaseLedgerEntry(
     direction: "debit",
     category: "purchase",
     amountInPaisa: params.totalInPaisa,
+    timezone: params.timezone,
     counterpartyName: params.supplierName ?? null,
     description: params.invoiceNumber ? `Purchase (invoice ${params.invoiceNumber})` : "Purchase",
     referenceType: "purchase",
@@ -269,10 +292,20 @@ export async function recordPurchaseLedgerEntry(
  * time — flipping dueStatus to "settled" only once the running total
  * reaches the original amount.
  *
- * The original row's UPDATE is a compare-and-swap on dueStatus =
- * 'outstanding' (same pattern as the order-status route's own
- * compare-and-swap on orders.status) so two concurrent settle requests on
- * the same entry can't both succeed past the original's remaining balance.
+ * The original row's UPDATE is a compare-and-swap on BOTH dueStatus =
+ * 'outstanding' AND settledAmountInPaisa = <the value just read>. Guarding
+ * on dueStatus alone is not enough: a *partial* settlement leaves
+ * dueStatus at 'outstanding' (only a settlement that reaches the full
+ * amount flips it to 'settled'), so two concurrent partial settlements
+ * would both still match a dueStatus-only WHERE clause after the first
+ * one commits — the second's UPDATE would then overwrite settledAmount
+ * with its own stale, independently-computed total, silently losing the
+ * first settlement's contribution while still recording BOTH settlement
+ * ledger entries below. Including settledAmountInPaisa in the WHERE
+ * clause closes that gap the same way the order-status route's
+ * compare-and-swap on orders.status does: whoever's UPDATE lands second
+ * finds the row's settledAmountInPaisa has already moved and its own
+ * WHERE clause simply doesn't match anymore, so it returns no row.
  */
 export async function settleLedgerDue(
   tx: Transaction,
@@ -281,6 +314,7 @@ export async function settleLedgerDue(
     entryId: string;
     amountInPaisa: number;
     note?: string | null;
+    timezone: string;
     recordedByUserId?: string | null;
   },
 ) {
@@ -323,15 +357,19 @@ export async function settleLedgerDue(
         eq(ledgerEntries.id, params.entryId),
         eq(ledgerEntries.restaurantId, params.restaurantId),
         eq(ledgerEntries.dueStatus, "outstanding"),
+        // See the doc comment above: dueStatus alone doesn't change on a
+        // partial settlement, so this is the field that actually detects
+        // "someone else already settled part of this since I read it."
+        eq(ledgerEntries.settledAmountInPaisa, original.settledAmountInPaisa),
       ),
     )
     .returning();
 
   if (!updated) {
-    // Another concurrent settlement already moved this row past
-    // "outstanding" between our read and this write — reject cleanly
-    // rather than double-booking a settlement entry for money that was
-    // already accounted for.
+    // Another concurrent settlement already moved this row (either past
+    // "outstanding" entirely, or just its settledAmount) between our read
+    // and this write — reject cleanly rather than double-booking a
+    // settlement entry for money that was already accounted for.
     throw new LedgerError("This entry was just settled by someone else. Please refresh and try again.", 409);
   }
 
@@ -340,6 +378,7 @@ export async function settleLedgerDue(
     direction: original.direction,
     category: "due_settlement",
     amountInPaisa: params.amountInPaisa,
+    timezone: params.timezone,
     counterpartyName: original.counterpartyName,
     description: `Due settled: ${original.description}`,
     note: params.note ?? null,

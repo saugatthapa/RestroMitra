@@ -53,7 +53,7 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_INVENTORY,
     );
@@ -149,6 +149,7 @@ export async function POST(
         totalInPaisa,
         supplierName,
         invoiceNumber: purchase.invoiceNumber,
+        timezone,
         recordedByUserId: session.user.id,
       });
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
 import { getLedgerDayBook, getLedgerRollup, getOutstandingDues } from "@/lib/ledger-reports";
+import { restaurantDate } from "@/lib/restaurant-date";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -25,11 +26,11 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_ACCOUNT_BOOKS);
+    const { restaurantId, timezone } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_ACCOUNT_BOOKS);
 
     const url = new URL(request.url);
     const granularity = url.searchParams.get("granularity");
-    const date = url.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
+    const date = url.searchParams.get("date") ?? restaurantDate(timezone);
 
     if (!ISO_DATE.test(date)) {
       return NextResponse.json({ error: "date must be YYYY-MM-DD." }, { status: 400 });

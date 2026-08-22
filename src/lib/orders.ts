@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { db } from "@/db";
 import { applyTax } from "@/lib/money";
 import { HttpError } from "@/lib/http-error";
+import { restaurantDate } from "@/lib/restaurant-date";
 
 export class OrderValidationError extends HttpError {
   constructor(message: string) {
@@ -206,14 +207,20 @@ export async function computeOrderPricing(
 /**
  * Human-facing order number, unique per restaurant (enforced by a DB
  * unique index on (restaurant_id, order_number), not by this function
- * alone — see generateUniqueOrderNumber for the retry-on-collision loop
- * that actually guarantees it). Format: YYYYMMDD-XXXX, e.g.
- * "20260814-9K2F". Not a sequential counter — a per-tenant atomic sequence
- * is more machinery than a single-branch QR-ordering phase needs; this is
- * revisited if/when Phase 4's POS wants strictly sequential daily numbers.
+ * alone — see each caller's own retry-on-collision loop that actually
+ * guarantees it). Format: YYYYMMDD-XXXX, e.g. "20260814-9K2F". Not a
+ * sequential counter — a per-tenant atomic sequence is more machinery than
+ * a single-branch QR-ordering phase needs; this is revisited if/when
+ * Phase 4's POS wants strictly sequential daily numbers.
+ *
+ * The date part is purely a human-facing label baked into the receipt
+ * number (uniqueness comes from the random suffix + DB constraint
+ * regardless), but it should still say the right day: computed in the
+ * RESTAURANT's own timezone so an order placed at 11:50pm Kathmandu time
+ * doesn't get stamped with tomorrow's UTC date.
  */
-export function generateOrderNumber(): string {
-  const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+export function generateOrderNumber(timezone: string): string {
+  const datePart = restaurantDate(timezone).replace(/-/g, "");
   const randomPart = randomBytes(3).toString("hex").toUpperCase().slice(0, 4);
   return `${datePart}-${randomPart}`;
 }

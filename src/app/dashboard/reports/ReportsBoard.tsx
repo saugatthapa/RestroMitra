@@ -10,6 +10,7 @@ import { IconStatTile, StatIcon } from "@/components/StatTile";
 import { useDateSystem, type DateSystem } from "@/lib/date-system";
 import { useActiveBranch } from "@/lib/branch-context";
 import { formatDate, formatBsHint } from "@/lib/nepali-date";
+import { localDateIso } from "@/lib/local-date";
 
 // Chart chrome tokens, matching RevenueTrendChart's validated palette
 // (dataviz skill, palette.md) — used here for the small inline breakdown
@@ -102,18 +103,18 @@ function formatRupees(paisa: number) {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateIso();
 }
 
 function daysAgoIso(days: number) {
   const d = new Date();
-  d.setUTCDate(d.getUTCDate() - days);
-  return d.toISOString().slice(0, 10);
+  d.setDate(d.getDate() - days);
+  return localDateIso(d);
 }
 
 function firstOfMonthIso() {
   const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
 // Presets before a custom range — dataviz skill's "date range first, presets

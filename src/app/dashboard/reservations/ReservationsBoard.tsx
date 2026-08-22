@@ -9,6 +9,7 @@ import {
 } from "@/lib/reservation-status";
 import { useDateSystem } from "@/lib/date-system";
 import { formatBsHint } from "@/lib/nepali-date";
+import { localDateIso } from "@/lib/local-date";
 
 type Table = { id: string; name: string };
 
@@ -30,7 +31,7 @@ function base(slug: string) {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateIso();
 }
 
 function toDatetimeLocal(iso: string) {

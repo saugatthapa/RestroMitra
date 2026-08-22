@@ -8,6 +8,7 @@ import { createPayrollPaymentSchema } from "@/lib/validation/payroll";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { recordPayrollLedgerEntry } from "@/lib/ledger";
+import { restaurantDate } from "@/lib/restaurant-date";
 
 const PAYROLL_LIST_LIMIT = 500;
 
@@ -58,7 +59,7 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_PAYROLL,
     );
@@ -78,7 +79,7 @@ export async function POST(
     }
     const staff = staffRow[0];
 
-    const paymentDate = new Date().toISOString().slice(0, 10);
+    const paymentDate = restaurantDate(timezone);
 
     // Committed together, same "one write, two rows, one transaction"
     // shape as expense payment — a payroll payment should never exist
@@ -106,6 +107,7 @@ export async function POST(
         amountInPaisa: row.amountInPaisa,
         payPeriodLabel: row.payPeriodLabel,
         paymentDate,
+        timezone,
         recordedByUserId: session.user.id,
       });
 

@@ -9,6 +9,7 @@ import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { reconcileBirthdayBonus } from "@/lib/loyalty";
 import { isBirthdayToday, BIRTHDAY_BONUS_POINTS } from "@/lib/loyalty-birthday";
+import { restaurantDate } from "@/lib/restaurant-date";
 
 const CUSTOMER_LIST_LIMIT = 200;
 
@@ -30,7 +31,7 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_CUSTOMERS);
+    const { restaurantId, timezone } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_CUSTOMERS);
 
     const url = new URL(request.url);
     const q = url.searchParams.get("q")?.trim();
@@ -48,13 +49,13 @@ export async function GET(
     // Cheap in almost every call: isBirthdayToday is a plain string
     // compare, so this loop only ever does DB work for rows that actually
     // match today's month+day (birthdays are rare on any given page load).
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = restaurantDate(timezone);
     const currentYear = Number(todayIso.slice(0, 4));
     const dueForBonus = rows.filter(
       (c) => isBirthdayToday(c.dateOfBirth, todayIso) && c.lastBirthdayBonusYear !== currentYear,
     );
     for (const customer of dueForBonus) {
-      const awarded = await db.transaction((tx) => reconcileBirthdayBonus(tx, customer));
+      const awarded = await db.transaction((tx) => reconcileBirthdayBonus(tx, customer, timezone));
       if (awarded) {
         customer.lastBirthdayBonusYear = currentYear;
         customer.loyaltyPointsBalance += BIRTHDAY_BONUS_POINTS;
