@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 
 export type DateSystem = "AD" | "BS";
 
-const DATE_SYSTEM_KEY = "dhankipos:date-system";
+const DATE_SYSTEM_KEY = "restromitra:date-system";
 
 type DateSystemContextValue = {
   dateSystem: DateSystem;

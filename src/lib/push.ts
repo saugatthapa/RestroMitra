@@ -199,7 +199,7 @@ export async function sendTestPush(userId: string): Promise<TestPushOutcome> {
     title: "Test notification",
     body: "If you can see this, push notifications are working on this device.",
     url: "/dashboard",
-    tag: "dhankipos-test",
+    tag: "restromitra-test",
   });
   return { status: "sent", results };
 }

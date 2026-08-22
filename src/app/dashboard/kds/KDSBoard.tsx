@@ -185,11 +185,11 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
     refreshQueue();
     const poll = setInterval(load, 5000);
     const tick = setInterval(() => forceTick((n) => n + 1), 30_000);
-    window.addEventListener("dhankipos:orders-changed", load);
+    window.addEventListener("restromitra:orders-changed", load);
     return () => {
       clearInterval(poll);
       clearInterval(tick);
-      window.removeEventListener("dhankipos:orders-changed", load);
+      window.removeEventListener("restromitra:orders-changed", load);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);

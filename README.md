@@ -1,4 +1,4 @@
-# DhankiPOS
+# RestroMitra
 
 An all-in-one, multi-tenant restaurant management SaaS built for restaurants, cafes,
 momo shops, bars, and small food businesses in Itahari, Sunsari, and Eastern Nepal.
@@ -522,7 +522,7 @@ src/
   `src/lib/orders.ts` recomputes every unit price, addon price, and tax rate from the
   current menu rows in the database. The request schema doesn't even have a price
   field to send.
-- JSON API routes require a custom `x-dhankipos-client` header as CSRF defense-in-depth
+- JSON API routes require a custom `x-restromitra-client` header as CSRF defense-in-depth
   alongside `SameSite=Lax` session cookies (see `src/lib/request.ts`).
 - Sensitive actions are written to `audit_logs` (`src/lib/audit.ts`) — auth events,
   restaurant creation, order status changes, and (as of Phase 5) every payment and

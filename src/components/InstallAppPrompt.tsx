@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const DISMISSED_KEY = "dhankipos:install-prompt-dismissed";
+const DISMISSED_KEY = "restromitra:install-prompt-dismissed";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;

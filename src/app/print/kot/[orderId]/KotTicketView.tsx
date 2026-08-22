@@ -13,7 +13,7 @@ import {
   resolvePairedPort,
 } from "@/lib/printing/web-serial-printer";
 
-const PRINT_MODE_KEY = "dhankipos:kot-print-mode";
+const PRINT_MODE_KEY = "restromitra:kot-print-mode";
 
 type Order = {
   id: string;

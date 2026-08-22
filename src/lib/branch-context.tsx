@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 export type SelectableBranch = { id: string; name: string; isMain: boolean };
 
 function storageKey(restaurantId: string) {
-  return `dhankipos:active-branch:${restaurantId}`;
+  return `restromitra:active-branch:${restaurantId}`;
 }
 
 type BranchContextValue = {

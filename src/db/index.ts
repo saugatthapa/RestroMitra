@@ -27,13 +27,13 @@ if (!connectionString) {
 // hits this: the module only loads once per long-lived process there.
 declare global {
   // eslint-disable-next-line no-var
-  var __dhankiposDbClient: ReturnType<typeof postgres> | undefined;
+  var __restromitraDbClient: ReturnType<typeof postgres> | undefined;
 }
 
 const client =
   process.env.NODE_ENV === "production"
     ? postgres(connectionString, { prepare: false, max: 10 })
-    : (globalThis.__dhankiposDbClient ??= postgres(connectionString, { prepare: false, max: 10 }));
+    : (globalThis.__restromitraDbClient ??= postgres(connectionString, { prepare: false, max: 10 }));
 
 export const db = drizzle(client, { schema });
 export type Database = typeof db;

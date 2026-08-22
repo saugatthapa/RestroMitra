@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api-client";
 
-const SNOOZE_KEY = "dhankipos:notif-gate-snoozed"; // sessionStorage — reappears next session, not gone forever
-const TEST_DISMISS_KEY = "dhankipos:notif-test-dismissed"; // sessionStorage — same "reappears next session" idea
+const SNOOZE_KEY = "restromitra:notif-gate-snoozed"; // sessionStorage — reappears next session, not gone forever
+const TEST_DISMISS_KEY = "restromitra:notif-test-dismissed"; // sessionStorage — same "reappears next session" idea
 
 type TestOutcome =
   | { status: "not_configured" }

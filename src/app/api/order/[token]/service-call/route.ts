@@ -137,7 +137,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
       title: "Table needs help",
       body: `${resolved.tableName} is calling staff`,
       url: "/dashboard/tables",
-      tag: "dhankipos-service-call",
+      tag: "restromitra-service-call",
     });
 
     return NextResponse.json({ call: serializeCall(created) }, { status: 201 });

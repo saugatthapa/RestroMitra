@@ -30,7 +30,7 @@ import { translate, type Locale, type TranslationKey } from "./i18n-dictionary";
 export { LOCALE_LABELS, translate, trialDaysLeftText, cartItemCountText } from "./i18n-dictionary";
 export type { Locale, TranslationKey } from "./i18n-dictionary";
 
-const LOCALE_KEY = "dhankipos:locale";
+const LOCALE_KEY = "restromitra:locale";
 
 type LocaleContextValue = { locale: Locale; setLocale: (next: Locale) => void };
 
@@ -66,7 +66,7 @@ export function useTranslation(): { t: (key: TranslationKey) => string; locale: 
   return { t: (key) => translate(key, locale), locale };
 }
 
-const GUEST_LOCALE_KEY = "dhankipos:guest-locale";
+const GUEST_LOCALE_KEY = "restromitra:guest-locale";
 
 /** A standalone locale+t() pair for the public order page — deliberately NOT
  * sharing LocaleProvider/LOCALE_KEY with the dashboard (see the module doc

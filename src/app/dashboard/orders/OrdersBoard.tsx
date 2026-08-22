@@ -185,11 +185,11 @@ export function OrdersBoard({
     refreshQueue();
     const poll = setInterval(loadOrders, 5000);
     const tick = setInterval(() => forceTick((n) => n + 1), 30_000);
-    window.addEventListener("dhankipos:orders-changed", loadOrders);
+    window.addEventListener("restromitra:orders-changed", loadOrders);
     return () => {
       clearInterval(poll);
       clearInterval(tick);
-      window.removeEventListener("dhankipos:orders-changed", loadOrders);
+      window.removeEventListener("restromitra:orders-changed", loadOrders);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);

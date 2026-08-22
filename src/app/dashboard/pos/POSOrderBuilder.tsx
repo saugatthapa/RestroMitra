@@ -71,7 +71,7 @@ function base(slug: string) {
 // can still render a usable, if possibly stale, ordering screen instead of
 // a blank error.
 function snapshotKey(slug: string) {
-  return `dhankipos:pos-menu:${slug}`;
+  return `restromitra:pos-menu:${slug}`;
 }
 
 function readSnapshot(slug: string): MenuSnapshot | null {

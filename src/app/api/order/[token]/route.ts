@@ -59,6 +59,7 @@ export async function POST(
         tableIsActive: restaurantTables.isActive,
         restaurantId: restaurants.id,
         restaurantIsActive: restaurants.isActive,
+        restaurantTimezone: restaurants.timezone,
       })
       .from(restaurantTables)
       .innerJoin(restaurants, eq(restaurantTables.restaurantId, restaurants.id))
@@ -106,7 +107,7 @@ export async function POST(
               restaurantId: resolved.restaurantId,
               branchId: resolved.branchId,
               tableId: resolved.tableId,
-              orderNumber: generateOrderNumber(),
+              orderNumber: generateOrderNumber(resolved.restaurantTimezone),
               source: "qr_customer",
               status: "pending",
               customerName: body.customerName || null,
@@ -228,7 +229,7 @@ export async function POST(
         ? `${resolved.tableName} • ${formatNPR(insertedOrder.totalInPaisa)}`
         : formatNPR(insertedOrder.totalInPaisa),
       url: "/dashboard/orders",
-      tag: "dhankipos-order",
+      tag: "restromitra-order",
     });
 
     return NextResponse.json(

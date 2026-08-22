@@ -25,7 +25,7 @@
  * no "this is the one from last time" signal on its own).
  */
 
-const STORAGE_KEY = "dhankipos:thermal-printer";
+const STORAGE_KEY = "restromitra:thermal-printer";
 
 type StoredPrinter = { usbVendorId?: number; usbProductId?: number; baudRate: number; label: string };
 

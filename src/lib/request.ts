@@ -13,5 +13,5 @@ export function getClientIp(request: Request): string | null {
  * blocks classic cross-site form-post CSRF against these endpoints.
  */
 export function hasValidCsrfHeader(request: Request): boolean {
-  return request.headers.get("x-dhankipos-client") === "web";
+  return request.headers.get("x-restromitra-client") === "web";
 }

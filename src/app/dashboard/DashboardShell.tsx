@@ -48,7 +48,7 @@ type NavGroup = {
   items: NavItem[];
 };
 
-const SIDEBAR_COLLAPSED_KEY = "dhankipos:sidebar-collapsed";
+const SIDEBAR_COLLAPSED_KEY = "restromitra:sidebar-collapsed";
 
 function daysRemaining(trialEndsAt: string | null): number | null {
   if (!trialEndsAt) return null;
@@ -398,7 +398,7 @@ function DashboardShellContent({
     const source = new EventSource(`/api/restaurants/${slug}/events`);
 
     source.addEventListener("order.created", (event) => {
-      window.dispatchEvent(new CustomEvent("dhankipos:orders-changed"));
+      window.dispatchEvent(new CustomEvent("restromitra:orders-changed"));
 
       let orderId: string | null = null;
       try {
@@ -429,7 +429,7 @@ function DashboardShellContent({
       }
     });
     source.addEventListener("order.status_changed", (event) => {
-      window.dispatchEvent(new CustomEvent("dhankipos:orders-changed"));
+      window.dispatchEvent(new CustomEvent("restromitra:orders-changed"));
       try {
         const data = JSON.parse((event as MessageEvent).data) as { orderId: string; to: string };
         if (data.to !== "pending") {

@@ -9,7 +9,7 @@ async function apiRequest<T = unknown>(
     method,
     headers: {
       "Content-Type": "application/json",
-      "x-dhankipos-client": "web",
+      "x-restromitra-client": "web",
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
