@@ -127,6 +127,13 @@ export const NavIcon = {
       <path d="M7 15h4" />
     </svg>
   ),
+  AuditLog: () => (
+    <svg {...iconProps}>
+      <path d="M3 3v6h6" />
+      <path d="M3 9a9 9 0 1 1 2.6 6.3" />
+      <path d="M12 7v5l3 3" />
+    </svg>
+  ),
   Settings: () => (
     <svg {...iconProps}>
       <circle cx="12" cy="12" r="3" />

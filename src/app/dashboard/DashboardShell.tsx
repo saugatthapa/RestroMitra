@@ -612,6 +612,18 @@ function DashboardShellContent({
           icon: <NavIcon.Website />,
           permission: PERMISSIONS.MANAGE_RESTAURANT_SETTINGS,
         },
+        {
+          // RC audit P1 fix — recordAuditLog() has been populating
+          // audit_logs since Phase 2, but there was never a read path (no
+          // GET endpoint, no page) — same MANAGE_STAFF trust tier as the
+          // Staff nav item above, since the log surfaces exactly the kind
+          // of staff-permission/role/salary changes that entry gates.
+          label: t("nav.auditLog"),
+          href: "/dashboard/audit-log",
+          enabled: true,
+          icon: <NavIcon.AuditLog />,
+          permission: PERMISSIONS.MANAGE_STAFF,
+        },
       ],
     },
     {
