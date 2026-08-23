@@ -29,6 +29,36 @@ const ESC = 0x1b;
 const GS = 0x1d;
 const LF = 0x0a;
 
+/**
+ * RC audit P0 fix — strips ASCII control bytes (0x00-0x1F, plus DEL 0x7F)
+ * out of any text before it's encoded, replacing each with a plain space.
+ *
+ * Why this matters: `line()`'s output ultimately reaches a real thermal
+ * printer as raw, unescaped bytes with no separation between "bytes the
+ * app meant as a command" and "bytes that happen to be sitting inside a
+ * text field" — the printer's firmware treats ESC (0x1B), GS (0x1D), and
+ * the rest of the control range as command bytes wherever they appear in
+ * the stream. Several of the strings that flow into `line()` (order/item
+ * notes, in particular) originate from the public, unauthenticated QR
+ * ordering page with no character restriction today — so without this,
+ * a customer could type/POST a note containing a literal control
+ * character sequence (e.g. GS V — cut, or a printer-model-specific
+ * cash-drawer-kick command) and have it execute on hardware physically at
+ * the restaurant the next time that ticket prints. Any legitimate line
+ * break the caller wants is expressed by calling `line()` again, or via
+ * `wrapText`'s own wrapping — never by embedding a raw LF/CR inside the
+ * text itself — so it's safe to strip all of them here, LF (0x0A)
+ * included.
+ */
+function sanitizeForPrinter(text: string): string {
+  let result = "";
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    result += code <= 0x1f || code === 0x7f ? " " : ch;
+  }
+  return result;
+}
+
 type Align = "left" | "center" | "right";
 
 const ALIGN_CODES: Record<Align, number> = { left: 0, center: 1, right: 2 };
@@ -105,7 +135,8 @@ export class EscPosBuilder {
 
   /** One line of text, word-wrapped to the configured character width, each wrapped line ending in LF. */
   line(text: string = ""): this {
-    for (const wrapped of wrapText(text, this.charWidth)) {
+    const safe = sanitizeForPrinter(text);
+    for (const wrapped of wrapText(safe, this.charWidth)) {
       this.chunks.push(...Array.from(new TextEncoder().encode(wrapped)));
       this.chunks.push(LF);
     }

@@ -53,6 +53,33 @@ describe("EscPosBuilder", () => {
     const bytes = new EscPosBuilder().cut().build();
     expect(Array.from(bytes.slice(-3))).toEqual([0x1d, 0x56, 0x01]);
   });
+
+  it("line() strips embedded ESC/GS control bytes instead of passing them through raw", () => {
+    // RC audit P0 regression test: a malicious/careless customer note
+    // containing a literal ESC (0x1B) + GS V (0x1D 0x56) "cut" sequence
+    // must not reach the printer's own command stream unescaped.
+    const injected = "Note\x1b\x40\x1dV\x00 no onions";
+    const bytes = new EscPosBuilder().line(injected).build();
+    const arr = Array.from(bytes);
+    // Only the builder's own leading ESC @ (indices 0-1) may contain 0x1b —
+    // none of the injected control bytes may appear anywhere after it.
+    const afterHeader = arr.slice(2);
+    expect(afterHeader).not.toContain(0x1b);
+    expect(afterHeader).not.toContain(0x1d);
+  });
+
+  it("line() replaces control bytes with spaces rather than silently dropping content", () => {
+    const bytes = new EscPosBuilder().line("a\x07b").build();
+    const text = decode(bytes);
+    expect(text).toContain("a b");
+  });
+
+  it("line() leaves ordinary printable text, including the LF it appends itself, untouched", () => {
+    const bytes = new EscPosBuilder().line("hello").build();
+    const text = decode(bytes);
+    expect(text).toContain("hello");
+    expect(bytes).toHaveLength(2 + 5 + 1);
+  });
 });
 
 function ticket(overrides: Partial<EscPosKotTicket> = {}): EscPosKotTicket {
@@ -125,5 +152,39 @@ describe("buildKotTicketEscPos", () => {
   it("ends with a cut command", () => {
     const bytes = buildKotTicketEscPos(ticket());
     expect(Array.from(bytes.slice(-3))).toEqual([0x1d, 0x56, 0x01]);
+  });
+
+  it("sanitizes control bytes injected via a customer-supplied item note end-to-end", () => {
+    // A guest's order-item note reaches this builder as untrusted text from
+    // the public QR ordering page — this proves the whole ticket-assembly
+    // path, not just line() in isolation, never lets one through raw.
+    const bytes = buildKotTicketEscPos(
+      ticket({
+        items: [
+          {
+            quantity: 1,
+            name: "Momo",
+            variantName: null,
+            addonNames: [],
+            notes: "spicy\x1b\x40\x1dV\x00please",
+          },
+        ],
+      }),
+    );
+    // The ticket legitimately contains other ESC/GS bytes of its own
+    // (bold/align/emphasizedSize toggles around other lines), so this
+    // checks for the exact injected subsequence rather than banning every
+    // ESC/GS byte anywhere in the output.
+    const injectedSequence = [0x1b, 0x40, 0x1d, "V".charCodeAt(0), 0x00];
+    const arr = Array.from(bytes);
+    let found = false;
+    for (let i = 0; i <= arr.length - injectedSequence.length; i++) {
+      if (injectedSequence.every((b, j) => arr[i + j] === b)) {
+        found = true;
+        break;
+      }
+    }
+    expect(found).toBe(false);
+    expect(decode(bytes)).toContain("please");
   });
 });
