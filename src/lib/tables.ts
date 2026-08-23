@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { restaurantTables, orders, reservations } from "@/db/schema";
 import { deriveTableStatus, type TableStatus } from "@/lib/table-status";
 import { HttpError } from "@/lib/http-error";
+import { restaurantStartOfDay } from "@/lib/restaurant-date";
 
 export class TableError extends HttpError {
   constructor(message: string, status = 400) {
@@ -132,9 +133,20 @@ export async function releaseTableIfSoleReservation(
   tx: Transaction,
   tableId: string,
   excludingReservationId: string,
+  // P0-6 re-audit: this used to compute "today" via `new Date();
+  // setHours(0,0,0,0)` — the APP SERVER's local midnight, not the
+  // restaurant's. Node processes in this deployment run in UTC, so for
+  // roughly 5h45m after real Kathmandu midnight (until the server's own
+  // UTC midnight caught up), this window was silently checking the WRONG
+  // calendar day — exactly the Task #130 bug class, just in a call site
+  // that Task #130's original pass missed. Optional + defaulting to the
+  // Asia/Kathmandu fallback (restaurantStartOfDay's own default) rather
+  // than required, so any caller that hasn't been updated yet still gets
+  // the CORRECT default timezone instead of silently reverting to
+  // UTC-server-local.
+  timezone?: string | null,
 ): Promise<void> {
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
+  const dayStart = restaurantStartOfDay(timezone);
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
 
   const otherActive = await tx
@@ -266,6 +278,12 @@ export function assertPartyFitsCapacity(capacity: number | null, partySize: numb
 export async function getTodayUpcomingReservationsByTable(
   restaurantId: string,
   tableIds: string[],
+  // P0-6 re-audit: same server-local-midnight bug as
+  // releaseTableIfSoleReservation above — see that function's comment.
+  // Optional + defaulting to restaurantStartOfDay's own Asia/Kathmandu
+  // fallback so a not-yet-updated caller still gets the right default
+  // instead of reverting to UTC-server-local.
+  timezone?: string | null,
 ): Promise<Map<string, { id: string; customerName: string; partySize: number; reservationTime: Date }[]>> {
   const byTable = new Map<
     string,
@@ -273,8 +291,7 @@ export async function getTodayUpcomingReservationsByTable(
   >();
   if (tableIds.length === 0) return byTable;
 
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
+  const dayStart = restaurantStartOfDay(timezone);
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
 
   const rows = await db.query.reservations.findMany({

@@ -26,7 +26,7 @@ export async function PATCH(
   }
   try {
     const { slug, reservationId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_RESERVATIONS,
     );
@@ -69,7 +69,7 @@ export async function PATCH(
         if (targetStatus === "seated") {
           await markTableSeated(tx, row.tableId);
         } else if (targetStatus === "cancelled" || targetStatus === "no_show") {
-          await releaseTableIfSoleReservation(tx, row.tableId, reservationId);
+          await releaseTableIfSoleReservation(tx, row.tableId, reservationId, timezone);
         }
       }
 

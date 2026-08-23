@@ -20,6 +20,16 @@ export const submitPublicOrderSchema = z.object({
     .optional()
     .or(z.literal("")),
   notes: z.string().trim().max(500).optional().or(z.literal("")),
+  // P0-2 — same idempotency mechanism as the staff order route's
+  // clientRequestId (see validation/payments.ts): a client-generated id
+  // this specific submission attempt is tagged with, so a retry (a guest's
+  // flaky mobile connection timing out after the order already committed,
+  // or the QR menu's own double-submit guard racing a slow response) can
+  // be recognized and handed back the original order instead of creating a
+  // second one. This is the higher-risk gap this covers — the public QR
+  // route has no staff oversight to catch a duplicate order the way a
+  // busy counter might notice two identical tickets print.
+  clientRequestId: z.string().trim().min(1).max(100).optional(),
 });
 
 export const updateOrderStatusSchema = z.object({

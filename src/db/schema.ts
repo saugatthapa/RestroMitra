@@ -642,13 +642,15 @@ export const orders = pgTable(
     // completed transition (src/lib/loyalty.ts).
     customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
     notes: text("notes"),
-    // Phase 11b (offline POS): a client-generated UUID the POS app attaches
-    // to an order it may retry — e.g. a network hiccup mid-submit, or an
-    // order queued locally while offline and synced once back online. When
-    // set, a retry with the SAME clientRequestId returns the original order
-    // instead of creating a duplicate (see the unique index below and the
-    // orders POST route's idempotent-insert handling). Nullable: ordinary
-    // browser/QR submissions with no retry concern never set this.
+    // Phase 11b (offline POS), extended P0-2 to the public QR order route: a
+    // client-generated id the submitting client attaches to an order it may
+    // retry — e.g. a network hiccup mid-submit, an order queued locally
+    // while offline and synced once back online, or a guest's phone
+    // retrying a QR order after a flaky connection. When set, a retry with
+    // the SAME clientRequestId returns the original order instead of
+    // creating a duplicate (see the unique index below and both order POST
+    // routes' idempotent-insert handling). Nullable: a submission with no
+    // retry concern (or a client too old to send one) never sets this.
     clientRequestId: varchar("client_request_id", { length: 100 }),
     // All amounts here are integer paisa, computed server-side — never
     // trust a client-supplied total. subtotalInPaisa/taxInPaisa come from
@@ -1449,6 +1451,19 @@ export const attendanceRecords = pgTable(
     index("attendance_records_restaurant_id_idx").on(table.restaurantId),
     index("attendance_records_user_id_idx").on(table.userId),
     index("attendance_records_branch_id_idx").on(table.branchId),
+    // DB-level backstop for "at most one open shift per user" — the
+    // clock-in route's own SELECT-then-INSERT check (see its doc comment)
+    // is a plain read-then-write with no locking, so two clock-in requests
+    // for the same user arriving close enough together (a double-tap, or a
+    // flaky-connection retry) could both pass the SELECT before either
+    // INSERT committed, opening two simultaneous shifts. Partial (WHERE
+    // clock_out_at IS NULL) so closed shift history accumulates freely —
+    // only a concurrently-OPEN shift per (user, restaurant) is constrained.
+    // Same pattern as service_calls_one_active_per_table_unique /
+    // user_roles_one_active_per_restaurant_unique above.
+    uniqueIndex("attendance_records_one_open_shift_per_user_unique")
+      .on(table.userId, table.restaurantId)
+      .where(sql`${table.clockOutAt} IS NULL`),
   ],
 );
 
@@ -2307,6 +2322,22 @@ export const serviceCalls = pgTable(
     // create route uses this to return the existing call instead of
     // spawning a duplicate every time an impatient guest taps twice.
     index("service_calls_table_id_status_idx").on(table.tableId, table.status),
+    // DB-level backstop for the same invariant the route's "look up the
+    // existing active call, return it instead of inserting" check is
+    // already trying to enforce (see the POST handler's doc comment in
+    // src/app/api/order/[token]/service-call/route.ts). That check is a
+    // plain SELECT-then-INSERT with no locking, so two requests for the
+    // same table arriving close enough together (a genuine race on a
+    // flaky mobile network's retry, or someone double-tapping fast enough
+    // to beat the round trip) can both pass the SELECT before either
+    // INSERT commits, producing two simultaneous "pending" calls for one
+    // table. Partial (WHERE status IN pending/acknowledged) so resolved
+    // history accumulates freely — only concurrently-ACTIVE calls for a
+    // table are constrained to one. Same pattern as
+    // user_roles_one_active_per_restaurant_unique above.
+    uniqueIndex("service_calls_one_active_per_table_unique")
+      .on(table.tableId)
+      .where(sql`${table.status} IN ('pending', 'acknowledged')`),
   ],
 );
 

@@ -33,7 +33,7 @@ export async function GET(
 ) {
   try {
     const { slug, tableId } = await ctx.params;
-    const { restaurantId } = await resolveRestaurantContext(slug);
+    const { restaurantId, timezone } = await resolveRestaurantContext(slug);
 
     const existing = await getOwnedTable(restaurantId, tableId);
     if (!existing) {
@@ -55,7 +55,7 @@ export async function GET(
       },
     });
 
-    const reservationsByTable = await getTodayUpcomingReservationsByTable(restaurantId, [tableId]);
+    const reservationsByTable = await getTodayUpcomingReservationsByTable(restaurantId, [tableId], timezone);
 
     return NextResponse.json({
       table: existing,

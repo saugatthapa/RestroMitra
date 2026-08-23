@@ -4,6 +4,7 @@ import { Suspense, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { apiPost, ApiError } from "@/lib/api-client";
+import { safeInternalRedirect } from "@/lib/safe-redirect";
 import { AuthTabs } from "@/components/auth/AuthTabs";
 import { AuthField } from "@/components/auth/AuthField";
 import { AuthIcon } from "@/components/auth/AuthIcons";
@@ -31,7 +32,7 @@ function LoginForm() {
     setSubmitting(true);
     try {
       await apiPost("/api/auth/login", { phone, password });
-      const next = searchParams.get("next") ?? "/dashboard";
+      const next = safeInternalRedirect(searchParams.get("next"));
       router.push(next);
       router.refresh();
     } catch (err) {

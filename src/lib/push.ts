@@ -1,8 +1,8 @@
 import "server-only";
 import webpush from "web-push";
-import { eq } from "drizzle-orm";
+import { and, eq, getTableColumns, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
-import { pushSubscriptions } from "@/db/schema";
+import { pushSubscriptions, userRoles } from "@/db/schema";
 import { sendFallbackAlertEmail } from "@/lib/email";
 
 /**
@@ -148,18 +148,49 @@ async function sendToSubscriptions(
  * That fallback is deliberately NOT attempted when individual sends fail
  * despite subscriptions existing (a transient push-service 5xx, say) —
  * only the two "there is definitionally no one to push to" cases below.
+ *
+ * P0-4 fix — `branchId`: when the event this notification reports on
+ * happened at a SPECIFIC branch (e.g. a Call Staff tap at Branch A),
+ * pass that branch's id so staff scoped to a *different* branch of the
+ * same restaurant don't get paged for it. `pushSubscriptions` itself has
+ * no branchId column — a device subscribes once, restaurant-wide — so the
+ * filter joins to `userRoles` (the subscription owner's current grant) and
+ * keeps a subscription only when its owner is unrestricted (branchId IS
+ * NULL — owner/manager/platform_admin) OR scoped to this same branch.
+ * Mirrors the SSE realtime path's identical branch-scoping logic (see
+ * fetchEventsForRestaurant in realtime.ts / realtime-branch-filtering.
+ * test.ts) — same invariant, different transport. Omitting `branchId`
+ * (restaurant-wide events, or callers not yet updated to pass one) keeps
+ * the prior unfiltered behavior — every subscription for the restaurant.
  */
-export async function sendPushToRestaurant(restaurantId: string, payload: PushPayload): Promise<void> {
+export async function sendPushToRestaurant(
+  restaurantId: string,
+  payload: PushPayload,
+  branchId?: string | null,
+): Promise<void> {
   if (!ensureConfigured()) {
     console.warn("sendPushToRestaurant: VAPID keys not configured, skipping push send.");
     void sendFallbackAlertEmail(restaurantId, payload.title, payload.body);
     return;
   }
 
-  const subs = await db
-    .select()
-    .from(pushSubscriptions)
-    .where(eq(pushSubscriptions.restaurantId, restaurantId));
+  const subs = branchId
+    ? await db
+        .select(getTableColumns(pushSubscriptions))
+        .from(pushSubscriptions)
+        .innerJoin(userRoles, eq(pushSubscriptions.userId, userRoles.userId))
+        .where(
+          and(
+            eq(pushSubscriptions.restaurantId, restaurantId),
+            eq(userRoles.restaurantId, restaurantId),
+            eq(userRoles.isActive, true),
+            or(isNull(userRoles.branchId), eq(userRoles.branchId, branchId)),
+          ),
+        )
+    : await db
+        .select()
+        .from(pushSubscriptions)
+        .where(eq(pushSubscriptions.restaurantId, restaurantId));
 
   if (subs.length === 0) {
     void sendFallbackAlertEmail(restaurantId, payload.title, payload.body);

@@ -302,20 +302,36 @@ export async function requireBranchAccess(
 ): Promise<void> {
   const { role, branchId: grantedBranchId } =
     knownGrant ?? (await requireRestaurantAccess(userId, restaurantId));
-
-  // Owners/managers/platform admins with a NULL branchId on their grant
-  // have access to all branches of the restaurant. Staff scoped to a
-  // specific branch can only act on that branch.
-  if (grantedBranchId === null) return;
-  if (grantedBranchId !== branchId) {
-    throw new AuthError("You do not have access to this branch.", 403);
-  }
   void role;
 
+  // P0-1 fix: this check used to run only for a branch-SCOPED grant
+  // (after already confirming grantedBranchId === branchId, so it was
+  // largely redundant there) and was skipped entirely for an unrestricted
+  // (grantedBranchId === null) grant via an early return above. That meant
+  // this function's own name promised "does this user have access to
+  // THIS branch of THIS restaurant" but an unrestricted caller never
+  // actually got the second half verified — a caller passing a branchId
+  // that belongs to a DIFFERENT restaurant (or doesn't exist at all)
+  // would sail through as long as the user had any unrestricted grant on
+  // `restaurantId`. Every real call site in this app independently
+  // re-applies eq(table.restaurantId, trustedRestaurantId) on its own
+  // queries (defense in depth), so this was never actually exploitable in
+  // practice — but a primitive named "requireBranchAccess" should itself
+  // guarantee what it claims to, for whatever calls it next. Running this
+  // unconditionally, before considering the grant, closes that gap.
   const rows = await db
     .select({ id: branches.id })
     .from(branches)
     .where(and(eq(branches.id, branchId), eq(branches.restaurantId, restaurantId)))
     .limit(1);
   if (rows.length === 0) throw new AuthError("Branch not found", 404);
+
+  // Owners/managers/platform admins with a NULL branchId on their grant
+  // have access to every branch of the restaurant — now confirmed above to
+  // actually belong to it. Staff scoped to a specific branch can only act
+  // on that one branch.
+  if (grantedBranchId === null) return;
+  if (grantedBranchId !== branchId) {
+    throw new AuthError("You do not have access to this branch.", 403);
+  }
 }

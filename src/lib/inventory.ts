@@ -93,6 +93,22 @@ export async function recordStockMovement(
  * "phantom" stock doesn't mean anything, since stock is allowed to go
  * negative in this phase (see PHASE_7_NOTES.md) but negative stock was
  * never actually paid for at any cost.
+ *
+ * P0-5 fix: the new cost is computed here in JS from the row this SELECT
+ * reads (unlike recordStockMovement's stock-quantity update, which does its
+ * `+= delta` entirely inside the SQL SET clause and so is safe on its own),
+ * which makes this a genuine read-modify-write. Under Postgres's default
+ * READ COMMITTED isolation a bare transaction does NOT protect that: two
+ * concurrent purchases of the same item can both SELECT the same
+ * pre-purchase cost/stock, each compute its own "correct" weighted average
+ * from that stale snapshot, and whichever UPDATE commits second silently
+ * overwrites the first — a lost update that under-costs the item forever
+ * (the first purchase's price contribution vanishes from the average with
+ * no trace). `.for("update")` locks this row for the rest of the
+ * transaction so a second concurrent purchase's SELECT blocks until the
+ * first commits, then reads the already-updated cost/stock instead of a
+ * stale snapshot — same pattern as the order-locking call sites (e.g.
+ * src/lib/tables.ts, the payments/adjustments/refunds routes).
  */
 export async function applyPurchaseCosting(
   tx: Transaction,
@@ -114,6 +130,7 @@ export async function applyPurchaseCosting(
         eq(inventoryItems.restaurantId, params.restaurantId),
       ),
     )
+    .for("update")
     .limit(1);
   const item = rows[0];
   if (!item) {

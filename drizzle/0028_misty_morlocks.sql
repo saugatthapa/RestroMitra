@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "service_calls_one_active_per_table_unique" ON "service_calls" USING btree ("table_id") WHERE "service_calls"."status" IN ('pending', 'acknowledged');

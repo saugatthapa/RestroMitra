@@ -8,6 +8,7 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { rateLimit } from "@/lib/rate-limit";
 import { publishEvent } from "@/lib/realtime";
 import { sendPushToRestaurant } from "@/lib/push";
+import { isUniqueViolation } from "@/lib/db-error";
 
 const ACTIVE_STATUSES = ["pending", "acknowledged"] as const;
 
@@ -48,6 +49,17 @@ function serializeCall(call: typeof serviceCalls.$inferSelect) {
  * has an active (pending/acknowledged) call, that same call is returned
  * instead of creating a duplicate — a guest double-tapping (or retrying
  * after a flaky connection) doesn't spawn a second alert on staff screens.
+ *
+ * The SELECT-then-INSERT below is a plain read-then-write with no locking,
+ * so it's only a best-effort check on its own — two requests for the same
+ * table close enough together (a double-tap fast enough to beat one round
+ * trip, or two retries from a flaky connection) can both pass the SELECT
+ * before either INSERT commits. The actual guarantee is the
+ * `service_calls_one_active_per_table_unique` partial unique index (see
+ * schema.ts): the loser of that race gets a 23505 back from Postgres, which
+ * is caught below and turned into the same "return the existing call"
+ * response the SELECT path takes — so a guest never sees an error, and
+ * staff never see a duplicate alert, no matter how the race lands.
  */
 export async function POST(request: Request, ctx: { params: Promise<{ token: string }> }) {
   if (!hasValidCsrfHeader(request)) {
@@ -94,15 +106,39 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
       return NextResponse.json({ call: serializeCall(existing) }, { status: 200 });
     }
 
-    const [created] = await db
-      .insert(serviceCalls)
-      .values({
-        restaurantId: resolved.restaurantId,
-        branchId: resolved.branchId,
-        tableId: resolved.tableId,
-        status: "pending",
-      })
-      .returning();
+    let created: typeof serviceCalls.$inferSelect;
+    try {
+      const [inserted] = await db
+        .insert(serviceCalls)
+        .values({
+          restaurantId: resolved.restaurantId,
+          branchId: resolved.branchId,
+          tableId: resolved.tableId,
+          status: "pending",
+        })
+        .returning();
+      created = inserted;
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+      // Lost the race against a concurrent request for the same table — the
+      // other request's insert is the one that landed. Fetch it and return
+      // it the same way the up-front SELECT would have, rather than
+      // erroring out or creating a duplicate.
+      const raceWinner = await db.query.serviceCalls.findFirst({
+        where: and(
+          eq(serviceCalls.tableId, resolved.tableId),
+          inArray(serviceCalls.status, ACTIVE_STATUSES),
+        ),
+        orderBy: (sc, { desc }) => [desc(sc.createdAt)],
+      });
+      if (!raceWinner) {
+        // Should be unreachable — the unique index only fires when an
+        // active row exists — but don't silently swallow the original
+        // error if reality disagrees.
+        throw err;
+      }
+      return NextResponse.json({ call: serializeCall(raceWinner) }, { status: 200 });
+    }
 
     await publishEvent(db, {
       restaurantId: resolved.restaurantId,
@@ -133,12 +169,21 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
     // tapping "call staff" and getting no response because everyone's
     // screen happened to be off was exactly as real a gap as the missing
     // order alert was, just never wired up when Web Push was first added.
-    void sendPushToRestaurant(resolved.restaurantId, {
-      title: "Table needs help",
-      body: `${resolved.tableName} is calling staff`,
-      url: "/dashboard/tables",
-      tag: "restromitra-service-call",
-    });
+    // P0-4: scoped to this table's own branch — a branch-restricted staff
+    // member at a DIFFERENT branch of this restaurant must not be paged
+    // for a table that isn't theirs. Unrestricted staff (owner/manager)
+    // still get it regardless of branch — see sendPushToRestaurant's doc
+    // comment.
+    void sendPushToRestaurant(
+      resolved.restaurantId,
+      {
+        title: "Table needs help",
+        body: `${resolved.tableName} is calling staff`,
+        url: "/dashboard/tables",
+        tag: "restromitra-service-call",
+      },
+      resolved.branchId,
+    );
 
     return NextResponse.json({ call: serializeCall(created) }, { status: 201 });
   } catch (err) {

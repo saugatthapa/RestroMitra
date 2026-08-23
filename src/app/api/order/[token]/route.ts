@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { restaurantTables, restaurants, orders, orderItems, orderItemAddons } from "@/db/schema";
 import { parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
@@ -78,6 +78,48 @@ export async function POST(
     if (!parsed.ok) return parsed.response;
     const body = parsed.data;
 
+    // P0-2 idempotent create: if this exact submission attempt (identified
+    // by clientRequestId, not the order itself) already landed — a flaky
+    // mobile connection retrying after the server already committed, or the
+    // menu's own double-submit guard racing a slow response — hand back
+    // the original order instead of creating a second one. Checked up
+    // front (cheap, avoids doing pricing work for what's almost always a
+    // no-op) AND after insert (handles the race where two retries land
+    // concurrently — see the 23505 handling in the retry loop below). Same
+    // pattern as the staff order route (orders/route.ts), which this route
+    // never had until now despite being the higher-risk one: no staff
+    // oversight to notice a duplicate, on the flakiest network conditions
+    // (a guest's own phone).
+    if (body.clientRequestId) {
+      const existingRows = await db
+        .select()
+        .from(orders)
+        .where(
+          and(
+            eq(orders.restaurantId, resolved.restaurantId),
+            eq(orders.clientRequestId, body.clientRequestId),
+          ),
+        )
+        .limit(1);
+      if (existingRows[0]) {
+        return NextResponse.json(
+          {
+            order: {
+              id: existingRows[0].id,
+              orderNumber: existingRows[0].orderNumber,
+              status: existingRows[0].status,
+              subtotalInPaisa: existingRows[0].subtotalInPaisa,
+              taxInPaisa: existingRows[0].taxInPaisa,
+              totalInPaisa: existingRows[0].totalInPaisa,
+            },
+            tableName: resolved.tableName,
+            idempotentReplay: true,
+          },
+          { status: 200 },
+        );
+      }
+    }
+
     const pricing = await computeOrderPricing(
       resolved.restaurantId,
       body.items.map((item) => ({
@@ -95,6 +137,7 @@ export async function POST(
     // alone (astronomically unlikely, but "astronomically unlikely" isn't
     // the same guarantee as "enforced").
     let insertedOrder: typeof orders.$inferSelect | undefined;
+    let idempotentReplay = false;
     let lastError: unknown;
     for (let attempt = 0; attempt < 3 && !insertedOrder; attempt++) {
       try {
@@ -113,6 +156,7 @@ export async function POST(
               customerName: body.customerName || null,
               customerPhone: body.customerPhone || null,
               notes: body.notes || null,
+              clientRequestId: body.clientRequestId || null,
               subtotalInPaisa: pricing.subtotalInPaisa,
               taxInPaisa: pricing.taxInPaisa,
               totalInPaisa: pricing.totalInPaisa,
@@ -173,11 +217,52 @@ export async function POST(
         // its doc comment for why the latter is the one that actually
         // fires here, since this throws from inside db.transaction().)
         if (!isUniqueViolation(err)) throw err;
+        // A unique-index collision here is either the order-number index
+        // (loop again with a freshly generated number) or, if a
+        // clientRequestId was supplied, possibly a concurrent duplicate
+        // submission of the SAME retry racing us (two requests from the
+        // same flaky connection both landing at once) — check for that
+        // before burning another attempt. Same pattern as the staff order
+        // route (orders/route.ts).
+        if (body.clientRequestId) {
+          const raceRows = await db
+            .select()
+            .from(orders)
+            .where(
+              and(
+                eq(orders.restaurantId, resolved.restaurantId),
+                eq(orders.clientRequestId, body.clientRequestId),
+              ),
+            )
+            .limit(1);
+          if (raceRows[0]) {
+            insertedOrder = raceRows[0];
+            idempotentReplay = true;
+          }
+        }
       }
     }
 
     if (!insertedOrder) {
       throw lastError ?? new Error("Failed to create order after retries.");
+    }
+
+    if (idempotentReplay) {
+      return NextResponse.json(
+        {
+          order: {
+            id: insertedOrder.id,
+            orderNumber: insertedOrder.orderNumber,
+            status: insertedOrder.status,
+            subtotalInPaisa: insertedOrder.subtotalInPaisa,
+            taxInPaisa: insertedOrder.taxInPaisa,
+            totalInPaisa: insertedOrder.totalInPaisa,
+          },
+          tableName: resolved.tableName,
+          idempotentReplay: true,
+        },
+        { status: 200 },
+      );
     }
 
     // Perf: the audit log write and the realtime publish are independent —
@@ -223,14 +308,23 @@ export async function POST(
     // app fully closed. `sendPushToRestaurant` never throws (see its own
     // comment) and a slow/failed push service must never delay or fail the
     // order response the guest is waiting on, so this isn't awaited.
-    void sendPushToRestaurant(resolved.restaurantId, {
-      title: insertedOrder.orderNumber ? `New order #${insertedOrder.orderNumber}` : "New order",
-      body: resolved.tableName
-        ? `${resolved.tableName} • ${formatNPR(insertedOrder.totalInPaisa)}`
-        : formatNPR(insertedOrder.totalInPaisa),
-      url: "/dashboard/orders",
-      tag: "restromitra-order",
-    });
+    // P0-4: scoped to this order's own branch — a branch-restricted staff
+    // member at a DIFFERENT branch of this restaurant must not be paged
+    // for an order that isn't theirs. Unrestricted staff (owner/manager)
+    // still get it regardless of branch — see sendPushToRestaurant's doc
+    // comment.
+    void sendPushToRestaurant(
+      resolved.restaurantId,
+      {
+        title: insertedOrder.orderNumber ? `New order #${insertedOrder.orderNumber}` : "New order",
+        body: resolved.tableName
+          ? `${resolved.tableName} • ${formatNPR(insertedOrder.totalInPaisa)}`
+          : formatNPR(insertedOrder.totalInPaisa),
+        url: "/dashboard/orders",
+        tag: "restromitra-order",
+      },
+      resolved.branchId,
+    );
 
     return NextResponse.json(
       {

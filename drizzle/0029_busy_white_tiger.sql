@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "attendance_records_one_open_shift_per_user_unique" ON "attendance_records" USING btree ("user_id","restaurant_id") WHERE "attendance_records"."clock_out_at" IS NULL;

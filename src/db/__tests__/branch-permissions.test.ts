@@ -104,6 +104,27 @@ describe.skipIf(!hasDb)("Branch access enforcement (integration)", () => {
     ).resolves.toBeUndefined();
   });
 
+  // P0-1 regression: before the fix, requireBranchAccess's unrestricted
+  // (branchId === null) path returned immediately without ever confirming
+  // the REQUESTED branchId actually belongs to the restaurant the caller
+  // passed in — meaning an owner/manager/platform_admin with an
+  // unrestricted grant on restaurant A could pass restaurant B's branch id
+  // straight through unchecked. Every real call site independently
+  // re-scopes its own queries by restaurantId (defense in depth), so this
+  // was never live-exploitable, but the primitive itself should refuse
+  // this on its own.
+  it("an unrestricted grant is REJECTED for a branch belonging to a different restaurant entirely", async () => {
+    await expect(
+      guard.requireBranchAccess(ownerAId, restaurantAId, restaurantBBranchId),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("an unrestricted grant is REJECTED for a branch id that doesn't exist at all", async () => {
+    await expect(
+      guard.requireBranchAccess(ownerAId, restaurantAId, "00000000-0000-0000-0000-000000000000"),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
   it("a branch-scoped grant reaches its own branch", async () => {
     await expect(
       guard.requireBranchAccess(managerScopedId, restaurantAId, secondBranchId),
