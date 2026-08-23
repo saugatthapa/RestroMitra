@@ -851,10 +851,16 @@ function DashboardShellContent({
           {initials}
         </span>
         {!isCollapsed && (
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-neutral-900">{ownerName}</p>
+          // RC audit P1 fix — the only way into /dashboard/account (change
+          // password, log out other sessions), since there's no broader
+          // Settings section yet (see the still-"coming soon" nav item
+          // below) to hang it off instead.
+          <Link href="/dashboard/account" className="min-w-0 flex-1 group">
+            <p className="truncate text-sm font-medium text-neutral-900 group-hover:underline">
+              {ownerName}
+            </p>
             <p className="truncate text-xs capitalize text-neutral-500">{role.replace("_", " ")}</p>
-          </div>
+          </Link>
         )}
         <button
           type="button"

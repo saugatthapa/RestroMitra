@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { randomBytes, createHash } from "crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { sessions, users } from "@/db/schema";
 import { SESSION_COOKIE_NAME } from "./session-cookie";
@@ -143,4 +143,32 @@ export async function setActiveRestaurant(
     .update(sessions)
     .set({ activeRestaurantId: restaurantId })
     .where(eq(sessions.id, sessionId));
+}
+
+/**
+ * RC audit P1 fix — deletes every OTHER session row for this user (never
+ * the caller's own — see keepSessionId), same "logout actually deletes the
+ * row, not just the cookie" model destroySession() already uses, applied
+ * across every device/browser this account is currently logged into.
+ *
+ * Two real uses this closes a gap for: (1) a user who changed their
+ * password because they suspect it leaked — without this, an attacker who
+ * already has a valid session cookie stays logged in indefinitely, the
+ * password change alone does nothing to them; (2) a plain "log out
+ * everywhere else" self-service action (lost/stolen device, logged in on
+ * a shared computer and forgot to log out).
+ *
+ * Returns the number of sessions revoked, purely informational (e.g. "you
+ * were logged out on 2 other devices") — never used for a security
+ * decision.
+ */
+export async function destroyOtherSessions(
+  userId: string,
+  keepSessionId: string,
+): Promise<number> {
+  const deleted = await db
+    .delete(sessions)
+    .where(and(eq(sessions.userId, userId), ne(sessions.id, keepSessionId)))
+    .returning({ id: sessions.id });
+  return deleted.length;
 }

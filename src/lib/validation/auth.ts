@@ -28,5 +28,14 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required."),
 });
 
+// RC audit P1 fix — self-service change-password (previously there was no
+// way for a logged-in user to change their own password at all, only
+// register/login).
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Enter your current password."),
+  newPassword: z.string().min(8, "New password must be at least 8 characters."),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
