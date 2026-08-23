@@ -55,17 +55,39 @@ export async function PATCH(
       );
     }
 
+    // RC audit P1 fix — the UPDATE's WHERE clause includes
+    // `status = currentStatus`, a compare-and-swap on the status column,
+    // matching the pattern every other status-transition route in this
+    // codebase already uses (orders, tables, service-calls). Without it,
+    // two staff concurrently PATCHing the same `confirmed` reservation —
+    // one to `seated`, one to `cancelled` — would both read the same stale
+    // status outside this transaction, both pass canTransition, and both
+    // UPDATEs would match and commit: whichever runs last silently
+    // overwrites the other, desyncing the floor plan from reality (e.g. a
+    // seated party's table gets released as "available"). With the extra
+    // condition, Postgres serializes the two UPDATEs; the second one's
+    // WHERE clause no longer matches once the first has committed, so it
+    // returns zero rows and this route reports a conflict instead of
+    // silently clobbering the other request's transition.
     const updated = await db.transaction(async (tx) => {
       const [row] = await tx
         .update(reservations)
         .set({ status: targetStatus, updatedAt: new Date() })
-        .where(and(eq(reservations.id, reservationId), eq(reservations.restaurantId, restaurantId)))
+        .where(
+          and(
+            eq(reservations.id, reservationId),
+            eq(reservations.restaurantId, restaurantId),
+            eq(reservations.status, currentStatus),
+          ),
+        )
         .returning();
+
+      if (!row) return null;
 
       // Table-status effects of the transition — see markTableSeated and
       // releaseTableIfSoleReservation's own comments for exactly what each
       // does and doesn't override.
-      if (row?.tableId) {
+      if (row.tableId) {
         if (targetStatus === "seated") {
           await markTableSeated(tx, row.tableId);
         } else if (targetStatus === "cancelled" || targetStatus === "no_show") {
@@ -75,6 +97,16 @@ export async function PATCH(
 
       return row;
     });
+
+    if (!updated) {
+      return NextResponse.json(
+        {
+          error:
+            "This reservation's status was just changed by someone else. Please refresh and try again.",
+        },
+        { status: 409 },
+      );
+    }
 
     await recordAuditLog({
       restaurantId,
