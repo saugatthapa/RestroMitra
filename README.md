@@ -515,7 +515,14 @@ src/
   logout actually deletes the row, not just the cookie).
 - Auth endpoints are rate-limited (see `src/lib/rate-limit.ts` for an important caveat:
   it's in-memory and single-instance only — swap for Redis/Upstash before running more
-  than one app instance).
+  than one app instance). **This is a hard requirement, not a nice-to-have**: every
+  IP/user-keyed limit in this app (login attempts, gateway-callback abuse, public
+  order-page throttling) lives in one process's memory, with zero code-level guard
+  against a second instance. Deploying to a horizontally-scaled serverless platform
+  (Vercel's own model — a request can land on any of several concurrent function
+  instances) or running `pm2` in cluster mode silently multiplies every limit by the
+  instance/worker count instead of erroring — see the "Deploying" section below for
+  which of the documented platforms this actually holds for.
 - The public QR ordering endpoint (`POST /api/order/[token]`) is unauthenticated by
   design — the qrToken itself is the access control — so it's rate-limited by both IP
   and table, and **never** trusts a price from the client: `computeOrderPricing()` in
@@ -560,9 +567,22 @@ src/
 
 ## Deploying
 
-Any Next.js-compatible host (Vercel, Railway, a VPS with Node + PM2, etc.) works —
-there's no Prisma-style native binary tying it to a specific platform. Vercel is the
-easiest path since it auto-detects Next.js and needs no custom build config.
+Any Next.js-compatible host works technically — there's no Prisma-style native binary
+tying it to a specific platform — but **only a genuinely single-process deployment is
+actually correct for this app today**, because of the in-memory rate limiter above. The
+verified, currently-live target is a single-instance Hostinger Node.js app (hPanel →
+Node.js — see `DEPLOY_PHASE25.md` for the concrete steps); a single VPS process (with or
+without `pm2` in **fork** mode, which is still one process) is equally fine.
+
+**Vercel and `pm2` cluster mode are NOT drop-in equivalents** — RC audit correction: an
+earlier version of this section presented them as interchangeable "any host works"
+alternates, which was wrong. Vercel's serverless model can and does run a given route's
+handler on more than one concurrent function instance, and `pm2 -i <n>` cluster mode
+runs `<n>` separate Node processes — either one silently multiplies every rate limit by
+however many instances/workers happen to be live, with no error or warning anywhere.
+Vercel steps are kept below for reference (the app itself runs fine there), but treat
+its rate-limiting as effectively disabled unless `src/lib/rate-limit.ts` is first
+swapped for a shared store (Redis/Upstash) — do not launch commercially on it as-is.
 
 ### Deploying to Vercel
 
@@ -586,7 +606,7 @@ easiest path since it auto-detects Next.js and needs no custom build config.
    |---|---|---|
    | `DATABASE_URL` | Yes | The **pooled** (transaction-mode, port 6543 on Supabase) connection string — Vercel's serverless functions open a fresh connection per invocation, so an unpooled URL here will exhaust Postgres' connection limit under real traffic. |
    | `DIRECT_URL` | Yes, for migrations | The **direct/session** (port 5432) connection string. Not read by the running app, only by `npm run db:migrate` / `drizzle-kit generate` — see step 5. |
-   | `AUTH_SECRET` | Yes | `openssl rand -base64 48`. Use a different value than any local/dev secret. |
+   | `AUTH_SECRET` | No | Kept for compatibility with hosts/checklists that expect it, but **not actually read anywhere in application code** — sessions use a random opaque DB-backed token (`src/lib/auth/session.ts`), not a JWT. Safe to leave unset; if set, `openssl rand -base64 48` and don't reuse a dev value. |
    | `APP_URL` | Yes | Your production URL, e.g. `https://restromitra.vercel.app` or a custom domain — used to build absolute links (QR codes, the public website builder's `/site/[slug]` links). |
    | `NODE_ENV` | No | Vercel sets this itself; no need to set it manually. |
    | `KHALTI_SECRET_KEY`, `ESEWA_*` | Only if using payment gateways | Leave unset to disable that gateway rather than deploying with a placeholder — see `.env.example`'s comments. |
