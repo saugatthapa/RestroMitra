@@ -37,6 +37,14 @@ export async function POST(
       return NextResponse.json({ error: "You're not currently clocked in." }, { status: 400 });
     }
 
+    // RC audit P2 fix — the WHERE clause re-asserts `clockOutAt IS NULL`
+    // (a compare-and-swap on that column), same pattern as the other
+    // status-transition routes in this codebase. Without it, a double-tap
+    // (the same request fired twice by a flaky connection, or two devices
+    // clocking the same shift out) would both match the row read above and
+    // both write, the second silently overwriting the first's `clockOutAt`
+    // with a later timestamp — a low-stakes but still-real timesheet
+    // inaccuracy with no constraint to catch it.
     const [record] = await db
       .update(attendanceRecords)
       .set({
@@ -44,8 +52,12 @@ export async function POST(
         // Appended, not overwritten — preserves any note left at clock-in.
         note: parsed.data.note ? [open.note, parsed.data.note].filter(Boolean).join(" / ") : open.note,
       })
-      .where(eq(attendanceRecords.id, open.id))
+      .where(and(eq(attendanceRecords.id, open.id), isNull(attendanceRecords.clockOutAt)))
       .returning();
+
+    if (!record) {
+      return NextResponse.json({ error: "This shift was already clocked out." }, { status: 409 });
+    }
 
     await recordAuditLog({
       restaurantId,
