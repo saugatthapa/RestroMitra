@@ -33,7 +33,12 @@ describe("createInventoryItemSchema", () => {
 
 describe("recordStockAdjustmentSchema", () => {
   it("converts quantity from real units to milliunits", () => {
-    const parsed = recordStockAdjustmentSchema.parse({ quantity: 2.5, direction: "add", reason: "count" });
+    const parsed = recordStockAdjustmentSchema.parse({
+      branchId: "00000000-0000-0000-0000-000000000000",
+      quantity: 2.5,
+      direction: "add",
+      reason: "count",
+    });
     expect(parsed.quantity).toBe(2500);
   });
 
@@ -56,6 +61,7 @@ describe("recordStockAdjustmentSchema", () => {
 describe("createPurchaseSchema", () => {
   it("converts quantity to milliunits and unitCost to paisa per line", () => {
     const parsed = createPurchaseSchema.parse({
+      branchId: "00000000-0000-0000-0000-000000000000",
       items: [{ inventoryItemId: "00000000-0000-0000-0000-000000000000", quantity: 2, unitCost: 150.5 }],
     });
     expect(parsed.items[0].quantity).toBe(2000);

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { rupeesToPaisa } from "@/lib/money";
 import { unitsToMilliunits } from "@/lib/quantity";
 import { INVENTORY_UNITS } from "@/lib/inventory-units";
+import { WASTE_REASONS } from "@/lib/waste-reasons";
 
 const rupeeAmount = z
   .number()
@@ -54,13 +55,28 @@ export const updateInventoryItemSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export const recordStockAdjustmentSchema = z.object({
-  quantity: quantityAmount,
-  direction: z.enum(["add", "remove"]),
-  reason: z.string().trim().min(1, "A reason is required.").max(300),
-});
+// P2 — `wasteReason` is optional and, when present, marks this as a
+// "waste" movement rather than a plain "adjustment" (see recordStockMovement
+// in src/lib/inventory.ts, the actual choke point that enforces the same
+// rule — this schema-level refine is a fast 400 for the obviously-wrong
+// case, not a substitute for that enforcement). Waste is always a removal:
+// "add 2kg of waste" isn't a meaningful action, so direction is required
+// to be "remove" whenever a reason is given.
+export const recordStockAdjustmentSchema = z
+  .object({
+    branchId: z.string().uuid("Select which branch this adjustment applies to."),
+    quantity: quantityAmount,
+    direction: z.enum(["add", "remove"]),
+    reason: z.string().trim().min(1, "A reason is required.").max(300),
+    wasteReason: z.enum(WASTE_REASONS).nullable().optional(),
+  })
+  .refine((data) => !data.wasteReason || data.direction === "remove", {
+    message: "Waste can only remove stock, not add to it.",
+    path: ["direction"],
+  });
 
 export const createPurchaseSchema = z.object({
+  branchId: z.string().uuid("Select which branch received this delivery."),
   supplierId: z.string().uuid().nullable().optional(),
   invoiceNumber: z.string().trim().max(60).optional().or(z.literal("")),
   notes: z.string().trim().max(1000).optional().or(z.literal("")),

@@ -39,6 +39,7 @@ describe.skipIf(!hasDb)("applyPurchaseCosting row locking (integration)", () => 
   let inventoryLib: typeof import("@/lib/inventory");
 
   let restaurantId: string;
+  let branchId: string;
 
   beforeAll(async () => {
     db = (await import("@/db")).db;
@@ -52,6 +53,12 @@ describe.skipIf(!hasDb)("applyPurchaseCosting row locking (integration)", () => 
       .values({ slug: `test-inv-cost-race-${suffix}`, name: "TEST Inventory Cost Race Restaurant" })
       .returning({ id: schema.restaurants.id });
     restaurantId = restaurant.id;
+
+    const [branch] = await db
+      .insert(schema.branches)
+      .values({ restaurantId, name: "TEST Main Branch", isMain: true })
+      .returning({ id: schema.branches.id });
+    branchId = branch.id;
   });
 
   afterAll(async () => {
@@ -78,7 +85,7 @@ describe.skipIf(!hasDb)("applyPurchaseCosting row locking (integration)", () => 
   async function createPurchase() {
     const [purchase] = await db
       .insert(schema.purchases)
-      .values({ restaurantId, totalInPaisa: 0 })
+      .values({ restaurantId, branchId, totalInPaisa: 0 })
       .returning({ id: schema.purchases.id });
     return purchase.id;
   }
@@ -105,6 +112,7 @@ describe.skipIf(!hasDb)("applyPurchaseCosting row locking (integration)", () => 
     const aPromise = db.transaction(async (tx) => {
       await inventoryLib.applyPurchaseCosting(tx, {
         restaurantId,
+        branchId,
         inventoryItemId: itemId,
         purchasedQuantityMilliunits: 1000, // +1 unit at 20000/unit
         unitCostInPaisa: 20_000,
@@ -125,6 +133,7 @@ describe.skipIf(!hasDb)("applyPurchaseCosting row locking (integration)", () => 
       .transaction((tx) =>
         inventoryLib.applyPurchaseCosting(tx, {
           restaurantId,
+          branchId,
           inventoryItemId: itemId,
           purchasedQuantityMilliunits: 1000, // +1 unit at 30000/unit
           unitCostInPaisa: 30_000,
@@ -164,6 +173,7 @@ describe.skipIf(!hasDb)("applyPurchaseCosting row locking (integration)", () => 
       db.transaction((tx) =>
         inventoryLib.applyPurchaseCosting(tx, {
           restaurantId,
+          branchId,
           inventoryItemId: itemId,
           purchasedQuantityMilliunits: 1000, // +1 unit each
           unitCostInPaisa,

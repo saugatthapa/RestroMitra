@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { inventoryItems, purchaseItems, purchases, suppliers } from "@/db/schema";
+import { branches, inventoryItems, purchaseItems, purchases, suppliers } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { createPurchaseSchema } from "@/lib/validation/inventory";
@@ -62,6 +62,15 @@ export async function POST(
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
 
+    const ownedBranch = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.id, data.branchId), eq(branches.restaurantId, restaurantId)))
+      .limit(1);
+    if (ownedBranch.length === 0) {
+      return NextResponse.json({ error: "Branch not found." }, { status: 404 });
+    }
+
     let supplierName: string | null = null;
     if (data.supplierId) {
       const ownedSupplier = await db
@@ -103,6 +112,7 @@ export async function POST(
         .insert(purchases)
         .values({
           restaurantId,
+          branchId: data.branchId,
           supplierId: data.supplierId ?? null,
           invoiceNumber: data.invoiceNumber || null,
           totalInPaisa,
@@ -131,6 +141,7 @@ export async function POST(
         // request are undone too. Caught by the outer toErrorResponse().
         await applyPurchaseCosting(tx, {
           restaurantId,
+          branchId: data.branchId,
           inventoryItemId: line.inventoryItemId,
           purchasedQuantityMilliunits: line.quantity,
           unitCostInPaisa: line.unitCost,

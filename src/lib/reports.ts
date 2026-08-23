@@ -1,7 +1,18 @@
 import "server-only";
 import { and, asc, desc, eq, gte, lt, lte, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { orders, orderItems, payments, expenses, expenseCategories, branches } from "@/db/schema";
+import {
+  orders,
+  orderItems,
+  payments,
+  expenses,
+  expenseCategories,
+  branches,
+  recipeItems,
+  inventoryItems,
+  stockMovements,
+} from "@/db/schema";
+import type { WasteReasonValue } from "@/lib/waste-reasons";
 import {
   generateDateRange,
   mergeDailySeries,
@@ -638,6 +649,165 @@ export async function getExpenseCategoryBreakdown(
   return rows.map((r) => ({ category: r.category, totalInPaisa: Number(r.totalInPaisa) }));
 }
 
+export type CogsSummary = {
+  cogsInPaisa: number;
+  /** How many distinct menu items sold in this range actually had a
+   *  matching recipe (see below) — surfaced so the UI can be honest about
+   *  when cogsInPaisa is a genuine total vs. a partial one. */
+  itemsWithRecipeCount: number;
+  /** Distinct menu items sold in this range, recipe or not. Equal to
+   *  itemsWithRecipeCount when every sold item has a recipe defined. */
+  soldItemCount: number;
+};
+
+/**
+ * P2 — cost of goods sold, derived from recipeItems (bill-of-materials per
+ * menu item) x inventoryItems.costPerUnitInPaisa (weighted-average cost),
+ * applied to every completed order's line items in the range. Deliberately
+ * NOT folded into netProfitInPaisa/computeNetProfitInPaisa above — those
+ * are revenue-minus-manually-logged-EXPENSES, an existing, already-tested
+ * definition (Account Books' own model, see ledgerEntries' module
+ * comment). An owner who buys ingredients without ever touching the
+ * Recipes/Purchases feature may already be logging that cost manually as
+ * an "Inventory"/"Food ingredients" expense — folding COGS into
+ * netProfitInPaisa too would silently double-count that spend for exactly
+ * the owners least likely to notice (the ones NOT using recipes). Gross
+ * profit (revenue - COGS) is surfaced as its own, clearly-separate figure
+ * instead — see getReportSummary below and BRANCH_INVENTORY.md's sibling
+ * COGS write-up for the full reasoning.
+ *
+ * A menu item with no recipe defined contributes 0 to cogsInPaisa for
+ * every unit sold — recipes are opt-in (same convention
+ * deductRecipeStockForOrder already uses for stock deduction), so this is
+ * silently a PARTIAL total whenever any sold item lacks a recipe, which
+ * itemsWithRecipeCount/soldItemCount exist to make visible rather than
+ * hide behind a single confident-looking number.
+ *
+ * The per-line cost formula — Math.round((quantityPerServingMilliunits /
+ * 1000) * costPerUnitInPaisa) per unit sold, summed — matches the recipe
+ * detail route's own lineCostInPaisa/costPerServingInPaisa exactly (see
+ * the recipe route's GET handler), so a menu item's "cost per serving"
+ * shown there and its contribution to this report's COGS always agree.
+ * Done as one rounded SUM in SQL rather than per-line in JS since this is
+ * a management report, not a financial transaction that must reconcile to
+ * the exact paisa (unlike a payment or purchase line total) — a
+ * rounding difference of a paisa or two across many order lines is
+ * immaterial here.
+ */
+export async function getCogsSummary(
+  restaurantId: string,
+  range: ReportDateRange,
+  timezone: string,
+  branchId?: string,
+): Promise<CogsSummary> {
+  const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
+
+  const [row] = await db
+    .select({
+      cogsInPaisa: sql<string>`
+        coalesce(sum(case when ${recipeItems.id} is not null
+          then round(${orderItems.quantity} * ${recipeItems.quantityPerServingMilliunits} * ${inventoryItems.costPerUnitInPaisa} / 1000.0)
+          else 0 end), 0)
+      `,
+      soldItemCount: sql<string>`count(distinct ${orderItems.menuItemId})`,
+      itemsWithRecipeCount: sql<string>`count(distinct case when ${recipeItems.id} is not null then ${orderItems.menuItemId} end)`,
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .leftJoin(recipeItems, eq(recipeItems.menuItemId, orderItems.menuItemId))
+    .leftJoin(inventoryItems, eq(inventoryItems.id, recipeItems.inventoryItemId))
+    .where(
+      and(
+        eq(orders.restaurantId, restaurantId),
+        eq(orders.status, "completed"),
+        gte(orders.placedAt, dayStart),
+        lt(orders.placedAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
+      ),
+    );
+
+  return {
+    cogsInPaisa: Number(row?.cogsInPaisa ?? 0),
+    soldItemCount: Number(row?.soldItemCount ?? 0),
+    itemsWithRecipeCount: Number(row?.itemsWithRecipeCount ?? 0),
+  };
+}
+
+export type WastageSummary = {
+  /** Ingredient cost of everything logged as "waste" in the range, valued
+   *  at each item's own costPerUnitInPaisa (same weighted-average cost
+   *  basis getCogsSummary uses) — "how much did spoilage/breakage/etc.
+   *  actually cost us," not just a raw quantity count, which wouldn't be
+   *  comparable across different units (kg vs. liters vs. pieces). */
+  wastageCostInPaisa: number;
+  movementCount: number;
+  byReason: { reason: WasteReasonValue; costInPaisa: number; movementCount: number }[];
+};
+
+/**
+ * P2 — cost/volume of wastage in the range, from stock_movements rows of
+ * type "waste" (see wasteReasonEnum's schema comment). Closes the gap the
+ * P2 audit flagged: wastage was recordable (dedicated movement type +
+ * reason taxonomy) but had no report surfacing it. Grouped by wasteReason
+ * so "60% of this month's waste was spoilage" is answerable, same
+ * motivation as expense-category breakdown above.
+ *
+ * Deliberately its own figure, not folded into cogsInPaisa/netProfitInPaisa
+ * — waste is stock that left without generating any revenue (the opposite
+ * of a sale_deduction), so mixing it into "cost of GOODS SOLD" would
+ * mislabel it. An owner sees it as a clearly separate cost signal instead.
+ */
+export async function getWastageSummary(
+  restaurantId: string,
+  range: ReportDateRange,
+  timezone: string,
+  branchId?: string,
+): Promise<WastageSummary> {
+  const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
+
+  const rows = await db
+    .select({
+      wasteReason: stockMovements.wasteReason,
+      costInPaisa: sql<string>`
+        coalesce(sum(round(abs(${stockMovements.quantityDeltaMilliunits}) * ${inventoryItems.costPerUnitInPaisa} / 1000.0)), 0)
+      `,
+      movementCount: sql<string>`count(*)`,
+    })
+    .from(stockMovements)
+    .innerJoin(inventoryItems, eq(inventoryItems.id, stockMovements.inventoryItemId))
+    .where(
+      and(
+        eq(stockMovements.restaurantId, restaurantId),
+        eq(stockMovements.type, "waste"),
+        gte(stockMovements.createdAt, dayStart),
+        lt(stockMovements.createdAt, dayAfterEnd),
+        ...(branchId ? [eq(stockMovements.branchId, branchId)] : []),
+      ),
+    )
+    .groupBy(stockMovements.wasteReason);
+
+  // wasteReason is only null for non-waste movements, which this query
+  // already excludes via type="waste" — recordStockMovement's own
+  // validation requires a reason whenever type is "waste" (see
+  // src/lib/inventory.ts), so every row here is expected to have one. The
+  // filter is defensive narrowing for TypeScript, not a real branch this
+  // data should ever hit.
+  const byReason = rows
+    .filter((r): r is typeof r & { wasteReason: WasteReasonValue } => r.wasteReason !== null)
+    .map((r) => ({
+      reason: r.wasteReason,
+      costInPaisa: Number(r.costInPaisa),
+      movementCount: Number(r.movementCount),
+    }))
+    .sort((a, b) => b.costInPaisa - a.costInPaisa);
+
+  return {
+    wastageCostInPaisa: byReason.reduce((sum, r) => sum + r.costInPaisa, 0),
+    movementCount: byReason.reduce((sum, r) => sum + r.movementCount, 0),
+    byReason,
+  };
+}
+
 /**
  * The single call the reports API route makes — bundles every section of
  * the report into one payload so the dashboard page is one request, not
@@ -675,6 +845,8 @@ export async function getReportSummary(
     completion,
     hourlyHeatmap,
     branchComparison,
+    cogs,
+    wastage,
   ] = await Promise.all([
     getSalesSummary(restaurantId, range, timezone, branchId),
     getTotalExpensesInPaisa(restaurantId, range, timezone, branchId),
@@ -693,9 +865,18 @@ export async function getReportSummary(
     branchId
       ? Promise.resolve([] as BranchComparisonRow[])
       : getBranchComparison(restaurantId, range, timezone),
+    getCogsSummary(restaurantId, range, timezone, branchId),
+    getWastageSummary(restaurantId, range, timezone, branchId),
   ]);
 
   const netProfitInPaisa = computeNetProfitInPaisa(sales.revenueInPaisa, totalExpensesInPaisa);
+  // P2 — gross profit, deliberately separate from netProfitInPaisa above.
+  // See getCogsSummary's own doc comment for why these two numbers are
+  // allowed to disagree (same "allowed to disagree" precedent as Account
+  // Books vs. Reports' revenue figure).
+  const grossProfitInPaisa = sales.revenueInPaisa - cogs.cogsInPaisa;
+  const grossMarginPercent =
+    sales.revenueInPaisa > 0 ? Math.round((grossProfitInPaisa / sales.revenueInPaisa) * 10_000) / 100 : null;
 
   // Phase 16b — "vs previous period" deltas for the KPI tiles, requested
   // directly by the user (the reference dashboard they sent shows a "+8.43%
@@ -730,6 +911,16 @@ export async function getReportSummary(
     sales,
     totalExpensesInPaisa,
     netProfitInPaisa,
+    cogsInPaisa: cogs.cogsInPaisa,
+    grossProfitInPaisa,
+    grossMarginPercent,
+    cogsCoverage: {
+      soldItemCount: cogs.soldItemCount,
+      itemsWithRecipeCount: cogs.itemsWithRecipeCount,
+    },
+    wastageCostInPaisa: wastage.wastageCostInPaisa,
+    wastageMovementCount: wastage.movementCount,
+    wastageByReason: wastage.byReason,
     dailySeries,
     topItems,
     paymentBreakdown,

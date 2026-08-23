@@ -94,3 +94,36 @@ export function useActiveBranch(): BranchContextValue {
   }
   return ctx;
 }
+
+/**
+ * P2 — a WRITE-side branch picker, distinct from useActiveBranch's
+ * read-side report filter above. Every branch-scoped write this phase adds
+ * (purchases, stock adjustments, and any P2 form after it — physical
+ * stock counts, cash register shifts) needs to know exactly which branch
+ * an action applies to, not "all branches" (activeBranchId's null case,
+ * which is meaningless for a write). This never returns null: it resolves
+ * to activeBranchId if that's one of the user's selectable branches,
+ * otherwise the main branch, otherwise just the first selectable one — so
+ * a single-branch restaurant (the common case) gets a sensible default
+ * with no picker needed, and a multi-branch one at least starts on
+ * whichever branch the user's already looking at.
+ *
+ * Returns `branches` alongside so a form can decide for itself whether to
+ * render a picker at all (`branches.length > 1`) or just silently use the
+ * resolved id.
+ */
+export function useBranchSelection(): {
+  branches: SelectableBranch[];
+  branchId: string;
+  setBranchId: (id: string) => void;
+} {
+  const { branches, activeBranchId } = useActiveBranch();
+  const defaultId =
+    (activeBranchId && branches.some((b) => b.id === activeBranchId) ? activeBranchId : null) ??
+    branches.find((b) => b.isMain)?.id ??
+    branches[0]?.id ??
+    "";
+  const [branchId, setBranchId] = useState(defaultId);
+  const resolvedBranchId = branches.some((b) => b.id === branchId) ? branchId : defaultId;
+  return { branches, branchId: resolvedBranchId, setBranchId };
+}

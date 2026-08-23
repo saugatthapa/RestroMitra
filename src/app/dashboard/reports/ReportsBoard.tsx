@@ -11,12 +11,14 @@ import { useDateSystem, type DateSystem } from "@/lib/date-system";
 import { useActiveBranch } from "@/lib/branch-context";
 import { formatDate, formatBsHint } from "@/lib/nepali-date";
 import { localDateIso } from "@/lib/local-date";
+import { WASTE_REASON_LABELS, type WasteReasonValue } from "@/lib/waste-reasons";
 
 // Chart chrome tokens, matching RevenueTrendChart's validated palette
 // (dataviz skill, palette.md) — used here for the small inline breakdown
 // bars so the whole page reads as one consistent system.
 const REVENUE_COLOR = "#2a78d6";
 const EXPENSES_COLOR = "#eb6834";
+const WASTAGE_COLOR = "#a13d3d";
 const SECONDARY_TEXT_COLOR = "#52514e";
 
 type ReportSummary = {
@@ -34,6 +36,23 @@ type ReportSummary = {
   };
   totalExpensesInPaisa: number;
   netProfitInPaisa: number;
+  /** P2 — cost of goods sold, from recipe-tracked ingredient cost per
+   *  order sold. Deliberately separate from netProfitInPaisa — see
+   *  getCogsSummary's doc comment in reports.ts for why. */
+  cogsInPaisa: number;
+  grossProfitInPaisa: number;
+  /** null when revenue is 0 for the range (no meaningful margin). */
+  grossMarginPercent: number | null;
+  /** How many distinct menu items sold in the range have a recipe defined
+   *  vs. how many were sold at all — when these differ, cogsInPaisa is a
+   *  partial total, not a complete one, and the UI says so. */
+  cogsCoverage: { soldItemCount: number; itemsWithRecipeCount: number };
+  /** P2 — ingredient cost of stock logged as "waste" in the range, valued
+   *  at each item's own cost basis. Separate from cogsInPaisa — waste
+   *  never generated revenue, so it isn't "cost of goods SOLD". */
+  wastageCostInPaisa: number;
+  wastageMovementCount: number;
+  wastageByReason: { reason: WasteReasonValue; costInPaisa: number; movementCount: number }[];
   dailySeries: DailySeriesPoint[];
   topItems: { name: string; quantitySold: number; revenueInPaisa: number }[];
   paymentBreakdown: { method: PaymentMethod; totalInPaisa: number }[];
@@ -184,6 +203,10 @@ export function ReportsBoard({ slug }: { slug: string }) {
     () => Math.max(1, ...(data?.branchComparison.map((r) => r.revenueInPaisa) ?? [1])),
     [data],
   );
+  const maxWastageTotal = useMemo(
+    () => Math.max(1, ...(data?.wastageByReason.map((r) => r.costInPaisa) ?? [1])),
+    [data],
+  );
 
   return (
     <div>
@@ -303,6 +326,30 @@ export function ReportsBoard({ slug }: { slug: string }) {
                 delta={{ percent: data.comparison.netProfitChangePercent }}
               />
               <IconStatTile
+                label="Cost of goods sold"
+                value={formatRupees(data.cogsInPaisa)}
+                icon={<StatIcon.TrendDown />}
+                color="neutral"
+              />
+              <IconStatTile
+                label="Gross profit"
+                value={formatRupees(data.grossProfitInPaisa)}
+                icon={<StatIcon.TrendUp />}
+                color={data.grossProfitInPaisa < 0 ? "red" : "teal"}
+                tone={data.grossProfitInPaisa < 0 ? "negative" : "neutral"}
+              />
+              <IconStatTile
+                label="Wastage cost"
+                value={formatRupees(data.wastageCostInPaisa)}
+                note={
+                  data.wastageMovementCount > 0
+                    ? `${data.wastageMovementCount} recorded`
+                    : "None recorded"
+                }
+                icon={<StatIcon.TrendDown />}
+                color={data.wastageCostInPaisa > 0 ? "red" : "neutral"}
+              />
+              <IconStatTile
                 label="Discounts given"
                 value={formatRupees(data.sales.discountInPaisa)}
                 icon={<StatIcon.Percent />}
@@ -321,6 +368,16 @@ export function ReportsBoard({ slug }: { slug: string }) {
                 color="purple"
               />
             </div>
+
+            {data.cogsCoverage.soldItemCount > 0 &&
+              data.cogsCoverage.itemsWithRecipeCount < data.cogsCoverage.soldItemCount && (
+                <p className="-mt-4 mb-6 text-xs text-amber-700">
+                  Cost of goods sold and gross profit only reflect{" "}
+                  {data.cogsCoverage.itemsWithRecipeCount} of {data.cogsCoverage.soldItemCount} menu
+                  items sold in this range — the rest have no recipe defined yet (Inventory →
+                  Recipes), so their ingredient cost isn&apos;t counted.
+                </p>
+              )}
 
             {/* Peak-hour + completion tiles — the reference dashboard shows
                 these as a dual-axis revenue/orders chart; a single dual-axis
@@ -453,7 +510,7 @@ export function ReportsBoard({ slug }: { slug: string }) {
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 xl:grid-cols-4">
               {/* Top-selling items */}
               <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm lg:col-span-1">
                 <h2 className="mb-3 text-sm font-semibold text-neutral-900">Top-selling items</h2>
@@ -521,6 +578,28 @@ export function ReportsBoard({ slug }: { slug: string }) {
                         valueLabel={formatRupees(row.totalInPaisa)}
                         fraction={row.totalInPaisa / maxExpenseTotal}
                         color={EXPENSES_COLOR}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Wastage breakdown by reason — P2, see getWastageSummary */}
+              <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm lg:col-span-1">
+                <h2 className="mb-3 text-sm font-semibold text-neutral-900">
+                  Wastage by reason
+                </h2>
+                {data.wastageByReason.length === 0 ? (
+                  <p className="text-sm text-neutral-400">No wastage recorded in this range.</p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {data.wastageByReason.map((row) => (
+                      <BreakdownBar
+                        key={row.reason}
+                        label={WASTE_REASON_LABELS[row.reason]}
+                        valueLabel={formatRupees(row.costInPaisa)}
+                        fraction={row.costInPaisa / maxWastageTotal}
+                        color={WASTAGE_COLOR}
                       />
                     ))}
                   </div>

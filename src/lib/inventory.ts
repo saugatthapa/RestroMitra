@@ -1,8 +1,16 @@
 import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import type { Transaction } from "@/db";
-import { inventoryItems, stockMovements, orderItems, recipeItems } from "@/db/schema";
+import {
+  inventoryItems,
+  stockMovements,
+  orderItems,
+  recipeItems,
+  branches,
+  branchInventoryLevels,
+} from "@/db/schema";
 import { HttpError } from "@/lib/http-error";
+import type { WasteReasonValue } from "@/lib/waste-reasons";
 
 export class InventoryError extends HttpError {
   constructor(message: string) {
@@ -10,28 +18,41 @@ export class InventoryError extends HttpError {
   }
 }
 
-export type StockMovementType = "purchase" | "sale_deduction" | "adjustment";
+export type StockMovementType = "purchase" | "sale_deduction" | "adjustment" | "waste";
+export type WasteReason = WasteReasonValue;
 
 /**
  * The single choke point for changing an inventory item's stock. Inserts a
- * row into the stock_movements ledger AND atomically increments the
- * item's cached currentStockMilliunits in the same statement (a SQL
- * `+= delta` update, not a read-then-write in JS, so two concurrent
- * movements against the same item can't race and drop one of them).
+ * row into the stock_movements ledger AND atomically increments BOTH the
+ * item's cached restaurant-wide currentStockMilliunits AND its per-branch
+ * row in branch_inventory_levels, all in the same transaction (SQL
+ * `+= delta` updates, not a read-then-write in JS, so concurrent movements
+ * against the same item/branch can't race and drop one of them — same
+ * pattern the restaurant-wide update already used before P2, now extended
+ * to the branch-level table via an atomic upsert).
  *
  * `tx` should be the transaction handle from an enclosing
  * `db.transaction(async (tx) => ...)` block — every caller of this
  * function needs its ledger insert and stock update to commit or roll back
  * together with whatever triggered it (a purchase, an order transition, a
  * manual adjustment).
+ *
+ * `branchId` is required (P2 — see stock_movements.branchId's schema
+ * comment) and is verified to belong to this restaurant here, defense in
+ * depth same as the inventory-item ownership check below — every caller
+ * should already have resolved it from a restaurant-scoped branch list,
+ * but a wrong id must fail closed, not silently attribute stock to another
+ * tenant's branch.
  */
 export async function recordStockMovement(
   tx: Transaction,
   params: {
     restaurantId: string;
+    branchId: string;
     inventoryItemId: string;
     type: StockMovementType;
     quantityDeltaMilliunits: number;
+    wasteReason?: WasteReason | null;
     referenceType?: string | null;
     referenceId?: string | null;
     note?: string | null;
@@ -41,14 +62,35 @@ export async function recordStockMovement(
   if (params.quantityDeltaMilliunits === 0) {
     throw new InventoryError("A stock movement must have a non-zero quantity.");
   }
+  if (params.type === "waste") {
+    if (params.quantityDeltaMilliunits > 0) {
+      throw new InventoryError("A waste movement must reduce stock, not add to it.");
+    }
+    if (!params.wasteReason) {
+      throw new InventoryError("A waste movement requires a reason.");
+    }
+  } else if (params.wasteReason) {
+    throw new InventoryError("wasteReason only applies to waste movements.");
+  }
+
+  const branchRows = await tx
+    .select({ id: branches.id })
+    .from(branches)
+    .where(and(eq(branches.id, params.branchId), eq(branches.restaurantId, params.restaurantId)))
+    .limit(1);
+  if (!branchRows[0]) {
+    throw new InventoryError("Branch not found for this restaurant.");
+  }
 
   const [movement] = await tx
     .insert(stockMovements)
     .values({
       restaurantId: params.restaurantId,
+      branchId: params.branchId,
       inventoryItemId: params.inventoryItemId,
       type: params.type,
       quantityDeltaMilliunits: params.quantityDeltaMilliunits,
+      wasteReason: params.wasteReason ?? null,
       referenceType: params.referenceType ?? null,
       referenceId: params.referenceId ?? null,
       note: params.note ?? null,
@@ -78,7 +120,23 @@ export async function recordStockMovement(
     throw new InventoryError("Inventory item not found for this restaurant.");
   }
 
-  return { movement, item: updatedItem };
+  const [branchLevel] = await tx
+    .insert(branchInventoryLevels)
+    .values({
+      branchId: params.branchId,
+      inventoryItemId: params.inventoryItemId,
+      currentStockMilliunits: params.quantityDeltaMilliunits,
+    })
+    .onConflictDoUpdate({
+      target: [branchInventoryLevels.branchId, branchInventoryLevels.inventoryItemId],
+      set: {
+        currentStockMilliunits: sql`${branchInventoryLevels.currentStockMilliunits} + ${params.quantityDeltaMilliunits}`,
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
+
+  return { movement, item: updatedItem, branchLevel };
 }
 
 /**
@@ -114,6 +172,7 @@ export async function applyPurchaseCosting(
   tx: Transaction,
   params: {
     restaurantId: string;
+    branchId: string;
     inventoryItemId: string;
     purchasedQuantityMilliunits: number;
     unitCostInPaisa: number;
@@ -161,6 +220,7 @@ export async function applyPurchaseCosting(
 
   return recordStockMovement(tx, {
     restaurantId: params.restaurantId,
+    branchId: params.branchId,
     inventoryItemId: params.inventoryItemId,
     type: "purchase",
     quantityDeltaMilliunits: params.purchasedQuantityMilliunits,
@@ -184,7 +244,12 @@ export async function applyPurchaseCosting(
  */
 export async function deductRecipeStockForOrder(
   tx: Transaction,
-  params: { restaurantId: string; orderId: string; recordedByUserId?: string | null },
+  params: {
+    restaurantId: string;
+    branchId: string;
+    orderId: string;
+    recordedByUserId?: string | null;
+  },
 ) {
   const items = await tx
     .select()
@@ -205,6 +270,7 @@ export async function deductRecipeStockForOrder(
 
       await recordStockMovement(tx, {
         restaurantId: params.restaurantId,
+        branchId: params.branchId,
         inventoryItemId: line.inventoryItemId,
         type: "sale_deduction",
         quantityDeltaMilliunits: -deductionMilliunits,

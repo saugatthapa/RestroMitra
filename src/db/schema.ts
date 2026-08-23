@@ -975,6 +975,30 @@ export const stockMovementTypeEnum = pgEnum("stock_movement_type", [
   "purchase",
   "sale_deduction",
   "adjustment",
+  // P2 — split out from the generic "adjustment" bucket so wastage/spoilage
+  // can be filtered and reported on separately from ordinary count
+  // corrections (a stock-count variance and a bag of spoiled onions are
+  // very different signals for an owner, even though both used to land as
+  // an undifferentiated "adjustment" with only a free-text note to tell
+  // them apart). Always a negative quantityDeltaMilliunits — see
+  // wasteReasonEnum below and recordStockAdjustmentSchema.
+  "waste",
+]);
+
+// P2 — a structured reason taxonomy for "waste" movements, alongside the
+// existing free-text `note` column (kept for detail — "waste: spoilage,
+// note: 'left out overnight'"). Deliberately a fixed, small enum rather
+// than open text: it's what makes a wastage report groupable/chartable at
+// all ("60% of this month's waste was spoilage" is only answerable if
+// reason is structured data, not prose). Nullable — only meaningful when
+// stock_movements.type = 'waste'; every other movement type leaves it null.
+export const wasteReasonEnum = pgEnum("waste_reason", [
+  "spoilage",
+  "expired",
+  "breakage",
+  "overproduction",
+  "theft_or_loss",
+  "other",
 ]);
 
 export const suppliers = pgTable(
@@ -1042,6 +1066,15 @@ export const purchases = pgTable(
     restaurantId: uuid("restaurant_id")
       .notNull()
       .references(() => restaurants.id, { onDelete: "cascade" }),
+    // P2 — which branch physically received this delivery. Added nullable
+    // in drizzle/0030 (backfilled every existing row to the restaurant's
+    // main branch, since historical purchases predate branch-scoped
+    // inventory and carry no real branch signal), NOT NULL from drizzle/0031
+    // onward — every code path writing a purchase supplies one. See
+    // BRANCH_INVENTORY.md for the full backfill/scoping writeup.
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
     supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
     invoiceNumber: varchar("invoice_number", { length: 60 }),
     // Denormalized sum of purchase_items.line_total_in_paisa at creation
@@ -1059,6 +1092,7 @@ export const purchases = pgTable(
   (table) => [
     index("purchases_restaurant_id_idx").on(table.restaurantId),
     index("purchases_supplier_id_idx").on(table.supplierId),
+    index("purchases_branch_id_idx").on(table.branchId),
   ],
 );
 
@@ -1257,12 +1291,28 @@ export const stockMovements = pgTable(
     inventoryItemId: uuid("inventory_item_id")
       .notNull()
       .references(() => inventoryItems.id, { onDelete: "cascade" }),
+    // P2 — which branch this movement physically happened at. Added
+    // nullable in drizzle/0030 (see purchases.branchId's comment above for
+    // the exact same backfill story: sale_deduction rows backfill from the
+    // referenced order's branchId, purchase rows from the referenced
+    // purchase's branchId, everything else — manual adjustments predating
+    // this column — falls back to the restaurant's main branch), NOT NULL
+    // from drizzle/0031 onward. recordStockMovement() requires this on
+    // every write going forward; see its own doc comment.
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
     type: stockMovementTypeEnum("type").notNull(),
     // Positive for purchase/stock-in and positive manual adjustments,
-    // negative for sale deductions and negative manual adjustments
-    // (wastage/spoilage/count corrections) — same signed-ledger pattern as
+    // negative for sale deductions, waste, and negative manual adjustments
+    // (count corrections) — same signed-ledger pattern as
     // payments.amountInPaisa.
     quantityDeltaMilliunits: integer("quantity_delta_milliunits").notNull(),
+    // P2 — see wasteReasonEnum's own comment. Set only when type='waste';
+    // enforced at the application layer (recordStockMovement), not a DB
+    // CHECK constraint — this schema doesn't use CHECK constraints
+    // elsewhere for cross-column rules, matching the existing convention.
+    wasteReason: wasteReasonEnum("waste_reason"),
     // Informational traceability to what caused this movement (a purchase
     // id, an order id) — same pattern as menu_item_id on order_items:
     // never read back for correctness, only for "why did this change".
@@ -1279,6 +1329,49 @@ export const stockMovements = pgTable(
   (table) => [
     index("stock_movements_restaurant_id_idx").on(table.restaurantId),
     index("stock_movements_inventory_item_id_idx").on(table.inventoryItemId),
+    index("stock_movements_branch_id_idx").on(table.branchId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// P2 — branch-scoped stock levels. inventoryItems.currentStockMilliunits
+// (above) stays the authoritative RESTAURANT-WIDE total — every existing
+// caller (low-stock alerts, weighted-average costing, the Items tab) keeps
+// reading/writing it exactly as before, unchanged. This table is additive:
+// one row per (branch, item), incremented atomically in lockstep with the
+// restaurant-wide total inside the same recordStockMovement() transaction
+// (see src/lib/inventory.ts), so the per-branch figures can never drift out
+// of sync with the restaurant-wide one they sum to. Powers per-branch stock
+// views, branch-to-branch transfers, and branch-scoped physical stock
+// counts — see BRANCH_INVENTORY.md.
+//
+// A row only exists once a movement has actually happened at that branch
+// (no zero-rows pre-created for every branch x item pair) — read code
+// treats a missing row as zero stock, same convention as "no recipe" being
+// treated as zero ingredients rather than an error.
+// ---------------------------------------------------------------------------
+
+export const branchInventoryLevels = pgTable(
+  "branch_inventory_levels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    inventoryItemId: uuid("inventory_item_id")
+      .notNull()
+      .references(() => inventoryItems.id, { onDelete: "cascade" }),
+    currentStockMilliunits: integer("current_stock_milliunits").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("branch_inventory_levels_branch_item_unique").on(
+      table.branchId,
+      table.inventoryItemId,
+    ),
+    index("branch_inventory_levels_inventory_item_id_idx").on(table.inventoryItemId),
   ],
 );
 
@@ -2179,12 +2272,28 @@ export const inventoryItemsRelations = relations(inventoryItems, ({ one, many })
   purchaseItems: many(purchaseItems),
   stockMovements: many(stockMovements),
   recipeItems: many(recipeItems),
+  branchLevels: many(branchInventoryLevels),
+}));
+
+export const branchInventoryLevelsRelations = relations(branchInventoryLevels, ({ one }) => ({
+  branch: one(branches, {
+    fields: [branchInventoryLevels.branchId],
+    references: [branches.id],
+  }),
+  inventoryItem: one(inventoryItems, {
+    fields: [branchInventoryLevels.inventoryItemId],
+    references: [inventoryItems.id],
+  }),
 }));
 
 export const purchasesRelations = relations(purchases, ({ one, many }) => ({
   restaurant: one(restaurants, {
     fields: [purchases.restaurantId],
     references: [restaurants.id],
+  }),
+  branch: one(branches, {
+    fields: [purchases.branchId],
+    references: [branches.id],
   }),
   supplier: one(suppliers, {
     fields: [purchases.supplierId],
@@ -2212,6 +2321,10 @@ export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
   restaurant: one(restaurants, {
     fields: [stockMovements.restaurantId],
     references: [restaurants.id],
+  }),
+  branch: one(branches, {
+    fields: [stockMovements.branchId],
+    references: [branches.id],
   }),
   inventoryItem: one(inventoryItems, {
     fields: [stockMovements.inventoryItemId],

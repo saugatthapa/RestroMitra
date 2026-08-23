@@ -7,6 +7,8 @@ import { formatQuantity } from "@/lib/quantity";
 import { INVENTORY_UNITS, INVENTORY_UNIT_LABELS, type InventoryUnit } from "@/lib/inventory-units";
 import { useDateSystem } from "@/lib/date-system";
 import { formatDate } from "@/lib/nepali-date";
+import { useBranchSelection } from "@/lib/branch-context";
+import { WASTE_REASONS, WASTE_REASON_LABELS, type WasteReasonValue } from "@/lib/waste-reasons";
 
 type Supplier = {
   id: string;
@@ -329,21 +331,44 @@ function AdjustStockModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { branches, branchId, setBranchId } = useBranchSelection();
   const [direction, setDirection] = useState<"add" | "remove">("add");
   const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState("");
+  const [isWaste, setIsWaste] = useState(false);
+  const [wasteReason, setWasteReason] = useState<WasteReasonValue | "">("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function selectDirection(next: "add" | "remove") {
+    setDirection(next);
+    // Waste only makes sense for a removal — switching to "Add" drops it
+    // rather than leaving a stale, now-invalid selection sitting hidden.
+    if (next === "add") {
+      setIsWaste(false);
+      setWasteReason("");
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!branchId) {
+      setError("No branch available for this adjustment.");
+      return;
+    }
+    if (isWaste && !wasteReason) {
+      setError("Select a waste reason.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       await apiPost(`${base(slug)}/inventory-items/${item.id}/adjustments`, {
+        branchId,
         quantity: Number(quantity),
         direction,
         reason,
+        wasteReason: isWaste ? wasteReason : null,
       });
       onSaved();
     } catch (err) {
@@ -362,10 +387,27 @@ function AdjustStockModal({
         </p>
         {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <form onSubmit={submit} className="space-y-3">
+          {branches.length > 1 && (
+            <label className="block text-sm">
+              <span className="mb-1 block text-neutral-600">Branch</span>
+              <select
+                required
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+                className="input"
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setDirection("add")}
+              onClick={() => selectDirection("add")}
               className={`flex-1 rounded-lg border px-3 py-1.5 text-sm ${
                 direction === "add"
                   ? "border-green-600 bg-green-50 font-medium text-green-700"
@@ -376,7 +418,7 @@ function AdjustStockModal({
             </button>
             <button
               type="button"
-              onClick={() => setDirection("remove")}
+              onClick={() => selectDirection("remove")}
               className={`flex-1 rounded-lg border px-3 py-1.5 text-sm ${
                 direction === "remove"
                   ? "border-red-600 bg-red-50 font-medium text-red-700"
@@ -398,14 +440,47 @@ function AdjustStockModal({
               className="input"
             />
           </label>
+          {direction === "remove" && (
+            <label className="flex items-center gap-2 text-sm text-neutral-700">
+              <input
+                type="checkbox"
+                checked={isWaste}
+                onChange={(e) => {
+                  setIsWaste(e.target.checked);
+                  if (!e.target.checked) setWasteReason("");
+                }}
+              />
+              This is waste (spoilage, breakage, etc.)
+            </label>
+          )}
+          {isWaste && (
+            <label className="block text-sm">
+              <span className="mb-1 block text-neutral-600">Waste reason</span>
+              <select
+                required
+                value={wasteReason}
+                onChange={(e) => setWasteReason(e.target.value as WasteReasonValue)}
+                className="input"
+              >
+                <option value="" disabled>
+                  Select a reason
+                </option>
+                {WASTE_REASONS.map((r) => (
+                  <option key={r} value={r}>
+                    {WASTE_REASON_LABELS[r]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="block text-sm">
-            <span className="mb-1 block text-neutral-600">Reason</span>
+            <span className="mb-1 block text-neutral-600">{isWaste ? "Details" : "Reason"}</span>
             <input
               required
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               className="input"
-              placeholder="e.g. Stock count correction, spoilage"
+              placeholder={isWaste ? "e.g. Left out overnight" : "e.g. Stock count correction"}
             />
           </label>
           <div className="flex justify-end gap-2">
@@ -678,6 +753,7 @@ function CreatePurchaseForm({
   suppliers: Supplier[];
   onCreated: () => void;
 }) {
+  const { branches, branchId, setBranchId } = useBranchSelection();
   const [supplierId, setSupplierId] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [lines, setLines] = useState<PurchaseLineDraft[]>([
@@ -700,10 +776,15 @@ function CreatePurchaseForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!branchId) {
+      setError("No branch available to receive this purchase.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       await apiPost(`${base(slug)}/purchases`, {
+        branchId,
         supplierId: supplierId || null,
         invoiceNumber,
         items: lines.map((l) => ({
@@ -724,6 +805,23 @@ function CreatePurchaseForm({
     <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
       {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-2">
+        {branches.length > 1 && (
+          <label className="text-sm">
+            <span className="mb-1 block text-neutral-600">Receiving branch</span>
+            <select
+              required
+              value={branchId}
+              onChange={(e) => setBranchId(e.target.value)}
+              className="input"
+            >
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="text-sm">
           <span className="mb-1 block text-neutral-600">Supplier (optional)</span>
           <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="input">

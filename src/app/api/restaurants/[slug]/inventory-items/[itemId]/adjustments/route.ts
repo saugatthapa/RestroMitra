@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { inventoryItems, stockMovements } from "@/db/schema";
+import { branches, inventoryItems, stockMovements } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { recordStockAdjustmentSchema } from "@/lib/validation/inventory";
@@ -39,11 +39,14 @@ export async function GET(
 }
 
 /**
- * Records a manual stock adjustment — count corrections, wastage,
- * spoilage, or recording pre-existing stock right after an item is
- * created. `direction` (add/remove) plus a mandatory `reason` are more
- * honest at the UI layer than asking for a raw signed delta; converted to
- * a signed quantityDeltaMilliunits here before it reaches the ledger.
+ * Records a manual stock movement — either a plain "adjustment" (count
+ * corrections, recording pre-existing stock right after an item is
+ * created) or, when `wasteReason` is given, a structured "waste" movement
+ * (P2 — see wasteReasonEnum's schema comment for why this is split out
+ * from the generic adjustment bucket). `direction` (add/remove) plus a
+ * mandatory `reason` are more honest at the UI layer than asking for a raw
+ * signed delta; converted to a signed quantityDeltaMilliunits here before
+ * it reaches the ledger.
  */
 export async function POST(
   request: Request,
@@ -72,14 +75,25 @@ export async function POST(
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
 
+    const ownedBranch = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.id, data.branchId), eq(branches.restaurantId, restaurantId)))
+      .limit(1);
+    if (ownedBranch.length === 0) {
+      return NextResponse.json({ error: "Branch not found." }, { status: 404 });
+    }
+
     const signedDelta = data.direction === "add" ? data.quantity : -data.quantity;
 
     const result = await db.transaction(async (tx) =>
       recordStockMovement(tx, {
         restaurantId,
+        branchId: data.branchId,
         inventoryItemId: itemId,
-        type: "adjustment",
+        type: data.wasteReason ? "waste" : "adjustment",
         quantityDeltaMilliunits: signedDelta,
+        wasteReason: data.wasteReason ?? null,
         referenceType: "manual",
         note: data.reason,
         recordedByUserId: session.user.id,
@@ -89,11 +103,16 @@ export async function POST(
     await recordAuditLog({
       restaurantId,
       userId: session.user.id,
-      action: "inventory.stock.adjusted",
+      action: data.wasteReason ? "inventory.stock.wasted" : "inventory.stock.adjusted",
       resourceType: "inventory_item",
       resourceId: itemId,
       ipAddress: getClientIp(request),
-      metadata: { direction: data.direction, quantityMilliunits: data.quantity, reason: data.reason },
+      metadata: {
+        direction: data.direction,
+        quantityMilliunits: data.quantity,
+        reason: data.reason,
+        wasteReason: data.wasteReason ?? null,
+      },
     });
 
     return NextResponse.json(

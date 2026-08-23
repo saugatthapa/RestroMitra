@@ -152,6 +152,7 @@ export async function PATCH(
       if (currentStatus === "confirmed" && targetStatus === "preparing") {
         await deductRecipeStockForOrder(tx, {
           restaurantId,
+          branchId: row.branchId,
           orderId,
           recordedByUserId: session.user.id,
         });

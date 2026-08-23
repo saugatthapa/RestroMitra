@@ -173,6 +173,7 @@ describe.skipIf(!hasDb)("Inventory ledger, costing, recipe deduction (integratio
       db.transaction((tx) =>
         inventoryLib.recordStockMovement(tx, {
           restaurantId: restaurantAId,
+          branchId: branchAId,
           inventoryItemId: otherRestaurantItemId, // belongs to restaurant B
           type: "adjustment",
           quantityDeltaMilliunits: 1000,
@@ -194,6 +195,7 @@ describe.skipIf(!hasDb)("Inventory ledger, costing, recipe deduction (integratio
       db.transaction((tx) =>
         inventoryLib.recordStockMovement(tx, {
           restaurantId: restaurantAId,
+          branchId: branchAId,
           inventoryItemId: flourItemId,
           type: "adjustment",
           quantityDeltaMilliunits: 0,
@@ -207,6 +209,7 @@ describe.skipIf(!hasDb)("Inventory ledger, costing, recipe deduction (integratio
     const result = await db.transaction((tx) =>
       inventoryLib.recordStockMovement(tx, {
         restaurantId: restaurantAId,
+        branchId: branchAId,
         inventoryItemId: sugarItemId,
         type: "adjustment",
         quantityDeltaMilliunits: 5000, // +5kg
@@ -221,6 +224,7 @@ describe.skipIf(!hasDb)("Inventory ledger, costing, recipe deduction (integratio
     const second = await db.transaction((tx) =>
       inventoryLib.recordStockMovement(tx, {
         restaurantId: restaurantAId,
+        branchId: branchAId,
         inventoryItemId: sugarItemId,
         type: "sale_deduction",
         quantityDeltaMilliunits: -1200, // -1.2kg
@@ -236,10 +240,11 @@ describe.skipIf(!hasDb)("Inventory ledger, costing, recipe deduction (integratio
     const purchase1 = await db.transaction(async (tx) => {
       const [p] = await tx
         .insert(schema.purchases)
-        .values({ restaurantId: restaurantAId, totalInPaisa: 100_000 })
+        .values({ restaurantId: restaurantAId, branchId: branchAId, totalInPaisa: 100_000 })
         .returning();
       await inventoryLib.applyPurchaseCosting(tx, {
         restaurantId: restaurantAId,
+        branchId: branchAId,
         inventoryItemId: flourItemId,
         purchasedQuantityMilliunits: 5000,
         unitCostInPaisa: 20_000,
@@ -260,10 +265,11 @@ describe.skipIf(!hasDb)("Inventory ledger, costing, recipe deduction (integratio
     await db.transaction(async (tx) => {
       const [p] = await tx
         .insert(schema.purchases)
-        .values({ restaurantId: restaurantAId, totalInPaisa: 150_000 })
+        .values({ restaurantId: restaurantAId, branchId: branchAId, totalInPaisa: 150_000 })
         .returning();
       await inventoryLib.applyPurchaseCosting(tx, {
         restaurantId: restaurantAId,
+        branchId: branchAId,
         inventoryItemId: flourItemId,
         purchasedQuantityMilliunits: 5000,
         unitCostInPaisa: 30_000,
@@ -335,6 +341,7 @@ describe.skipIf(!hasDb)("Inventory ledger, costing, recipe deduction (integratio
     await db.transaction((tx) =>
       inventoryLib.deductRecipeStockForOrder(tx, {
         restaurantId: restaurantAId,
+        branchId: branchAId,
         orderId: order.id,
         recordedByUserId: inventoryManagerAId,
       }),
