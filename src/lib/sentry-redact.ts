@@ -43,7 +43,7 @@
 const REDACTED = "[Redacted]";
 
 const SENSITIVE_KEY_PATTERN =
-  /^(password|passwordhash|phone|customerphone|ownerphone|customername|email|panvat|cookie|set-cookie|authorization|token|tokenhash|qrtoken|sessionid|clientrequestid)$/i;
+  /^(password|passwordhash|phone|customerphone|ownerphone|customername|email|panvat|cookie|set-cookie|authorization|token|tokenhash|qrtoken|sessionid|clientrequestid|bankname|bankaccountnumber|bankaccountholder)$/i;
 
 /**
  * Recursively walks a plain-data structure (already-parsed JSON-like

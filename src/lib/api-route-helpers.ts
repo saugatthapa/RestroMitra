@@ -1,6 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import type { ZodType } from "zod";
+import * as Sentry from "@sentry/nextjs";
 import {
   requireAuth,
   requirePermission,
@@ -17,12 +18,27 @@ import type { SessionContext } from "@/lib/auth/session";
  * HttpError is logged server-side and returned as an opaque 500, so we
  * never leak internal error details (stack traces, DB error text) to a
  * client, authenticated or not.
+ *
+ * RC audit P1 fix — this is the shared error handler ~76 API routes funnel
+ * through via `catch (err) { return toErrorResponse(err); }`, which is
+ * exactly why the dominant class of "API failure" never reached Sentry
+ * even with a DSN configured: this catch-everything pattern means the
+ * error never escapes uncaught, so instrumentation.ts's own
+ * `onRequestError` hook (Sentry.captureRequestError) never fires either.
+ * The unhandled-error branch below now reports to Sentry directly.
+ * HttpErrors are deliberately NOT reported — those are expected,
+ * recognized failures (a 404, a validation 400, a permission 403), not
+ * bugs; reporting every one would bury the genuinely unexpected 500s this
+ * exists to surface. Same no-op-until-SENTRY_DSN-is-set behavior as every
+ * other Sentry call site in this app (see sentry.server.config.ts's own
+ * comment) — safe to call unconditionally.
  */
 export function toErrorResponse(err: unknown): NextResponse {
   if (err instanceof HttpError) {
     return NextResponse.json({ error: err.message }, { status: err.status });
   }
   console.error("Unhandled API error:", err);
+  Sentry.captureException(err);
   return NextResponse.json(
     { error: "Something went wrong. Please try again." },
     { status: 500 },

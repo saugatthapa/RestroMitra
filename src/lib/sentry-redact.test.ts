@@ -47,6 +47,22 @@ describe("redactSensitiveData", () => {
       clientRequestId: "[Redacted]",
     });
   });
+
+  it("RC audit — redacts payout bank-account fields", () => {
+    expect(
+      redactSensitiveData({
+        bankName: "TEST Bank",
+        bankAccountNumber: "0123456789",
+        bankAccountHolder: "Real Name",
+        payoutMethod: "bank_transfer",
+      }),
+    ).toEqual({
+      bankName: "[Redacted]",
+      bankAccountNumber: "[Redacted]",
+      bankAccountHolder: "[Redacted]",
+      payoutMethod: "bank_transfer",
+    });
+  });
 });
 
 describe("redactUrl", () => {
