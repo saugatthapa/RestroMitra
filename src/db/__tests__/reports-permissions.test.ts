@@ -297,19 +297,26 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
     });
   });
 
-  it("getSalesSummary counts only completed orders inside the range, excludes cancelled and out-of-range", async () => {
+  it("getSalesSummary counts only completed orders inside the range, excludes cancelled and out-of-range, and nets out the order-2 refund", async () => {
     const summary = await reports.getSalesSummary(restaurantAId, RANGE, TZ);
-    // 100_000 (branch A) + 50_000 (branch A) + 60_000 (branch B), not the
-    // 777_777 out-of-range or 999_999 cancelled order.
-    expect(summary.revenueInPaisa).toBe(210_000);
+    // 100_000 (branch A, order 1) + 50_000 (branch A, order 2) + 60_000
+    // (branch B) - 10_000 (the refund recorded against order 2 above) =
+    // 200_000. Not the 777_777 out-of-range or 999_999 cancelled order.
+    // RC audit P1 fix — revenueInPaisa now nets out refunds against
+    // completed orders (previously it didn't; see getSalesSummary's own
+    // doc comment), which is why this is 200_000, not order 2's full
+    // 50_000 totalInPaisa.
+    expect(summary.revenueInPaisa).toBe(200_000);
     expect(summary.orderCount).toBe(3);
-    expect(summary.averageOrderValueInPaisa).toBe(70_000);
+    expect(summary.averageOrderValueInPaisa).toBe(66_667); // round(200_000 / 3)
     expect(summary.cancelledCount).toBe(1);
   });
 
   it("getSalesSummary with a branchId only counts that branch's orders", async () => {
     const branchA = await reports.getSalesSummary(restaurantAId, RANGE, TZ, branchAId);
-    expect(branchA.revenueInPaisa).toBe(150_000); // 100_000 + 50_000, branch B's 60_000 excluded
+    // 100_000 (order 1) + 50_000 (order 2) - 10_000 (order 2's refund) =
+    // 140_000; branch B's 60_000 excluded.
+    expect(branchA.revenueInPaisa).toBe(140_000);
     expect(branchA.orderCount).toBe(2);
 
     const branchB = await reports.getSalesSummary(restaurantAId, RANGE, TZ, branchBId);
@@ -359,9 +366,10 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
 
   it("getReportSummary bundles everything and computes net profit as revenue minus expenses", async () => {
     const summary = await reports.getReportSummary(restaurantAId, RANGE, TZ);
-    expect(summary.sales.revenueInPaisa).toBe(210_000);
+    // 200_000 (see the getSalesSummary test above for the refund math).
+    expect(summary.sales.revenueInPaisa).toBe(200_000);
     expect(summary.totalExpensesInPaisa).toBe(55_000);
-    expect(summary.netProfitInPaisa).toBe(155_000);
+    expect(summary.netProfitInPaisa).toBe(145_000); // 200_000 - 55_000
     expect(summary.dailySeries).toHaveLength(7);
     expect(summary.branchId).toBeNull();
   });
@@ -369,14 +377,15 @@ describe.skipIf(!hasDb)("Reports permissions + aggregation math (integration)", 
   it("getReportSummary with a branchId scopes every figure to that branch and skips branch comparison", async () => {
     const summary = await reports.getReportSummary(restaurantAId, RANGE, TZ, branchAId);
     expect(summary.branchId).toBe(branchAId);
-    expect(summary.sales.revenueInPaisa).toBe(150_000); // branch B's order excluded
+    // branch B's order excluded; order 2's 10_000 refund still nets out.
+    expect(summary.sales.revenueInPaisa).toBe(140_000);
     expect(summary.sales.orderCount).toBe(2);
     // Expenses in this fixture were never tied to a branch (branchId null),
     // so a branch-scoped view correctly shows 0 — see getTotalExpensesInPaisa's
     // comment on why restaurant-wide overhead doesn't leak into one branch's
     // totals.
     expect(summary.totalExpensesInPaisa).toBe(0);
-    expect(summary.netProfitInPaisa).toBe(150_000);
+    expect(summary.netProfitInPaisa).toBe(140_000);
     // Comparing one branch against itself isn't meaningful — see
     // getReportSummary's own comment on why this is skipped entirely
     // rather than returning a single-row result.

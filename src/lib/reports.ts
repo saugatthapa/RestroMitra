@@ -98,7 +98,45 @@ export async function getSalesSummary(
       ),
     );
 
-  const revenueInPaisa = Number(completedRow?.revenueInPaisa ?? 0);
+  // RC audit P1 fix — there is no "refunded"/"voided" order status
+  // (`completed` is terminal, see order-status.ts); a refund only ever
+  // touches `orders.paymentStatus`, never `orders.status`. Without this,
+  // a fully (or partially) refunded completed order would still count its
+  // full `totalInPaisa` as revenue forever — refunds are stored as
+  // negative-amount `payments` rows (see the refunds route's own doc
+  // comment), so they net out correctly in getPaymentMethodBreakdown
+  // (which sums raw payments directly) but nowhere else. Scoped by the
+  // ORDER's placedAt, not the refund's own createdAt — same as
+  // revenueInPaisa itself — so a refund issued on a later day still
+  // reduces the revenue attributed to the day the sale was made, matching
+  // this function's accrual-style "revenue" definition (see the module
+  // doc comment above).
+  const [refundRow] = await db
+    .select({
+      netRefundInPaisa: sql<string>`
+        coalesce(sum(case when ${payments.amountInPaisa} < 0 then -${payments.amountInPaisa} else 0 end), 0)
+      `,
+    })
+    .from(payments)
+    .innerJoin(orders, eq(payments.orderId, orders.id))
+    .where(
+      and(
+        eq(orders.restaurantId, restaurantId),
+        eq(orders.status, "completed"),
+        gte(orders.placedAt, dayStart),
+        lt(orders.placedAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
+      ),
+    );
+
+  const grossRevenueInPaisa = Number(completedRow?.revenueInPaisa ?? 0);
+  const netRefundInPaisa = Number(refundRow?.netRefundInPaisa ?? 0);
+  // Clamped at 0 rather than allowed to go negative — refunds are bounded
+  // by net-paid-so-far at the point they're recorded (see the refunds
+  // route), never by totalInPaisa, so an order that was overpaid and then
+  // fully refunded could in principle refund more than its own total; that
+  // shouldn't read as "negative revenue" on a report.
+  const revenueInPaisa = Math.max(0, grossRevenueInPaisa - netRefundInPaisa);
   const orderCount = Number(completedRow?.orderCount ?? 0);
 
   return {
@@ -723,6 +761,25 @@ export async function getCogsSummary(
         gte(orders.placedAt, dayStart),
         lt(orders.placedAt, dayAfterEnd),
         ...(branchId ? [eq(orders.branchId, branchId)] : []),
+        // RC audit P1 fix — excludes order_items belonging to a FULLY
+        // refunded order (net payments <= 0 AND at least one refund
+        // recorded — see the payments-vs-revenue comment on
+        // getSalesSummary above for why net-paid, not orders.status,
+        // is the signal). Deliberately requires an actual refund row,
+        // not just "net paid <= 0" on its own — an order that was
+        // completed but never paid (net paid = 0, no refund) is a real
+        // sale with real recipe cost, not a reversed one, and must still
+        // count. Partial refunds are NOT excluded here: there is no
+        // line-item link between a refund and specific order_items, so
+        // there's no correct way to reduce COGS proportionally — this is
+        // an honest, documented limitation, not silently glossed over.
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${payments}
+          WHERE ${payments.orderId} = ${orders.id}
+          GROUP BY ${payments.orderId}
+          HAVING SUM(${payments.amountInPaisa}) <= 0
+             AND SUM(CASE WHEN ${payments.amountInPaisa} < 0 THEN 1 ELSE 0 END) > 0
+        )`,
       ),
     );
 
