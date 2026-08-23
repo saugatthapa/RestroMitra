@@ -9,6 +9,7 @@ import { getClientIp } from "@/lib/request";
 import { rateLimit } from "@/lib/rate-limit";
 import { verifyEsewaCallback } from "@/lib/payment-gateways/esewa";
 import { lookupKhaltiPayment, KHALTI_COMPLETED_STATUS } from "@/lib/payment-gateways/khalti";
+import { markGatewayTransactionFailed } from "@/lib/payment-gateways/transaction-status";
 
 /**
  * Public, UNAUTHENTICATED endpoint — the browser lands here after eSewa or
@@ -131,10 +132,24 @@ export async function GET(
   }
 
   if (!verified) {
-    await db
-      .update(paymentGatewayTransactions)
-      .set({ status: "failed", rawResponse: rawResponse ?? undefined, updatedAt: new Date() })
-      .where(eq(paymentGatewayTransactions.id, transaction.id));
+    // RC audit P0 fix — this used to be an unconditional UPDATE with no
+    // status guard, unlike the success path below (which locks + re-checks
+    // before writing). That let a stale/duplicate delivery whose OWN
+    // verification independently failed (e.g. a transient Khalti lookup
+    // error) silently overwrite a genuine "completed" status written by a
+    // concurrent, correctly-verified request — even though the money and
+    // the `payments` row from that real success were untouched, the field
+    // THIS route's own idempotency fast-path reads (line ~83 above) would
+    // then be wrong, so a follow-up page refresh would tell staff/guest
+    // the payment failed when it had actually succeeded and was recorded.
+    // The guarded lock-then-conditionally-update logic lives in
+    // markGatewayTransactionFailed so it's directly regression-tested
+    // against a real database rather than only provable by reading this
+    // route.
+    const { finalStatus } = await markGatewayTransactionFailed(transaction.id, rawResponse);
+    if (finalStatus === "completed") {
+      return NextResponse.redirect(`${appUrl}/dashboard/orders/${transaction.orderId}?payment=success`);
+    }
     return failRedirect(transaction.orderId);
   }
 
