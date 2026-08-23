@@ -232,6 +232,20 @@
       "when": 1787490065197,
       "tag": "0032_wastage_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787516813091,
+      "tag": "0033_payments_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1787516959084,
+      "tag": "0034_check_constraints",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,12 @@ export const recordPaymentSchema = z.object({
     .max(1_000_000, "Tip is unreasonably large.")
     .optional(),
   note: z.string().trim().max(300).optional().or(z.literal("")),
+  // RC audit — a client-generated retry key identifying this exact
+  // submission attempt, not the payment itself. Mirrors
+  // createStaffOrderSchema's clientRequestId (see its comment): a retry of
+  // the same submission (dropped response, offline-queue replay) must
+  // return the original payment rather than double-insert it.
+  clientRequestId: z.string().trim().min(1).max(100).optional(),
 });
 
 export const recordRefundSchema = z.object({

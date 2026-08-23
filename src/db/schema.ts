@@ -13,6 +13,7 @@ import {
   primaryKey,
   date,
   bigserial,
+  check,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -605,6 +606,11 @@ export const restaurantTables = pgTable(
     index("restaurant_tables_branch_id_idx").on(table.branchId),
     index("restaurant_tables_status_idx").on(table.status),
     uniqueIndex("restaurant_tables_qr_token_unique").on(table.qrToken),
+    // RC audit — DB-level backstop alongside the existing Zod validation
+    // (createTableSchema/updateTableSchema already reject <= 0); capacity
+    // is nullable (a table can be created before capacity is set), so this
+    // only rejects an explicit non-positive value, not an unset one.
+    check("restaurant_tables_capacity_positive", sql`${table.capacity} IS NULL OR ${table.capacity} > 0`),
   ],
 );
 
@@ -712,6 +718,15 @@ export const orders = pgTable(
     uniqueIndex("orders_restaurant_client_request_id_unique")
       .on(table.restaurantId, table.clientRequestId)
       .where(sql`${table.clientRequestId} IS NOT NULL`),
+    // RC audit — DB-level backstop for the money columns; app-layer
+    // validation (computeOrderTotals/order-adjustments.ts) already keeps
+    // these non-negative, this just closes the gap for anything that
+    // writes to this table outside that path (a script, a future route).
+    check("orders_amounts_non_negative", sql`
+      ${table.subtotalInPaisa} >= 0 AND ${table.taxInPaisa} >= 0 AND
+      ${table.discountInPaisa} >= 0 AND ${table.serviceChargeInPaisa} >= 0 AND
+      ${table.totalInPaisa} >= 0
+    `),
   ],
 );
 
@@ -781,7 +796,12 @@ export const orderItems = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("order_items_order_id_idx").on(table.orderId)],
+  (table) => [
+    index("order_items_order_id_idx").on(table.orderId),
+    // RC audit — app-layer already rejects quantity outside [1, 50]
+    // (createStaffOrderSchema et al.); this is the DB-level backstop.
+    check("order_items_quantity_positive", sql`${table.quantity} > 0`),
+  ],
 );
 
 export const orderItemAddons = pgTable(
@@ -853,6 +873,18 @@ export const payments = pgTable(
     // traceability. Optional: a refund can also just be a general credit
     // against the order without pointing at one specific prior payment.
     refundOfPaymentId: uuid("refund_of_payment_id"),
+    // RC audit — a client-generated retry key, same purpose and pattern as
+    // orders.clientRequestId (see that column's comment). The payments
+    // route already takes a `FOR UPDATE` lock on the order row, which
+    // serializes concurrent requests for the SAME order — but a *legitimate
+    // network retry* of a distinct partial payment (e.g. a dropped response
+    // after tapping "Cash Rs 500" on a larger bill) previously had no way
+    // to be told apart from "staff intentionally recording a second Rs 500
+    // payment," and both would pass the remaining-due check and insert.
+    // Nullable: most payments are recorded once, live, with no retry
+    // concern (the POS UI only sets this when it queues a payment for
+    // possible retry).
+    clientRequestId: varchar("client_request_id", { length: 100 }),
     note: text("note"),
     recordedByUserId: uuid("recorded_by_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -864,6 +896,13 @@ export const payments = pgTable(
   (table) => [
     index("payments_restaurant_id_idx").on(table.restaurantId),
     index("payments_order_id_idx").on(table.orderId),
+    // Partial, scoped to (order, clientRequestId) — most payments never set
+    // clientRequestId, and a UUID collision across two different orders
+    // isn't a real concern, so this only constrains retries of the same
+    // payment against the same order (see the column comment above).
+    uniqueIndex("payments_order_client_request_id_unique")
+      .on(table.orderId, table.clientRequestId)
+      .where(sql`${table.clientRequestId} IS NOT NULL`),
   ],
 );
 
@@ -1056,6 +1095,15 @@ export const inventoryItems = pgTable(
   (table) => [
     index("inventory_items_restaurant_id_idx").on(table.restaurantId),
     index("inventory_items_preferred_supplier_id_idx").on(table.preferredSupplierId),
+    // RC audit — currentStockMilliunits is deliberately excluded (see its
+    // own comment: allowed to go negative by design). reorderLevelMilliunits
+    // is nullable (null = no alerting configured), so only an explicit
+    // negative value is rejected.
+    check(
+      "inventory_items_reorder_level_non_negative",
+      sql`${table.reorderLevelMilliunits} IS NULL OR ${table.reorderLevelMilliunits} >= 0`,
+    ),
+    check("inventory_items_cost_non_negative", sql`${table.costPerUnitInPaisa} >= 0`),
   ],
 );
 
@@ -1093,6 +1141,7 @@ export const purchases = pgTable(
     index("purchases_restaurant_id_idx").on(table.restaurantId),
     index("purchases_supplier_id_idx").on(table.supplierId),
     index("purchases_branch_id_idx").on(table.branchId),
+    check("purchases_total_non_negative", sql`${table.totalInPaisa} >= 0`),
   ],
 );
 
@@ -1113,7 +1162,12 @@ export const purchaseItems = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("purchase_items_purchase_id_idx").on(table.purchaseId)],
+  (table) => [
+    index("purchase_items_purchase_id_idx").on(table.purchaseId),
+    check("purchase_items_quantity_positive", sql`${table.quantityMilliunits} > 0`),
+    check("purchase_items_unit_cost_non_negative", sql`${table.unitCostInPaisa} >= 0`),
+    check("purchase_items_line_total_non_negative", sql`${table.lineTotalInPaisa} >= 0`),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -1685,6 +1739,7 @@ export const expenses = pgTable(
     index("expenses_branch_id_idx").on(table.branchId),
     index("expenses_category_id_idx").on(table.categoryId),
     index("expenses_status_idx").on(table.status),
+    check("expenses_amount_positive", sql`${table.amountInPaisa} > 0`),
   ],
 );
 
@@ -1751,6 +1806,7 @@ export const staffSalaryConfigs = pgTable(
   (table) => [
     uniqueIndex("staff_salary_configs_user_role_id_idx").on(table.userRoleId),
     index("staff_salary_configs_restaurant_id_idx").on(table.restaurantId),
+    check("staff_salary_configs_amount_positive", sql`${table.amountInPaisa} > 0`),
   ],
 );
 
@@ -1804,6 +1860,7 @@ export const payrollPayments = pgTable(
     index("payroll_payments_restaurant_id_idx").on(table.restaurantId),
     index("payroll_payments_user_role_id_idx").on(table.userRoleId),
     index("payroll_payments_paid_at_idx").on(table.paidAt),
+    check("payroll_payments_amount_positive", sql`${table.amountInPaisa} > 0`),
   ],
 );
 
@@ -1857,8 +1914,12 @@ export const reservations = pgTable(
     // as attendance_records.branchId above.
     branchId: uuid("branch_id").references(() => branches.id, { onDelete: "cascade" }),
     reservationTime: timestamp("reservation_time", { withTimezone: true }).notNull(),
-    // Estimated dining duration — used for a soft double-booking warning
-    // in the UI, not a hard DB constraint (see known gaps).
+    // Estimated dining duration — defines the overlap window
+    // assertNoReservationOverlap() checks against (src/lib/tables.ts).
+    // RC audit note: this comment previously said double-booking was only
+    // a soft UI warning — that's stale. It's a real, transaction-enforced
+    // guard (a `FOR UPDATE` lock on the table row, taken before the
+    // overlap check runs) — see requireTableRowLock in tables.ts.
     durationMinutes: integer("duration_minutes").notNull().default(90),
     status: reservationStatusEnum("status").notNull().default("requested"),
     notes: text("notes"),
@@ -1877,6 +1938,7 @@ export const reservations = pgTable(
     index("reservations_reservation_time_idx").on(table.reservationTime),
     index("reservations_table_id_idx").on(table.tableId),
     index("reservations_branch_id_idx").on(table.branchId),
+    check("reservations_party_size_positive", sql`${table.partySize} > 0`),
   ],
 );
 

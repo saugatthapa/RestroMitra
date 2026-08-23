@@ -36,6 +36,14 @@ import { rupeesToPaisa } from "@/lib/money";
  * second transaction to wait for the first to commit before it reads the
  * order/ledger, so it sees the first payment's effect and is correctly
  * evaluated against the true remaining due.
+ *
+ * RC audit — that same lock is also what makes the optional
+ * `clientRequestId` idempotency check below race-safe with no retry loop
+ * needed (unlike the orders route): two requests carrying the same
+ * clientRequestId for the same order are already serialized by the lock,
+ * so the second one's post-lock lookup is guaranteed to see the first's
+ * committed insert, not a stale pre-commit view. The unique index on
+ * (orderId, clientRequestId) is still there as a DB-level backstop.
  */
 export async function POST(
   request: Request,
@@ -82,10 +90,33 @@ export async function POST(
       });
 
       const existingPayments = await tx
-        .select({ amountInPaisa: payments.amountInPaisa, tipInPaisa: payments.tipInPaisa })
+        .select({
+          id: payments.id,
+          amountInPaisa: payments.amountInPaisa,
+          tipInPaisa: payments.tipInPaisa,
+          clientRequestId: payments.clientRequestId,
+        })
         .from(payments)
         .where(eq(payments.orderId, orderId))
         .orderBy(asc(payments.createdAt));
+
+      // Idempotent replay — see the module doc comment above for why the
+      // FOR UPDATE lock already makes this race-safe with no retry loop.
+      // Billing is recomputed from the full existing ledger (which already
+      // includes the replayed payment) rather than returned as null, so
+      // callers get the same response shape either way.
+      if (body.clientRequestId) {
+        const existing = existingPayments.find((p) => p.clientRequestId === body.clientRequestId);
+        if (existing) {
+          const [fullExisting] = await tx.select().from(payments).where(eq(payments.id, existing.id));
+          const billing = computeBillingSummary(
+            order.totalInPaisa,
+            existingPayments.map((p) => p.amountInPaisa),
+            existingPayments.map((p) => p.tipInPaisa),
+          );
+          return { payment: fullExisting, order, billing, idempotentReplay: true } as const;
+        }
+      }
 
       const before = computeBillingSummary(
         order.totalInPaisa,
@@ -110,6 +141,7 @@ export async function POST(
           receivedInPaisa: body.receivedAmount ?? null,
           tipInPaisa: body.tip ? rupeesToPaisa(body.tip) : 0,
           note: body.note || null,
+          clientRequestId: body.clientRequestId || null,
           recordedByUserId: session.user.id,
         })
         .returning();
@@ -126,11 +158,22 @@ export async function POST(
         .where(and(eq(orders.id, orderId), eq(orders.restaurantId, restaurantId)))
         .returning();
 
-      return { payment, order: updatedOrder, billing: after } as const;
+      return { payment, order: updatedOrder, billing: after, idempotentReplay: false } as const;
     });
 
     if ("error" in result) {
       return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+
+    // A replayed request already recorded its audit-log entry the first
+    // time it landed — logging again here would make it look like the
+    // payment happened twice in the activity trail, even though only one
+    // payment row exists.
+    if (result.idempotentReplay) {
+      return NextResponse.json(
+        { payment: result.payment, order: result.order, billing: result.billing, idempotentReplay: true },
+        { status: 200 },
+      );
     }
 
     await recordAuditLog({
