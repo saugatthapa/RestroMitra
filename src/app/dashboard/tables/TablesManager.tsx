@@ -26,6 +26,12 @@ export function TablesManager({ slug, restaurantName }: { slug: string; restaura
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [regenerating, setRegenerating] = useState<string | null>(null);
+  // Cache-busting query param per table — the QR image's URL is keyed by
+  // table id, not by qrToken, so the browser's cached copy of that exact
+  // URL would otherwise keep showing the OLD code's image after a
+  // regenerate (the server-side image genuinely changed; nothing else did).
+  const [qrCacheBust, setQrCacheBust] = useState<Record<string, number>>({});
   // Lazy initializer (not an effect) — order links are only meaningful in
   // the browser (need the actual host customers will hit), and this way
   // there's no synchronous setState-in-effect to trigger a second render.
@@ -113,6 +119,28 @@ export function TablesManager({ slug, restaurantName }: { slug: string; restaura
     }
   }
 
+  async function handleRegenerateQr(table: Table) {
+    if (
+      !window.confirm(
+        `Regenerate the QR code for "${table.name}"? The old code (any printed poster, ` +
+          `bookmark, or screenshot of it) will immediately STOP working — customers must ` +
+          `scan the new one. Use this if a code was leaked, photographed by the wrong ` +
+          `person, or a poster went missing.`,
+      )
+    )
+      return;
+    setRegenerating(table.id);
+    try {
+      const res = await apiPost<{ table: Table }>(`${base(slug)}/tables/${table.id}/qr`, {});
+      setTables((prev) => prev.map((t) => (t.id === table.id ? res.table : t)));
+      setQrCacheBust((prev) => ({ ...prev, [table.id]: Date.now() }));
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Could not regenerate the QR code.");
+    } finally {
+      setRegenerating(null);
+    }
+  }
+
   async function copyOrderLink(table: Table) {
     const url = `${origin}/order/${table.qrToken}`;
     try {
@@ -182,51 +210,68 @@ export function TablesManager({ slug, restaurantName }: { slug: string; restaura
                 </div>
               </div>
 
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`${base(slug)}/tables/${table.id}/qr`}
-                alt={`QR code for ${table.name}`}
-                width={140}
-                height={140}
-                className="my-3 h-[140px] w-[140px] rounded-lg border border-neutral-100"
-              />
+              {(() => {
+                const qrUrl = `${base(slug)}/tables/${table.id}/qr${
+                  qrCacheBust[table.id] ? `?v=${qrCacheBust[table.id]}` : ""
+                }`;
+                return (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={qrUrl}
+                      alt={`QR code for ${table.name}`}
+                      width={140}
+                      height={140}
+                      className="my-3 h-[140px] w-[140px] rounded-lg border border-neutral-100"
+                    />
 
-              <div className="flex flex-wrap gap-3 text-xs">
-                <a
-                  href={`${base(slug)}/tables/${table.id}/qr`}
-                  download={`${table.name.replace(/[^a-z0-9]+/gi, "-")}-qr.png`}
-                  className="font-medium text-orange-600 hover:text-orange-700"
-                >
-                  Download QR
-                </a>
-                <QrPosterButton
-                  qrImageUrl={`${base(slug)}/tables/${table.id}/qr`}
-                  restaurantName={restaurantName}
-                  subtitle={table.name}
-                  fileName={`${table.name.replace(/[^a-z0-9]+/gi, "-")}-poster.png`}
-                  className="font-medium text-orange-600 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Download poster
-                </QrPosterButton>
-                <button
-                  onClick={() => copyOrderLink(table)}
-                  className="font-medium text-neutral-600 hover:text-neutral-900"
-                >
-                  Copy order link
-                </button>
-                <button
-                  onClick={() => handleRename(table)}
-                  className="font-medium text-neutral-600 hover:text-neutral-900"
-                >
-                  Rename
-                </button>
-                <button
-                  onClick={() => handleDeactivate(table)}
-                  className="font-medium text-neutral-400 hover:text-red-600"
-                >
-                  Deactivate
-                </button>
-              </div>
+                    <div className="flex flex-wrap gap-3 text-xs">
+                      <a
+                        href={qrUrl}
+                        download={`${table.name.replace(/[^a-z0-9]+/gi, "-")}-qr.png`}
+                        className="font-medium text-orange-600 hover:text-orange-700"
+                      >
+                        Download QR
+                      </a>
+                      <QrPosterButton
+                        qrImageUrl={qrUrl}
+                        restaurantName={restaurantName}
+                        subtitle={table.name}
+                        fileName={`${table.name.replace(/[^a-z0-9]+/gi, "-")}-poster.png`}
+                        className="font-medium text-orange-600 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Download poster
+                      </QrPosterButton>
+                      <button
+                        onClick={() => copyOrderLink(table)}
+                        className="font-medium text-neutral-600 hover:text-neutral-900"
+                      >
+                        Copy order link
+                      </button>
+                      <button
+                        onClick={() => handleRename(table)}
+                        className="font-medium text-neutral-600 hover:text-neutral-900"
+                      >
+                        Rename
+                      </button>
+                      <button
+                        onClick={() => handleRegenerateQr(table)}
+                        disabled={regenerating === table.id}
+                        className="font-medium text-neutral-600 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                        title="Invalidate the current QR code and issue a new one — use if a code was leaked or a poster went missing."
+                      >
+                        {regenerating === table.id ? "Regenerating…" : "Regenerate QR"}
+                      </button>
+                      <button
+                        onClick={() => handleDeactivate(table)}
+                        className="font-medium text-neutral-400 hover:text-red-600"
+                      >
+                        Deactivate
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           ))}
         </div>
