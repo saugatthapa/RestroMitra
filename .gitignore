@@ -13,6 +13,12 @@
 # testing
 /coverage
 
+# Playwright E2E (see playwright.config.ts) — screenshots/videos/traces
+# from local runs, never meant to be committed.
+/test-results/
+/playwright-report/
+/blob-report/
+
 # next.js
 /.next/
 /out/

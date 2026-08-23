@@ -1,0 +1,125 @@
+name: CI
+
+# Phase 2 (P1) — runs the exact same verification commands used by hand
+# throughout this project's hardening passes (lint, typecheck, test,
+# build) on every push/PR to main, against a real Postgres service
+# container so the DB-backed integration tests in src/db/__tests__/ run
+# for real instead of skipping themselves.
+#
+# All secrets below are CI-only dummy values, not production credentials —
+# .env.local (the real values) is gitignored and never reaches this repo.
+# AUTH_SECRET/VAPID_* just need to be well-FORMED, not real: AUTH_SECRET
+# only needs to be a non-empty string for session-signing code paths to
+# run; the VAPID keypair below was generated fresh with
+# `webpush.generateVAPIDKeys()` specifically for this workflow (see
+# P1_PHASE_REPORT.md) so push.ts's ensureConfigured() succeeds and the
+# push-branch-filtering integration test can actually exercise the real
+# send path (mocked at the network layer, not by leaving VAPID unset).
+# Production's real VAPID/AUTH_SECRET/DATABASE_URL values live only in
+# Hostinger's own environment configuration — never here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/restromitra_ci
+  DIRECT_URL: postgresql://postgres:postgres@localhost:5432/restromitra_ci
+  AUTH_SECRET: ci-dummy-secret-not-used-in-production-1234567890
+  # Must match the origin the gateway-callback integration tests hardcode
+  # into their request URLs (src/app/api/payments/gateway/[gateway]/
+  # callback/route.test.ts) — the callback route builds its redirect
+  # Location header from APP_URL, and those tests assert the exact
+  # resulting URL including port.
+  APP_URL: http://localhost:3100
+  VAPID_PUBLIC_KEY: BCV11RDcFrQnN_j6XJIc-1OR-F85_Wzv2kVw5DU5ibuWiar4dzEoBVm9yt8kxHNh-0Crco-EwxW37VaHVwUTN9M
+  VAPID_PRIVATE_KEY: 4kpjHqmoBdhJFeOSJdV-DG-xfnrbUB_4IoYRvTK4MQk
+  VAPID_SUBJECT: mailto:ci@example.com
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: restromitra_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Apply migrations
+        run: npm run db:migrate
+
+      # Required on a fresh database — role_permissions (which role gets
+      # which permission) is deliberately fixed, non-tenant reference data
+      # seeded separately from the schema migrations (see src/db/seed.ts's
+      # own doc comment), not baked into a migration. Discovered by actually
+      # running this workflow's commands against a genuinely empty database
+      # while building it: every permission-check integration test failed
+      # without this step, because a migrated-but-unseeded DB has no
+      # role -> permission rows at all yet.
+      - name: Seed reference data (permissions, role_permissions)
+        run: npm run db:seed
+
+      - name: Test
+        run: npx vitest run
+
+      - name: Build
+        run: npm run build
+
+      # Phase 2 (P1) — E2E tests (Playwright) for the highest-value flows:
+      # owner login, QR customer order placement, staff order management,
+      # the reservation flow. Runs after Build (not before) and against
+      # `next start` (see playwright.config.ts's own comment for why —
+      # dev mode was flaky under this suite's concurrent request load) —
+      # every spec seeds its own owner/restaurant via direct DB inserts, so
+      # it also needs to run after the seed step above, reading real
+      # role_permissions data through the same RBAC checks a production
+      # request would hit.
+      #
+      # Runs `npx playwright test` directly, not `npm run test:e2e` —
+      # that script also runs `next build` itself (so a local one-command
+      # `npm run test:e2e` always has something to start), which would
+      # just redo the Build step above for no reason here.
+      #
+      # `npx playwright install --with-deps chromium` downloads its own
+      # browser here — this differs from the sandbox this workflow was
+      # authored in, which has no network access for that and instead
+      # points at a pre-baked Chromium via PLAYWRIGHT_CHROMIUM_EXECUTABLE
+      # (see playwright.config.ts); on a normal GitHub-hosted runner that
+      # path doesn't exist, so the config falls through to Playwright's
+      # own browser resolution, i.e. exactly what this step installs.
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: npx playwright test
