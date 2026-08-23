@@ -94,4 +94,4 @@ Net new: `.github/workflows/ci.yml`, `BACKUP_RESTORE.md`, `MIGRATION_SAFETY.md`,
 
 ## What I have not done
 
-Not committed or pushed — same as always, your call. Have not started Phase 3 (P2) — cash register/shift management, COGS reporting, supplier dues, wastage tracking, physical stock count, branch-to-branch transfer, payroll improvements. That's real, substantial work deserving its own focused pass and its own explicit go-ahead, same as this phase got.
+Committed locally (`caeca4d`) but not pushed to GitHub — that's delivered alongside this report as a git bundle for you to pull in. Have not started Phase 3 (P2) — cash register/shift management, COGS reporting, supplier dues, wastage tracking, physical stock count, branch-to-branch transfer, payroll improvements. That's real, substantial work deserving its own focused pass and its own explicit go-ahead, same as this phase got.
