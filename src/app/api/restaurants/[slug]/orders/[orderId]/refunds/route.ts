@@ -12,7 +12,9 @@ import { recordRefundSchema } from "@/lib/validation/payments";
 import { computeBillingSummary, computeNetPaid } from "@/lib/payments";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
-import { requireBranchAccess } from "@/lib/rbac/guard";
+import { requireBranchAccess, requirePermission } from "@/lib/rbac/guard";
+import { restaurantDate } from "@/lib/restaurant-date";
+import { isBusinessDateClosed } from "@/lib/daily-closing";
 
 /**
  * Records a refund against an order, stored as a negative-amount row in the
@@ -40,10 +42,8 @@ export async function POST(
   }
   try {
     const { slug, orderId } = await ctx.params;
-    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
-      slug,
-      PERMISSIONS.REFUND_ORDER,
-    );
+    const { session, restaurantId, role, timezone, branchId: grantedBranchId } =
+      await resolveRestaurantContext(slug, PERMISSIONS.REFUND_ORDER);
 
     const parsed = await parseJsonBody(request, recordRefundSchema);
     if (!parsed.ok) return parsed.response;
@@ -68,6 +68,25 @@ export async function POST(
         role,
         branchId: grantedBranchId,
       });
+
+      // Daily Close Lock (Commercial Launch Phase A.2, spec section 10) —
+      // once the business day this order was PLACED on has been closed
+      // for this branch, an ordinary REFUND_ORDER holder (waiter/cashier/
+      // manager in the default matrix) can no longer touch it; only
+      // someone who ALSO holds MANAGE_DAILY_CLOSING (manager/accountant/
+      // owner) may issue a late refund. This never blocks the refund
+      // mechanism itself (still a new, audited, additive payments row —
+      // the original transaction is never rewritten), only requires the
+      // higher trust level once the period is locked.
+      const orderBusinessDate = restaurantDate(timezone, order.placedAt);
+      if (await isBusinessDateClosed(restaurantId, order.branchId, orderBusinessDate)) {
+        await requirePermission(
+          session.user.id,
+          restaurantId,
+          PERMISSIONS.MANAGE_DAILY_CLOSING,
+          role,
+        );
+      }
 
       const existingPayments = await tx
         .select({ id: payments.id, amountInPaisa: payments.amountInPaisa })

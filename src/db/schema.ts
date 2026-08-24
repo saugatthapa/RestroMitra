@@ -1916,6 +1916,77 @@ export const registerShiftCorrections = pgTable(
   (table) => [index("register_shift_corrections_shift_id_idx").on(table.shiftId)],
 );
 
+// ---------------------------------------------------------------------------
+// Daily Closing / "Daily Close Lock" (Commercial Launch Phase A.2).
+//
+// One row per (restaurant, branch, business day) that has actually been
+// closed — the row's mere existence IS the lock: closeDailyBusiness()
+// (src/lib/daily-closing.ts) refuses to insert a second row for the same
+// (restaurantId, branchId, businessDate) via the unique index below, and
+// the refunds route consults isBusinessDateClosed() to require the extra
+// MANAGE_DAILY_CLOSING trust level for a refund landing on an
+// already-closed day (see that route's own comment) rather than silently
+// letting ordinary staff edit a locked period's numbers.
+//
+// snapshotJson freezes EVERY line item the Daily Closing screen showed at
+// the moment of close (see DailyClosingSnapshot in daily-closing.ts) —
+// deliberately jsonb rather than dozens of individual columns, since this
+// is fundamentally "the report, frozen," not a row application code
+// queries piecemeal. The four numeric columns below are pulled out
+// separately anyway, NOT as a second source of truth (they're written
+// from the exact same snapshot in the same insert) but so a shift/day
+// history list can sort/filter without parsing JSON for every row.
+// ---------------------------------------------------------------------------
+
+export const dailyCloses = pgTable(
+  "daily_closes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    // YYYY-MM-DD — the RESTAURANT's own calendar day (restaurantDate()),
+    // never the server's UTC day. See restaurant-date.ts's own doc
+    // comment for why this distinction matters for a Nepal-timezone app.
+    businessDate: date("business_date").notNull(),
+    closedByUserId: uuid("closed_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    closedAt: timestamp("closed_at", { withTimezone: true }).notNull().defaultNow(),
+    revenueInPaisa: integer("revenue_in_paisa").notNull(),
+    cogsInPaisa: integer("cogs_in_paisa").notNull(),
+    netProfitInPaisa: integer("net_profit_in_paisa").notNull(),
+    // Null when no register shift was closed at this branch on this day —
+    // "nothing to reconcile" is a real, honestly-representable state, not
+    // fabricated as a zero variance (see spec section 9's "do not
+    // fabricate a value that can't be calculated" instruction).
+    cashVarianceInPaisa: integer("cash_variance_in_paisa"),
+    notes: text("notes"),
+    snapshotJson: jsonb("snapshot_json").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("daily_closes_restaurant_id_idx").on(table.restaurantId),
+    index("daily_closes_branch_id_idx").on(table.branchId),
+    uniqueIndex("daily_closes_restaurant_branch_date_unique").on(
+      table.restaurantId,
+      table.branchId,
+      table.businessDate,
+    ),
+  ],
+);
+
+export const dailyClosesRelations = relations(dailyCloses, ({ one }) => ({
+  restaurant: one(restaurants, { fields: [dailyCloses.restaurantId], references: [restaurants.id] }),
+  branch: one(branches, { fields: [dailyCloses.branchId], references: [branches.id] }),
+  closedBy: one(users, { fields: [dailyCloses.closedByUserId], references: [users.id] }),
+}));
+
 export const registerShiftsRelations = relations(registerShifts, ({ one, many }) => ({
   restaurant: one(restaurants, {
     fields: [registerShifts.restaurantId],

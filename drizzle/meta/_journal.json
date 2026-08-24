@@ -253,6 +253,13 @@
       "when": 1787587544495,
       "tag": "0035_cash_register",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1787588798054,
+      "tag": "0036_daily_closing",
+      "breakpoints": true
     }
   ]
 }

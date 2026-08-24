@@ -606,6 +606,13 @@ function DashboardShellContent({
           permission: PERMISSIONS.MANAGE_CASH_REGISTER,
         },
         {
+          label: t("nav.dailyClosing"),
+          href: "/dashboard/daily-closing",
+          enabled: true,
+          icon: <NavIcon.DailyClosing />,
+          permission: PERMISSIONS.MANAGE_DAILY_CLOSING,
+        },
+        {
           label: t("nav.accountBooks"),
           href: "/dashboard/account-books",
           enabled: true,

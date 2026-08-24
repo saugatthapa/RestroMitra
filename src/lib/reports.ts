@@ -146,6 +146,10 @@ export async function getSalesSummary(
     cancelledCount: Number(cancelledRow?.count ?? 0),
     discountInPaisa: Number(completedRow?.discountInPaisa ?? 0),
     serviceChargeInPaisa: Number(completedRow?.serviceChargeInPaisa ?? 0),
+    // Commercial-launch Daily Closing (Phase A.2) needs this as its own
+    // line item ("Refunds") — it was already computed above to net
+    // revenueInPaisa down, just not previously exposed to callers.
+    refundInPaisa: netRefundInPaisa,
   };
 }
 

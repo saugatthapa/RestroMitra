@@ -63,6 +63,14 @@ export const PERMISSIONS = {
   MANAGE_CASH_REGISTER: "manage_cash_register",
   CORRECT_CASH_REGISTER: "correct_cash_register",
 
+  // Daily Closing (Commercial Launch Phase A.2) — closing a business day
+  // AND acting on financial records (e.g. a late refund) belonging to an
+  // already-closed day both require this: the same trust tier the spec
+  // asks for ("manager corrections must be explicitly authorized"), so
+  // one permission covers both rather than adding a second that would
+  // always be granted to the exact same roles.
+  MANAGE_DAILY_CLOSING: "manage_daily_closing",
+
   // Payroll (Phase 21) — kept separate from every other financial
   // permission above: salary information must stay private (spec
   // section 31), so this is never bundled into MANAGE_EXPENSES or any
@@ -111,6 +119,8 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.MANAGE_ACCOUNT_BOOKS]: "View and record entries in the Account Books ledger, settle dues",
   [PERMISSIONS.MANAGE_CASH_REGISTER]: "Open/close a cash register shift and record cash drops, additions, and payouts",
   [PERMISSIONS.CORRECT_CASH_REGISTER]: "Reopen or correct a closed cash register shift",
+  [PERMISSIONS.MANAGE_DAILY_CLOSING]:
+    "Close a business day's books and act on financial records from an already-closed day",
   [PERMISSIONS.VIEW_PAYROLL]: "View payroll and salary information",
   [PERMISSIONS.MANAGE_PAYROLL]: "Calculate, approve, and pay employee payroll",
   [PERMISSIONS.VIEW_REPORTS]: "View analytics and reports",
@@ -178,6 +188,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     // comment) — same trust pairing as APPROVE_EXPENSE/PAY_EXPENSE above.
     PERMISSIONS.MANAGE_CASH_REGISTER,
     PERMISSIONS.CORRECT_CASH_REGISTER,
+    PERMISSIONS.MANAGE_DAILY_CLOSING,
     PERMISSIONS.VIEW_REPORTS,
     PERMISSIONS.VIEW_KDS,
     PERMISSIONS.VIEW_SERVICE_CALLS,
@@ -231,6 +242,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     // register shift's numbers same as a manager, per spec section 6.
     PERMISSIONS.MANAGE_CASH_REGISTER,
     PERMISSIONS.CORRECT_CASH_REGISTER,
+    PERMISSIONS.MANAGE_DAILY_CLOSING,
   ],
 };
 

@@ -141,6 +141,14 @@ export const NavIcon = {
       <path d="M8 14h.01M12 14h.01M16 14h.01" />
     </svg>
   ),
+  DailyClosing: () => (
+    <svg {...iconProps}>
+      <rect x="3" y="4" width="18" height="17" rx="2" />
+      <path d="M3 9h18" />
+      <path d="M8 3v3M16 3v3" />
+      <path d="m8.5 14 2 2 4-4" />
+    </svg>
+  ),
   Settings: () => (
     <svg {...iconProps}>
       <circle cx="12" cy="12" r="3" />
