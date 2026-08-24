@@ -1,5 +1,6 @@
 import "server-only";
 import { and, asc, desc, eq, gte, lt, lte, ne, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import {
   orders,
@@ -11,6 +12,7 @@ import {
   recipeItems,
   inventoryItems,
   stockMovements,
+  orderStatusHistory,
 } from "@/db/schema";
 import type { WasteReasonValue } from "@/lib/waste-reasons";
 import {
@@ -24,6 +26,7 @@ import {
 } from "@/lib/reports-helpers";
 import type { PaymentMethod } from "@/lib/payments";
 import { restaurantStartOfDay } from "@/lib/restaurant-date";
+import type { OrderStatus } from "@/lib/order-status";
 
 export type ReportDateRange = {
   /** YYYY-MM-DD, inclusive. */
@@ -461,6 +464,208 @@ export async function getCompletionStats(
     completionRatePercent: total > 0 ? Math.round((paid / total) * 10000) / 100 : 0,
     avgCompletionMinutes:
       avgRow?.avgMinutes != null ? Math.max(0, Math.round(Number(avgRow.avgMinutes))) : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Order Performance (Commercial Launch Phase B.1) — stage durations built
+// from order_status_history (see that table's own doc comment in schema.ts
+// for why it exists as a structured sibling of audit_logs). This is a more
+// precise successor to getCompletionStats' avgCompletionMinutes above
+// (which proxies "completion time" off orders.updatedAt — a column any
+// edit can touch, not just a status change); that stat is left as-is for
+// backward compatibility, this is additive.
+// ---------------------------------------------------------------------------
+
+function minutesOrNull(value: string | null | undefined): number | null {
+  return value != null ? Math.max(0, Math.round(Number(value))) : null;
+}
+
+export type OrderStageDurationRow = {
+  fromStatus: OrderStatus;
+  toStatus: OrderStatus;
+  avgMinutes: number | null;
+  transitionCount: number;
+};
+
+/** The five real forward stages a non-cancelled order passes through — see order-status.ts's TRANSITIONS. */
+const ORDER_STAGE_PAIRS: Array<[OrderStatus, OrderStatus]> = [
+  ["pending", "confirmed"],
+  ["confirmed", "preparing"],
+  ["preparing", "ready"],
+  ["ready", "served"],
+  ["served", "completed"],
+];
+
+/**
+ * Average time an order spends in `fromStatus` before moving to `toStatus`,
+ * scoped/filtered the same way as every other report here (orders.placedAt
+ * in range, optional branch). `fromStatus === "pending"` is special-cased:
+ * there is no history row for "entering pending" (see the table's own doc
+ * comment — orders.placedAt already IS that moment), so that one stage
+ * measures from placedAt instead of a self-joined prior row. Every other
+ * stage self-joins order_status_history to itself: `entered` is the row
+ * where the order arrived at `fromStatus`, `arrived` is the row where it
+ * left `fromStatus` for `toStatus`.
+ */
+async function getStageDuration(
+  restaurantId: string,
+  fromStatus: OrderStatus,
+  toStatus: OrderStatus,
+  dayStart: Date,
+  dayAfterEnd: Date,
+  branchId?: string,
+): Promise<OrderStageDurationRow> {
+  const arrived = alias(orderStatusHistory, "arrived");
+
+  if (fromStatus === "pending") {
+    const [row] = await db
+      .select({
+        avgMinutes: sql<string | null>`avg(extract(epoch from (${arrived.changedAt} - ${orders.placedAt})) / 60)`,
+        transitionCount: sql<string>`count(*)`,
+      })
+      .from(arrived)
+      .innerJoin(orders, eq(arrived.orderId, orders.id))
+      .where(
+        and(
+          eq(arrived.restaurantId, restaurantId),
+          eq(arrived.toStatus, toStatus),
+          gte(orders.placedAt, dayStart),
+          lt(orders.placedAt, dayAfterEnd),
+          ...(branchId ? [eq(orders.branchId, branchId)] : []),
+        ),
+      );
+    return {
+      fromStatus,
+      toStatus,
+      avgMinutes: minutesOrNull(row?.avgMinutes),
+      transitionCount: Number(row?.transitionCount ?? 0),
+    };
+  }
+
+  const entered = alias(orderStatusHistory, "entered");
+  const [row] = await db
+    .select({
+      avgMinutes: sql<string | null>`avg(extract(epoch from (${arrived.changedAt} - ${entered.changedAt})) / 60)`,
+      transitionCount: sql<string>`count(*)`,
+    })
+    .from(arrived)
+    .innerJoin(entered, and(eq(entered.orderId, arrived.orderId), eq(entered.toStatus, fromStatus)))
+    .innerJoin(orders, eq(arrived.orderId, orders.id))
+    .where(
+      and(
+        eq(arrived.restaurantId, restaurantId),
+        eq(arrived.toStatus, toStatus),
+        gte(orders.placedAt, dayStart),
+        lt(orders.placedAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
+      ),
+    );
+  return {
+    fromStatus,
+    toStatus,
+    avgMinutes: minutesOrNull(row?.avgMinutes),
+    transitionCount: Number(row?.transitionCount ?? 0),
+  };
+}
+
+export type CancellationReasonRow = { reason: string; count: number };
+
+export type OrderPerformanceStats = {
+  /** In stage order: pending->confirmed, confirmed->preparing, preparing->ready, ready->served, served->completed. */
+  stageDurations: OrderStageDurationRow[];
+  cancelledCount: number;
+  /** cancelled / all orders placed in range, as a percent. */
+  cancellationRatePercent: number;
+  /** Average time from placedAt to the cancellation transition. */
+  avgMinutesBeforeCancellation: number | null;
+  /** Most-cancelled reason first. "No reason given" groups every cancellation with a null reason. */
+  cancellationReasons: CancellationReasonRow[];
+};
+
+export async function getOrderPerformanceStats(
+  restaurantId: string,
+  range: ReportDateRange,
+  timezone: string,
+  branchId?: string,
+): Promise<OrderPerformanceStats> {
+  const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
+
+  const branchFilter = branchId ? [eq(orders.branchId, branchId)] : [];
+
+  const [stageDurations, [totalRow], [cancelledRow], [cancelledAvgRow], reasonRows] = await Promise.all([
+    Promise.all(
+      ORDER_STAGE_PAIRS.map(([from, to]) =>
+        getStageDuration(restaurantId, from, to, dayStart, dayAfterEnd, branchId),
+      ),
+    ),
+    db
+      .select({ count: sql<string>`count(*)` })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.restaurantId, restaurantId),
+          gte(orders.placedAt, dayStart),
+          lt(orders.placedAt, dayAfterEnd),
+          ...branchFilter,
+        ),
+      ),
+    db
+      .select({ count: sql<string>`count(*)` })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.restaurantId, restaurantId),
+          eq(orders.status, "cancelled"),
+          gte(orders.placedAt, dayStart),
+          lt(orders.placedAt, dayAfterEnd),
+          ...branchFilter,
+        ),
+      ),
+    db
+      .select({
+        avgMinutes: sql<string | null>`avg(extract(epoch from (${orderStatusHistory.changedAt} - ${orders.placedAt})) / 60)`,
+      })
+      .from(orderStatusHistory)
+      .innerJoin(orders, eq(orderStatusHistory.orderId, orders.id))
+      .where(
+        and(
+          eq(orderStatusHistory.restaurantId, restaurantId),
+          eq(orderStatusHistory.toStatus, "cancelled"),
+          gte(orders.placedAt, dayStart),
+          lt(orders.placedAt, dayAfterEnd),
+          ...branchFilter,
+        ),
+      ),
+    db
+      .select({
+        reason: sql<string>`coalesce(${orderStatusHistory.reason}, 'No reason given')`,
+        count: sql<string>`count(*)`,
+      })
+      .from(orderStatusHistory)
+      .innerJoin(orders, eq(orderStatusHistory.orderId, orders.id))
+      .where(
+        and(
+          eq(orderStatusHistory.restaurantId, restaurantId),
+          eq(orderStatusHistory.toStatus, "cancelled"),
+          gte(orders.placedAt, dayStart),
+          lt(orders.placedAt, dayAfterEnd),
+          ...branchFilter,
+        ),
+      )
+      .groupBy(sql`1`)
+      .orderBy(desc(sql`count(*)`)),
+  ]);
+
+  const total = Number(totalRow?.count ?? 0);
+  const cancelledCount = Number(cancelledRow?.count ?? 0);
+
+  return {
+    stageDurations,
+    cancelledCount,
+    cancellationRatePercent: total > 0 ? Math.round((cancelledCount / total) * 10000) / 100 : 0,
+    avgMinutesBeforeCancellation: minutesOrNull(cancelledAvgRow?.avgMinutes),
+    cancellationReasons: reasonRows.map((r) => ({ reason: r.reason, count: Number(r.count) })),
   };
 }
 
@@ -1041,6 +1246,7 @@ export async function getReportSummary(
     branchComparison,
     cogs,
     wastage,
+    orderPerformance,
   ] = await Promise.all([
     getSalesSummary(restaurantId, range, timezone, branchId),
     getTotalExpensesInPaisa(restaurantId, range, timezone, branchId),
@@ -1061,6 +1267,7 @@ export async function getReportSummary(
       : getBranchComparison(restaurantId, range, timezone),
     getCogsSummary(restaurantId, range, timezone, branchId),
     getWastageSummary(restaurantId, range, timezone, branchId),
+    getOrderPerformanceStats(restaurantId, range, timezone, branchId),
   ]);
 
   const netProfitInPaisa = computeNetProfitInPaisa(sales.revenueInPaisa, totalExpensesInPaisa);
@@ -1125,5 +1332,6 @@ export async function getReportSummary(
     comparison,
     hourlyHeatmap,
     branchComparison,
+    orderPerformance,
   };
 }

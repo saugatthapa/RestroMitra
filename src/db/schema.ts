@@ -730,6 +730,53 @@ export const orders = pgTable(
   ],
 );
 
+// Commercial Launch Phase B.1 — Order Status History. Written transactionally
+// alongside every order-status change (see the orders/[orderId]/status
+// route), unlike the generic `audit_logs` entry that route ALSO writes —
+// that audit log is a best-effort record written after the transaction
+// commits (a crash between the two would leave a gap), and its metadata is
+// unstructured JSON, awkward to aggregate over for reporting ("average time
+// from confirmed to preparing" would mean parsing every row's JSON blob).
+// This table is the durable, structured source of truth: one row per
+// transition, in the SAME transaction as the status change itself, with
+// fromStatus/toStatus as real enum columns a report can GROUP BY / JOIN on
+// directly. It doesn't replace audit_logs (which stays the generic
+// who-did-what trail across every feature) — it exists specifically to make
+// Order Performance reporting (stage durations, cancellation analytics)
+// possible without parsing JSON. See src/lib/order-status-history.ts.
+//
+// No row is written for order CREATION (the initial implicit "pending")
+// — orders.placedAt already reliably marks that moment, so a synthetic
+// "null -> pending" row would just duplicate it. The first row here is
+// always the first REAL transition (pending -> confirmed, or -> cancelled).
+export const orderStatusHistory = pgTable(
+  "order_status_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    fromStatus: orderStatusEnum("from_status").notNull(),
+    toStatus: orderStatusEnum("to_status").notNull(),
+    changedByUserId: uuid("changed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    // Only ever populated for a cancellation today (mirrors the `reason`
+    // already accepted by updateOrderStatusSchema) — nullable for every
+    // other transition, which has no reason to record.
+    reason: text("reason"),
+    changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("order_status_history_order_id_idx").on(table.orderId),
+    index("order_status_history_restaurant_id_idx").on(table.restaurantId),
+    // Every report query filters/joins on (restaurant, to_status, changed_at)
+    // — see getOrderPerformanceStats in reports.ts.
+    index("order_status_history_restaurant_to_status_idx").on(table.restaurantId, table.toStatus),
+  ],
+);
+
 // Phase 17 — backs orders.kotSequence: one row per (restaurant, day),
 // atomically incremented via an upsert (`ON CONFLICT ... DO UPDATE SET
 // last_number = last_number + 1 RETURNING last_number`, see
@@ -2945,6 +2992,22 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   }),
   items: many(orderItems),
   payments: many(payments),
+  statusHistory: many(orderStatusHistory),
+}));
+
+export const orderStatusHistoryRelations = relations(orderStatusHistory, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [orderStatusHistory.restaurantId],
+    references: [restaurants.id],
+  }),
+  order: one(orders, {
+    fields: [orderStatusHistory.orderId],
+    references: [orders.id],
+  }),
+  changedBy: one(users, {
+    fields: [orderStatusHistory.changedByUserId],
+    references: [users.id],
+  }),
 }));
 
 export const customersRelations = relations(customers, ({ one, many }) => ({

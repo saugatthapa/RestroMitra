@@ -12,6 +12,7 @@ import { useActiveBranch } from "@/lib/branch-context";
 import { formatDate, formatBsHint } from "@/lib/nepali-date";
 import { localDateIso } from "@/lib/local-date";
 import { WASTE_REASON_LABELS, type WasteReasonValue } from "@/lib/waste-reasons";
+import { ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
 
 // Chart chrome tokens, matching RevenueTrendChart's validated palette
 // (dataviz skill, palette.md) — used here for the small inline breakdown
@@ -84,6 +85,21 @@ type ReportSummary = {
     orderCount: number;
     averageOrderValueInPaisa: number;
   }[];
+  /** Commercial Launch Phase B.1 — stage-by-stage timing built from the new
+   *  order_status_history table, a more precise sibling of `completion`
+   *  above (which proxies off orders.updatedAt). */
+  orderPerformance: {
+    stageDurations: {
+      fromStatus: OrderStatus;
+      toStatus: OrderStatus;
+      avgMinutes: number | null;
+      transitionCount: number;
+    }[];
+    cancelledCount: number;
+    cancellationRatePercent: number;
+    avgMinutesBeforeCancellation: number | null;
+    cancellationReasons: { reason: string; count: number }[];
+  };
 };
 
 // UTC hour-of-day -> a readable 12-hour label. Matches the same UTC
@@ -519,6 +535,48 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
               <HourlyHeatmap cells={data.hourlyHeatmap} />
             </div>
 
+            {/* Order Performance (Commercial Launch Phase B.1) — how long an
+                order actually spends in each kitchen/service stage, built
+                from the order_status_history table (a more precise sibling
+                of the "Avg. completion time" tile above). */}
+            <div className="mb-6 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+              <h2 className="mb-3 text-sm font-semibold text-neutral-900">Order stage timing</h2>
+              <OrderStageDurations stageDurations={data.orderPerformance.stageDurations} />
+
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <IconStatTile
+                  label="Cancellation rate"
+                  value={`${data.orderPerformance.cancellationRatePercent}%`}
+                  note={`${data.orderPerformance.cancelledCount} orders`}
+                  icon={<StatIcon.CheckCircle />}
+                  color={data.orderPerformance.cancellationRatePercent <= 5 ? "green" : "amber"}
+                />
+                <IconStatTile
+                  label="Avg. time before cancelling"
+                  value={formatMinutes(data.orderPerformance.avgMinutesBeforeCancellation)}
+                  note="Placed → cancelled"
+                  icon={<StatIcon.Clock />}
+                  color="amber"
+                />
+              </div>
+
+              {data.orderPerformance.cancellationReasons.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500">
+                    Cancellation reasons
+                  </p>
+                  <ul className="space-y-1 text-sm text-neutral-700">
+                    {data.orderPerformance.cancellationReasons.map((r) => (
+                      <li key={r.reason} className="flex items-center justify-between">
+                        <span>{r.reason}</span>
+                        <span className="font-medium text-neutral-900">{r.count}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
             {/* Branch comparison — only meaningful once there's more than
                 one branch to compare (every restaurant gets one branch at
                 onboarding, so a single-branch result is the common case
@@ -770,6 +828,42 @@ function BreakdownBar({
           style={{ width: `${Math.max(2, Math.min(100, fraction * 100))}%`, backgroundColor: color }}
         />
       </div>
+    </div>
+  );
+}
+
+/** Commercial Launch Phase B.1 — reuses BreakdownBar (already built for the
+ *  payment/expense breakdowns above) to show average time-in-stage as a
+ *  row of bars scaled against the SLOWEST stage present, so the one worth
+ *  looking at first (usually kitchen prep) visually stands out. A stage
+ *  with zero transitions in range is shown with a "—" rather than omitted
+ *  — its absence from the list would otherwise read as "instant". */
+function OrderStageDurations({
+  stageDurations,
+}: {
+  stageDurations: {
+    fromStatus: OrderStatus;
+    toStatus: OrderStatus;
+    avgMinutes: number | null;
+    transitionCount: number;
+  }[];
+}) {
+  const maxMinutes = Math.max(1, ...stageDurations.map((s) => s.avgMinutes ?? 0));
+  return (
+    <div className="space-y-3">
+      {stageDurations.map((s) => (
+        <BreakdownBar
+          key={`${s.fromStatus}-${s.toStatus}`}
+          label={`${ORDER_STATUS_LABELS[s.fromStatus]} → ${ORDER_STATUS_LABELS[s.toStatus]}`}
+          valueLabel={
+            s.avgMinutes !== null
+              ? `${formatMinutes(s.avgMinutes)} (${s.transitionCount} order${s.transitionCount === 1 ? "" : "s"})`
+              : "—"
+          }
+          fraction={s.avgMinutes !== null ? s.avgMinutes / maxMinutes : 0}
+          color={REVENUE_COLOR}
+        />
+      ))}
     </div>
   );
 }

@@ -16,6 +16,7 @@ import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { syncTableStatusFromOrders } from "@/lib/tables";
 import { publishEvent } from "@/lib/realtime";
+import { recordOrderStatusHistory } from "@/lib/order-status-history";
 
 /**
  * Advances (or cancels) an order's status. This is the one place the order
@@ -130,6 +131,19 @@ export async function PATCH(
         .returning();
 
       if (!row) return null;
+
+      // Commercial Launch Phase B.1 — the durable, structured record of
+      // this transition (see order-status-history.ts's own doc comment for
+      // why this exists alongside the audit log written after this
+      // transaction commits, below).
+      await recordOrderStatusHistory(tx, {
+        restaurantId,
+        orderId,
+        fromStatus: currentStatus,
+        toStatus: targetStatus,
+        changedByUserId: session.user.id,
+        reason: parsed.data.reason ?? null,
+      });
 
       // pending -> confirmed is the single point a Kitchen Order Ticket is
       // cut — the moment front-of-house accepts the order into the kitchen

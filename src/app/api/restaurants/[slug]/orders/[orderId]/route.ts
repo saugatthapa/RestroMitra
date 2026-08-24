@@ -27,6 +27,13 @@ export async function GET(
         payments: {
           orderBy: (p, { asc }) => [asc(p.createdAt)],
         },
+        // Commercial Launch Phase B.1 — the status timeline, oldest first.
+        // See order-status-history.ts's doc comment for why this is a
+        // separate, structured table rather than parsed out of audit_logs.
+        statusHistory: {
+          orderBy: (h, { asc }) => [asc(h.changedAt)],
+          columns: { id: true, fromStatus: true, toStatus: true, reason: true, changedAt: true, changedByUserId: true },
+        },
       },
     });
 

@@ -100,6 +100,19 @@ const sampleSummary: ReportSummary = {
       averageOrderValueInPaisa: 12_500,
     },
   ],
+  orderPerformance: {
+    stageDurations: [
+      { fromStatus: "pending", toStatus: "confirmed", avgMinutes: 2, transitionCount: 40 },
+      { fromStatus: "confirmed", toStatus: "preparing", avgMinutes: 3, transitionCount: 40 },
+      { fromStatus: "preparing", toStatus: "ready", avgMinutes: 12, transitionCount: 39 },
+      { fromStatus: "ready", toStatus: "served", avgMinutes: 4, transitionCount: 38 },
+      { fromStatus: "served", toStatus: "completed", avgMinutes: 15, transitionCount: 38 },
+    ],
+    cancelledCount: 3,
+    cancellationRatePercent: 6.98,
+    avgMinutesBeforeCancellation: 5,
+    cancellationReasons: [{ reason: "Customer changed mind", count: 2 }, { reason: "No reason given", count: 1 }],
+  },
 };
 
 function jsonResponse(body: unknown, ok = true, status = ok ? 200 : 400) {
@@ -178,6 +191,19 @@ describe("buildSystemPrompt", () => {
           averageOrderValueInPaisa: 0,
         },
       ],
+      orderPerformance: {
+        stageDurations: [
+          { fromStatus: "pending", toStatus: "confirmed", avgMinutes: null, transitionCount: 0 },
+          { fromStatus: "confirmed", toStatus: "preparing", avgMinutes: null, transitionCount: 0 },
+          { fromStatus: "preparing", toStatus: "ready", avgMinutes: null, transitionCount: 0 },
+          { fromStatus: "ready", toStatus: "served", avgMinutes: null, transitionCount: 0 },
+          { fromStatus: "served", toStatus: "completed", avgMinutes: null, transitionCount: 0 },
+        ],
+        cancelledCount: 0,
+        cancellationRatePercent: 0,
+        avgMinutesBeforeCancellation: null,
+        cancellationReasons: [],
+      },
     };
     const prompt = buildSystemPrompt("Restaurant", empty);
     expect(prompt).toContain("no completed orders");

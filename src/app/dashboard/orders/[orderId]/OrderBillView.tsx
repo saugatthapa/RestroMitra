@@ -45,6 +45,14 @@ type Payment = {
   note: string | null;
   createdAt: string;
 };
+/** Commercial Launch Phase B.1 — one row per real status transition; see order-status-history.ts's own doc comment for why this is separate from the payment/audit trail above. */
+type StatusHistoryEntry = {
+  id: string;
+  fromStatus: OrderStatus;
+  toStatus: OrderStatus;
+  reason: string | null;
+  changedAt: string;
+};
 type Order = {
   id: string;
   orderNumber: string;
@@ -68,6 +76,7 @@ type Order = {
   table: { id: string; name: string } | null;
   items: OrderItem[];
   payments: Payment[];
+  statusHistory: StatusHistoryEntry[];
 };
 type Billing = {
   totalInPaisa: number;
@@ -426,6 +435,27 @@ export function OrderBillView({
           )}
         </div>
       </div>
+
+      {order.statusHistory.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-5 print:hidden">
+          <p className="mb-3 text-sm font-semibold text-neutral-900">Status history</p>
+          <ul className="space-y-2 text-sm">
+            {order.statusHistory.map((h) => (
+              <li key={h.id} className="flex items-center justify-between border-b border-neutral-100 pb-2 last:border-0 last:pb-0">
+                <div>
+                  <p className="font-medium text-neutral-900">
+                    {ORDER_STATUS_LABELS[h.fromStatus]} → {ORDER_STATUS_LABELS[h.toStatus]}
+                  </p>
+                  {h.reason && <p className="text-xs text-neutral-400">{h.reason}</p>}
+                </div>
+                <span className="text-xs text-neutral-400">
+                  {formatDate(h.changedAt, dateSystem, { withTime: true })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {confirmComplete && billing && (
         <ConfirmModal

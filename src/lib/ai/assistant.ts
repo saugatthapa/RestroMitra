@@ -2,6 +2,7 @@ import "server-only";
 import { formatNPR } from "@/lib/money";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payments";
 import type { getReportSummary } from "@/lib/reports";
+import { ORDER_STATUS_LABELS } from "@/lib/order-status";
 import { getAiConfig, type AiConfig, type AnthropicConfig, type GroqConfig } from "./config";
 
 /**
@@ -44,6 +45,7 @@ export function buildSystemPrompt(restaurantName: string, summary: ReportSummary
     comparison,
     hourlyHeatmap,
     branchComparison,
+    orderPerformance,
     range,
   } = summary;
 
@@ -94,6 +96,18 @@ export function buildSystemPrompt(restaurantName: string, summary: ReportSummary
           .join("\n")
       : "(no expenses recorded in this range)";
 
+  const stageDurationText = orderPerformance.stageDurations
+    .filter((s) => s.transitionCount > 0)
+    .map(
+      (s) =>
+        `${ORDER_STATUS_LABELS[s.fromStatus]} -> ${ORDER_STATUS_LABELS[s.toStatus]}: avg ${s.avgMinutes} min (${s.transitionCount} orders)`,
+    )
+    .join("\n");
+
+  const cancellationReasonText = orderPerformance.cancellationReasons
+    .map((r) => `${r.reason}: ${r.count}`)
+    .join("; ");
+
   return `You are the analytics assistant built into RestroMitra, a restaurant management system, answering questions for the owner/manager of "${restaurantName}" — a restaurant in Nepal.
 
 You may ONLY use the data given below, which covers ${range.from} to ${range.to} (inclusive). Do not invent, estimate, or assume any figure that is not explicitly present here. If the question asks about something outside this data (a different date range, a specific customer, inventory/stock levels, staff details, anything not listed below), say plainly that you don't have that information in this view, rather than guessing.
@@ -123,6 +137,12 @@ Busiest hour by revenue (summed across every day in range): ${formatHourOfDay(pe
 Busiest specific day-and-hour combinations by order count: ${topDayHourCombos.length > 0 ? topDayHourCombos.join("; ") : "(no completed orders in range)"}
 Order completion rate (paid, non-cancelled orders): ${completion.completionRatePercent}%
 Average time from order placed to completed: ${completion.avgCompletionMinutes !== null ? `${completion.avgCompletionMinutes} minutes` : "n/a (no completed orders in range)"}
+
+Order stage durations (average time an order spends in each stage before advancing):
+${stageDurationText || "(no status transitions recorded in this range)"}
+Cancellation rate: ${orderPerformance.cancellationRatePercent}% (${orderPerformance.cancelledCount} orders)
+Average time before cancellation: ${orderPerformance.avgMinutesBeforeCancellation !== null ? `${orderPerformance.avgMinutesBeforeCancellation} minutes` : "n/a"}
+Cancellation reasons: ${cancellationReasonText || "(none recorded)"}
 
 vs. the previous period of the same length (${comparison.previousRange.from} to ${comparison.previousRange.to}):
 Revenue change: ${formatChange(comparison.revenueChangePercent)}
