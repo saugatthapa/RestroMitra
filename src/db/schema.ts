@@ -1042,6 +1042,22 @@ export const stockMovementTypeEnum = pgEnum("stock_movement_type", [
   // them apart). Always a negative quantityDeltaMilliunits — see
   // wasteReasonEnum below and recordStockAdjustmentSchema.
   "waste",
+  // Commercial Launch Phase A.7 — Stock Transfer. Split out from the
+  // generic "adjustment" bucket for the same reporting reason "waste" was:
+  // a branch-to-branch transfer is an expected, deliberate stock move, not
+  // a correction or a loss, and a report lumping it in with "adjustment"
+  // would make shrinkage/count-correction numbers look worse than they
+  // are. "transfer_out" (negative delta, written at dispatch) and
+  // "transfer_in" (positive delta, written at receive) are always a pair
+  // referencing the same stock_transfers row via referenceType/referenceId
+  // — see src/lib/stock-transfer.ts. Between dispatch and receive the
+  // restaurant-wide total (inventoryItems.currentStockMilliunits, which
+  // recordStockMovement keeps in lockstep with every individual movement)
+  // is deliberately short by the in-transit quantity: it isn't sitting on
+  // either branch's shelf right now, so not counting it anywhere is the
+  // physically accurate state, not a bug.
+  "transfer_out",
+  "transfer_in",
 ]);
 
 // P2 — a structured reason taxonomy for "waste" movements, alongside the
@@ -1691,6 +1707,147 @@ export const stockCountItems = pgTable(
     check(
       "stock_count_items_physical_quantity_non_negative",
       sql`${table.physicalQuantityMilliunits} IS NULL OR ${table.physicalQuantityMilliunits} >= 0`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Stock Transfer (Commercial Launch Phase A.7). A `stockTransfers` header
+// row (one per branch-to-branch move) plus `stockTransferItems` line rows.
+// Lifecycle, enforced in src/lib/stock-transfer.ts, never here:
+//   requested -> approved -> dispatched -> received   (terminal)
+//   requested -> approved -> cancelled                (terminal)
+//   requested -> cancelled                             (terminal)
+// Cancel is deliberately ONLY available before dispatch. Once dispatched,
+// the goods have physically left the source branch (dispatch is the moment
+// stock is deducted there — see stockMovementTypeEnum's "transfer_out"
+// comment), so there is nothing left to cleanly "cancel" the way an
+// unsettled purchase can be voided; a dispatched transfer must be received
+// (even a received quantity of 0, if literally nothing arrived — see
+// stockTransferItems.receivedQuantityMilliunits below), and any real-world
+// discrepancy between what left and what arrived is visible on the record
+// itself for the restaurant to investigate, not auto-explained away.
+//
+// Quantities are integer milliunits, costs untouched by this table
+// entirely — a transfer only moves WHICH BRANCH holds existing stock, never
+// its restaurant-wide weighted-average cost (that stays exactly as
+// applyPurchaseCosting already computed it), so there is no cost-snapshot
+// column here. The stock_movements rows dispatch/receive write (type
+// transfer_out/transfer_in) already carry their own frozen cost snapshot
+// via recordStockMovement, same as every other movement type.
+// ---------------------------------------------------------------------------
+
+export const stockTransferStatusEnum = pgEnum("stock_transfer_status", [
+  "requested",
+  "approved",
+  "dispatched",
+  "received",
+  "cancelled",
+]);
+
+export const stockTransfers = pgTable(
+  "stock_transfers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    fromBranchId: uuid("from_branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    toBranchId: uuid("to_branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    status: stockTransferStatusEnum("status").notNull().default("requested"),
+    notes: text("notes"),
+    requestedByUserId: uuid("requested_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    dispatchedByUserId: uuid("dispatched_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
+    receivedByUserId: uuid("received_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    receivedAt: timestamp("received_at", { withTimezone: true }),
+    cancelledByUserId: uuid("cancelled_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    cancellationReason: varchar("cancellation_reason", { length: 300 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("stock_transfers_restaurant_id_idx").on(table.restaurantId),
+    index("stock_transfers_from_branch_id_idx").on(table.fromBranchId),
+    index("stock_transfers_to_branch_id_idx").on(table.toBranchId),
+    index("stock_transfers_status_idx").on(table.status),
+    check("stock_transfers_branches_distinct", sql`${table.fromBranchId} <> ${table.toBranchId}`),
+    // All-or-nothing pairs/triples, same pattern used throughout this
+    // schema (purchases_voided_fields_consistent, stock_counts_*).
+    check(
+      "stock_transfers_approved_fields_consistent",
+      sql`(${table.approvedByUserId} IS NULL AND ${table.approvedAt} IS NULL)
+          OR (${table.approvedByUserId} IS NOT NULL AND ${table.approvedAt} IS NOT NULL)`,
+    ),
+    check(
+      "stock_transfers_dispatched_fields_consistent",
+      sql`(${table.dispatchedByUserId} IS NULL AND ${table.dispatchedAt} IS NULL)
+          OR (${table.dispatchedByUserId} IS NOT NULL AND ${table.dispatchedAt} IS NOT NULL)`,
+    ),
+    check(
+      "stock_transfers_received_fields_consistent",
+      sql`(${table.receivedByUserId} IS NULL AND ${table.receivedAt} IS NULL)
+          OR (${table.receivedByUserId} IS NOT NULL AND ${table.receivedAt} IS NOT NULL)`,
+    ),
+    check(
+      "stock_transfers_cancelled_fields_consistent",
+      sql`(${table.status} <> 'cancelled' AND ${table.cancelledByUserId} IS NULL AND ${table.cancelledAt} IS NULL AND ${table.cancellationReason} IS NULL)
+          OR (${table.status} = 'cancelled' AND ${table.cancelledByUserId} IS NOT NULL AND ${table.cancelledAt} IS NOT NULL AND ${table.cancellationReason} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const stockTransferItems = pgTable(
+  "stock_transfer_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    stockTransferId: uuid("stock_transfer_id")
+      .notNull()
+      .references(() => stockTransfers.id, { onDelete: "cascade" }),
+    inventoryItemId: uuid("inventory_item_id")
+      .notNull()
+      .references(() => inventoryItems.id, { onDelete: "restrict" }),
+    // Requested/dispatched quantity — set at creation, fixed thereafter
+    // (the request itself can still be edited by re-creating it; there is
+    // no in-place quantity edit once other staff may already be acting on
+    // it — same "no partial mutation of a shared, already-visible record"
+    // instinct as purchases having no edit endpoint).
+    quantityMilliunits: integer("quantity_milliunits").notNull(),
+    // Null until received. What actually arrived — may legitimately differ
+    // from quantityMilliunits (breakage/spillage in transit); the stock
+    // movement recorded at receive uses THIS value, not the dispatched
+    // one, so the destination branch's stock reflects reality. The gap
+    // between the two, if any, is left as a visible fact on the record for
+    // the restaurant to investigate/record separately (e.g. as wastage) —
+    // this table does not guess or auto-explain the cause.
+    receivedQuantityMilliunits: integer("received_quantity_milliunits"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("stock_transfer_items_stock_transfer_id_idx").on(table.stockTransferId),
+    index("stock_transfer_items_inventory_item_id_idx").on(table.inventoryItemId),
+    uniqueIndex("stock_transfer_items_transfer_item_unique").on(table.stockTransferId, table.inventoryItemId),
+    check("stock_transfer_items_quantity_positive", sql`${table.quantityMilliunits} > 0`),
+    check(
+      "stock_transfer_items_received_quantity_non_negative",
+      sql`${table.receivedQuantityMilliunits} IS NULL OR ${table.receivedQuantityMilliunits} >= 0`,
     ),
   ],
 );
@@ -2964,6 +3121,53 @@ export const stockCountItemsRelations = relations(stockCountItems, ({ one }) => 
   }),
   inventoryItem: one(inventoryItems, {
     fields: [stockCountItems.inventoryItemId],
+    references: [inventoryItems.id],
+  }),
+}));
+
+export const stockTransfersRelations = relations(stockTransfers, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [stockTransfers.restaurantId],
+    references: [restaurants.id],
+  }),
+  fromBranch: one(branches, {
+    fields: [stockTransfers.fromBranchId],
+    references: [branches.id],
+  }),
+  toBranch: one(branches, {
+    fields: [stockTransfers.toBranchId],
+    references: [branches.id],
+  }),
+  requestedBy: one(users, {
+    fields: [stockTransfers.requestedByUserId],
+    references: [users.id],
+  }),
+  approvedBy: one(users, {
+    fields: [stockTransfers.approvedByUserId],
+    references: [users.id],
+  }),
+  dispatchedBy: one(users, {
+    fields: [stockTransfers.dispatchedByUserId],
+    references: [users.id],
+  }),
+  receivedBy: one(users, {
+    fields: [stockTransfers.receivedByUserId],
+    references: [users.id],
+  }),
+  cancelledBy: one(users, {
+    fields: [stockTransfers.cancelledByUserId],
+    references: [users.id],
+  }),
+  items: many(stockTransferItems),
+}));
+
+export const stockTransferItemsRelations = relations(stockTransferItems, ({ one }) => ({
+  stockTransfer: one(stockTransfers, {
+    fields: [stockTransferItems.stockTransferId],
+    references: [stockTransfers.id],
+  }),
+  inventoryItem: one(inventoryItems, {
+    fields: [stockTransferItems.inventoryItemId],
     references: [inventoryItems.id],
   }),
 }));

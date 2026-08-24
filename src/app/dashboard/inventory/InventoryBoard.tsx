@@ -116,6 +116,33 @@ type StockCountItemRow = {
 
 type StockCountDetail = { stockCount: StockCountSummary; items: StockCountItemRow[] };
 
+type StockTransferStatus = "requested" | "approved" | "dispatched" | "received" | "cancelled";
+
+type StockTransferSummary = {
+  id: string;
+  fromBranchId: string;
+  toBranchId: string;
+  status: StockTransferStatus;
+  notes: string | null;
+  requestedByUserId: string | null;
+  approvedAt: string | null;
+  dispatchedAt: string | null;
+  receivedAt: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  createdAt: string;
+};
+
+type StockTransferItemRow = {
+  id: string;
+  inventoryItemId: string;
+  quantityMilliunits: number;
+  receivedQuantityMilliunits: number | null;
+  note: string | null;
+};
+
+type StockTransferDetail = { transfer: StockTransferSummary; items: StockTransferItemRow[] };
+
 type MenuItemSummary = { id: string; name: string };
 type RecipeLine = {
   id: string;
@@ -130,7 +157,7 @@ function base(slug: string) {
   return `/api/restaurants/${slug}`;
 }
 
-const TABS = ["Items", "Suppliers", "Purchases", "Supplier dues", "Stock counts", "Recipes"] as const;
+const TABS = ["Items", "Suppliers", "Purchases", "Supplier dues", "Stock counts", "Stock transfers", "Recipes"] as const;
 type Tab = (typeof TABS)[number];
 
 export function InventoryBoard({
@@ -171,6 +198,7 @@ export function InventoryBoard({
       )}
       {tab === "Supplier dues" && <SupplierDuesTab slug={slug} canManageAccountBooks={canManageAccountBooks} />}
       {tab === "Stock counts" && <StockCountsTab slug={slug} canApproveStockCount={canApproveStockCount} />}
+      {tab === "Stock transfers" && <StockTransfersTab slug={slug} />}
       {tab === "Recipes" && <RecipesTab slug={slug} canViewProfit={canViewProfit} />}
     </div>
   );
@@ -1732,6 +1760,610 @@ function RecipesTab({ slug, canViewProfit }: { slug: string; canViewProfit: bool
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Stock transfers tab (Commercial Launch Phase A.7 — Stock Transfer)
+// ---------------------------------------------------------------------------
+
+const STOCK_TRANSFER_STATUS_LABELS: Record<StockTransferStatus, string> = {
+  requested: "Requested",
+  approved: "Approved",
+  dispatched: "Dispatched",
+  received: "Received",
+  cancelled: "Cancelled",
+};
+
+function StockTransferStatusBadge({ status }: { status: StockTransferStatus }) {
+  const cls =
+    status === "requested"
+      ? "bg-neutral-100 text-neutral-700"
+      : status === "approved"
+        ? "bg-blue-50 text-blue-700"
+        : status === "dispatched"
+          ? "bg-amber-50 text-amber-700"
+          : status === "received"
+            ? "bg-green-50 text-green-700"
+            : "bg-red-50 text-red-700";
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
+      {STOCK_TRANSFER_STATUS_LABELS[status]}
+    </span>
+  );
+}
+
+function StockTransfersTab({ slug }: { slug: string }) {
+  const { branches } = useBranchSelection();
+  const [transfers, setTransfers] = useState<StockTransferSummary[]>([]);
+  const [statusFilter, setStatusFilter] = useState<"all" | StockTransferStatus>("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [viewingId, setViewingId] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
+
+  async function load() {
+    try {
+      const qs = statusFilter === "all" ? "" : `?status=${statusFilter}`;
+      const res = await apiGet<{ stockTransfers: StockTransferSummary[] }>(`${base(slug)}/stock-transfers${qs}`);
+      setTransfers(res.stockTransfers);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load stock transfers.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, statusFilter]);
+
+  function branchName(branchId: string) {
+    return branches.find((b) => b.id === branchId)?.name ?? "—";
+  }
+
+  if (loading) return <p className="text-sm text-neutral-500">Loading stock transfers…</p>;
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          {(["all", "requested", "approved", "dispatched", "received", "cancelled"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                statusFilter === s ? "bg-orange-600 text-white" : "bg-neutral-100 text-neutral-600"
+              }`}
+            >
+              {s === "all" ? "All" : STOCK_TRANSFER_STATUS_LABELS[s]}
+            </button>
+          ))}
+        </div>
+        {branches.length > 1 && (
+          <button onClick={() => setShowCreate((v) => !v)} className="btn-primary">
+            {showCreate ? "Cancel" : "+ New transfer"}
+          </button>
+        )}
+      </div>
+
+      {branches.length <= 1 && <p className="text-sm text-neutral-500">Stock transfers need at least two branches.</p>}
+
+      {showCreate && (
+        <CreateStockTransferForm
+          slug={slug}
+          onCreated={(transfer) => {
+            setShowCreate(false);
+            load();
+            setViewingId(transfer.id);
+          }}
+        />
+      )}
+
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+            <tr>
+              <th className="px-3 py-2">From</th>
+              <th className="px-3 py-2">To</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">Requested</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {transfers.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
+                  No stock transfers in this view.
+                </td>
+              </tr>
+            )}
+            {transfers.map((t) => (
+              <tr key={t.id} className="border-t border-neutral-100">
+                <td className="px-3 py-2 font-medium text-neutral-900">{branchName(t.fromBranchId)}</td>
+                <td className="px-3 py-2 font-medium text-neutral-900">{branchName(t.toBranchId)}</td>
+                <td className="px-3 py-2">
+                  <StockTransferStatusBadge status={t.status} />
+                </td>
+                <td className="px-3 py-2 text-neutral-500">{formatDate(t.createdAt, dateSystem, { withTime: true })}</td>
+                <td className="px-3 py-2 text-right">
+                  <button onClick={() => setViewingId(t.id)} className="text-xs font-medium text-orange-700 hover:underline">
+                    View
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {viewingId && (
+        <StockTransferDetailModal
+          slug={slug}
+          transferId={viewingId}
+          onClose={() => setViewingId(null)}
+          onChanged={load}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateStockTransferForm({
+  slug,
+  onCreated,
+}: {
+  slug: string;
+  onCreated: (transfer: StockTransferSummary) => void;
+}) {
+  const { branches } = useBranchSelection();
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [fromBranchId, setFromBranchId] = useState(branches[0]?.id ?? "");
+  const [toBranchId, setToBranchId] = useState(branches[1]?.id ?? branches[0]?.id ?? "");
+  const [notes, setNotes] = useState("");
+  const [lines, setLines] = useState<{ inventoryItemId: string; quantity: string }[]>([
+    { inventoryItemId: "", quantity: "" },
+  ]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGet<{ inventoryItems: InventoryItem[] }>(`${base(slug)}/inventory-items`)
+      .then((res) => setItems(res.inventoryItems))
+      .catch(() => {});
+  }, [slug]);
+
+  function updateLine(index: number, patch: Partial<{ inventoryItemId: string; quantity: string }>) {
+    setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+  }
+  function addLine() {
+    setLines((prev) => [...prev, { inventoryItemId: "", quantity: "" }]);
+  }
+  function removeLine(index: number) {
+    setLines((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!fromBranchId || !toBranchId) {
+      setError("Select both a source and destination branch.");
+      return;
+    }
+    if (fromBranchId === toBranchId) {
+      setError("The source and destination branch must be different.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await apiPost<{ transfer: StockTransferSummary }>(`${base(slug)}/stock-transfers`, {
+        fromBranchId,
+        toBranchId,
+        notes,
+        items: lines
+          .filter((l) => l.inventoryItemId && l.quantity)
+          .map((l) => ({ inventoryItemId: l.inventoryItemId, quantity: Number(l.quantity) })),
+      });
+      onCreated(res.transfer);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not create this transfer.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">From branch</span>
+          <select required value={fromBranchId} onChange={(e) => setFromBranchId(e.target.value)} className="input">
+            <option value="" disabled>
+              Select a branch
+            </option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">To branch</span>
+          <select required value={toBranchId} onChange={(e) => setToBranchId(e.target.value)} className="input">
+            <option value="" disabled>
+              Select a branch
+            </option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm sm:col-span-2">
+          <span className="mb-1 block text-neutral-600">Notes (optional)</span>
+          <input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="input"
+            placeholder="e.g. Branch B ran low on rice"
+          />
+        </label>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {lines.map((line, i) => (
+          <div key={i} className="grid grid-cols-[1fr_100px_auto] items-end gap-2">
+            <label className="text-sm">
+              <span className="mb-1 block text-neutral-600">Item</span>
+              <select
+                required
+                value={line.inventoryItemId}
+                onChange={(e) => updateLine(i, { inventoryItemId: e.target.value })}
+                className="input"
+              >
+                <option value="" disabled>
+                  Select an item
+                </option>
+                {items.map((it) => (
+                  <option key={it.id} value={it.id}>
+                    {it.name} ({it.unit})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block text-neutral-600">Qty</span>
+              <input
+                required
+                type="number"
+                min="0.001"
+                step="0.001"
+                value={line.quantity}
+                onChange={(e) => updateLine(i, { quantity: e.target.value })}
+                className="input"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => removeLine(i)}
+              disabled={lines.length === 1}
+              className="btn-secondary disabled:opacity-40"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+        <button type="button" onClick={addLine} className="text-xs font-medium text-orange-700 hover:underline">
+          + Add another item
+        </button>
+      </div>
+
+      <button disabled={saving} className="btn-primary mt-3">
+        {saving ? "Requesting…" : "Request transfer"}
+      </button>
+    </form>
+  );
+}
+
+function StockTransferDetailModal({
+  slug,
+  transferId,
+  onClose,
+  onChanged,
+}: {
+  slug: string;
+  transferId: string;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const { branches } = useBranchSelection();
+  const dateSystem = useDateSystem();
+  const [detail, setDetail] = useState<StockTransferDetail | null>(null);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [receiveDrafts, setReceiveDrafts] = useState<Record<string, { quantity: string; note: string }>>({});
+  const [approving, setApproving] = useState(false);
+  const [dispatching, setDispatching] = useState(false);
+  const [receiving, setReceiving] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+
+  async function load() {
+    try {
+      const [detailRes, itemsRes] = await Promise.all([
+        apiGet<StockTransferDetail>(`${base(slug)}/stock-transfers/${transferId}`),
+        apiGet<{ inventoryItems: InventoryItem[] }>(`${base(slug)}/inventory-items`),
+      ]);
+      setDetail(detailRes);
+      setItems(itemsRes.inventoryItems);
+      const drafts: Record<string, { quantity: string; note: string }> = {};
+      for (const line of detailRes.items) {
+        drafts[line.id] = { quantity: String(milliunitsToUnits(line.quantityMilliunits)), note: "" };
+      }
+      setReceiveDrafts(drafts);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load this transfer.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transferId]);
+
+  function itemInfo(inventoryItemId: string) {
+    return items.find((i) => i.id === inventoryItemId);
+  }
+
+  async function doApprove() {
+    setApproving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/stock-transfers/${transferId}/approve`, {});
+      await load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not approve this transfer.");
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  async function doDispatch() {
+    setDispatching(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/stock-transfers/${transferId}/dispatch`, {});
+      await load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not dispatch this transfer.");
+    } finally {
+      setDispatching(false);
+    }
+  }
+
+  async function doReceive() {
+    setReceiving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/stock-transfers/${transferId}/receive`, {
+        items: Object.entries(receiveDrafts).map(([stockTransferItemId, draft]) => ({
+          stockTransferItemId,
+          receivedQuantity: draft.quantity === "" ? 0 : Number(draft.quantity),
+          note: draft.note,
+        })),
+      });
+      await load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not receive this transfer.");
+    } finally {
+      setReceiving(false);
+    }
+  }
+
+  async function doCancel(e: React.FormEvent) {
+    e.preventDefault();
+    setCancelling(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/stock-transfers/${transferId}/cancel`, { reason: cancelReason });
+      setShowCancel(false);
+      await load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not cancel this transfer.");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
+        {loading && <p className="text-sm text-neutral-500">Loading…</p>}
+        {!loading && detail && (
+          <>
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-neutral-900">
+                  {branches.find((b) => b.id === detail.transfer.fromBranchId)?.name ?? "Branch"} →{" "}
+                  {branches.find((b) => b.id === detail.transfer.toBranchId)?.name ?? "Branch"}
+                </h2>
+                <p className="mt-1 text-xs text-neutral-500">
+                  Requested {formatDate(detail.transfer.createdAt, dateSystem, { withTime: true })}
+                  {detail.transfer.notes ? ` — ${detail.transfer.notes}` : ""}
+                </p>
+              </div>
+              <StockTransferStatusBadge status={detail.transfer.status} />
+            </div>
+
+            {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+            {detail.transfer.status === "cancelled" && (
+              <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                Cancelled — {detail.transfer.cancellationReason}.
+              </p>
+            )}
+            {detail.transfer.status === "received" && (
+              <p className="mb-3 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-800">
+                Received
+                {detail.transfer.receivedAt ? ` ${formatDate(detail.transfer.receivedAt, dateSystem, { withTime: true })}` : ""}
+                {" "}
+                — stock has moved to the destination branch.
+              </p>
+            )}
+            {detail.transfer.status === "dispatched" && (
+              <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Dispatched — stock has left the source branch and is in transit. Confirm what actually arrives
+                below.
+              </p>
+            )}
+
+            <div className="overflow-x-auto rounded-xl border border-neutral-200">
+              <table className="w-full text-sm">
+                <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+                  <tr>
+                    <th className="px-3 py-2">Item</th>
+                    <th className="px-3 py-2">Requested</th>
+                    <th className="px-3 py-2">{detail.transfer.status === "dispatched" ? "Received" : "Arrived"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.items.map((row) => {
+                    const info = itemInfo(row.inventoryItemId);
+                    const unit = info?.unit ?? "piece";
+                    return (
+                      <tr key={row.id} className="border-t border-neutral-100 align-top">
+                        <td className="px-3 py-2 font-medium text-neutral-900">{info?.name ?? "Unknown item"}</td>
+                        <td className="px-3 py-2 text-neutral-500">{formatQuantity(row.quantityMilliunits, unit)}</td>
+                        <td className="px-3 py-2">
+                          {detail.transfer.status === "dispatched" ? (
+                            <div className="space-y-1">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                value={receiveDrafts[row.id]?.quantity ?? ""}
+                                onChange={(e) =>
+                                  setReceiveDrafts((prev) => ({
+                                    ...prev,
+                                    [row.id]: { ...prev[row.id], quantity: e.target.value },
+                                  }))
+                                }
+                                className="input w-24"
+                              />
+                              <input
+                                value={receiveDrafts[row.id]?.note ?? ""}
+                                onChange={(e) =>
+                                  setReceiveDrafts((prev) => ({
+                                    ...prev,
+                                    [row.id]: { ...prev[row.id], note: e.target.value },
+                                  }))
+                                }
+                                placeholder="Note if different (optional)"
+                                className="input w-40 text-xs"
+                              />
+                            </div>
+                          ) : row.receivedQuantityMilliunits === null ? (
+                            "—"
+                          ) : (
+                            <span
+                              className={
+                                row.receivedQuantityMilliunits < row.quantityMilliunits
+                                  ? "text-red-700"
+                                  : "text-neutral-700"
+                              }
+                            >
+                              {formatQuantity(row.receivedQuantityMilliunits, unit)}
+                            </span>
+                          )}
+                          {row.note && detail.transfer.status !== "dispatched" && (
+                            <p className="mt-0.5 text-xs text-neutral-400">{row.note}</p>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={onClose} className="btn-secondary">
+                Close
+              </button>
+              {(detail.transfer.status === "requested" || detail.transfer.status === "approved") && !showCancel && (
+                <button
+                  type="button"
+                  onClick={() => setShowCancel(true)}
+                  className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+                >
+                  Cancel transfer
+                </button>
+              )}
+              {detail.transfer.status === "requested" && (
+                <button type="button" disabled={approving} onClick={doApprove} className="btn-primary disabled:opacity-50">
+                  {approving ? "Approving…" : "Approve"}
+                </button>
+              )}
+              {detail.transfer.status === "approved" && (
+                <button type="button" disabled={dispatching} onClick={doDispatch} className="btn-primary disabled:opacity-50">
+                  {dispatching ? "Dispatching…" : "Dispatch"}
+                </button>
+              )}
+              {detail.transfer.status === "dispatched" && (
+                <button type="button" disabled={receiving} onClick={doReceive} className="btn-primary disabled:opacity-50">
+                  {receiving ? "Receiving…" : "Confirm receive"}
+                </button>
+              )}
+            </div>
+
+            {showCancel && (
+              <form onSubmit={doCancel} className="mt-3 space-y-2 rounded-xl border border-red-200 bg-red-50 p-3">
+                <label className="block text-sm">
+                  <span className="mb-1 block text-neutral-700">Reason for cancelling</span>
+                  <input
+                    required
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    className="input"
+                    placeholder="e.g. No longer needed"
+                  />
+                </label>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setShowCancel(false)} className="btn-secondary">
+                    Back
+                  </button>
+                  <button
+                    disabled={cancelling}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                  >
+                    {cancelling ? "Cancelling…" : "Confirm cancel"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

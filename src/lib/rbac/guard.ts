@@ -335,3 +335,36 @@ export async function requireBranchAccess(
     throw new AuthError("You do not have access to this branch.", 403);
   }
 }
+
+/**
+ * Same idea as requireBranchAccess, for an action that legitimately
+ * concerns TWO branches (Commercial Launch Phase A.7 — Stock Transfer:
+ * requesting/approving/cancelling a transfer is something either the
+ * sending or the receiving branch's staff should be able to do). Passes if
+ * the caller has access to at least one of the two branches; an
+ * unrestricted grant (branchId === null) still needs both branches to
+ * actually belong to this restaurant, same defense-in-depth as
+ * requireBranchAccess itself. Throws the same 403/404 shape as
+ * requireBranchAccess when neither branch is reachable.
+ */
+export async function requireEitherBranchAccess(
+  userId: string,
+  restaurantId: string,
+  branchIdA: string,
+  branchIdB: string,
+  knownGrant?: { role: string; branchId: string | null },
+): Promise<void> {
+  const grant = knownGrant ?? (await requireRestaurantAccess(userId, restaurantId));
+  if (grant.branchId === null) {
+    // Unrestricted — still confirm both branches are real, belonging to
+    // this restaurant (requireBranchAccess's own 404 check).
+    await requireBranchAccess(userId, restaurantId, branchIdA, grant);
+    await requireBranchAccess(userId, restaurantId, branchIdB, grant);
+    return;
+  }
+  if (grant.branchId === branchIdA || grant.branchId === branchIdB) {
+    await requireBranchAccess(userId, restaurantId, grant.branchId, grant);
+    return;
+  }
+  throw new AuthError("You do not have access to either branch for this transfer.", 403);
+}

@@ -18,7 +18,13 @@ export class InventoryError extends HttpError {
   }
 }
 
-export type StockMovementType = "purchase" | "sale_deduction" | "adjustment" | "waste";
+export type StockMovementType =
+  | "purchase"
+  | "sale_deduction"
+  | "adjustment"
+  | "waste"
+  | "transfer_out"
+  | "transfer_in";
 export type WasteReason = WasteReasonValue;
 
 /**

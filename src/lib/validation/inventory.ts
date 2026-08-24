@@ -143,6 +143,47 @@ export const rejectStockCountSchema = z.object({
   reason: z.string().trim().min(1, "A reason is required.").max(300),
 });
 
+// Stock Transfer (Commercial Launch Phase A.7).
+export const createStockTransferSchema = z
+  .object({
+    fromBranchId: z.string().uuid("Select the source branch."),
+    toBranchId: z.string().uuid("Select the destination branch."),
+    notes: z.string().trim().max(1000).optional().or(z.literal("")),
+    items: z
+      .array(
+        z.object({
+          inventoryItemId: z.string().uuid(),
+          quantity: quantityAmount,
+        }),
+      )
+      .min(1, "Add at least one item to transfer.")
+      .max(100),
+  })
+  .refine((data) => data.fromBranchId !== data.toBranchId, {
+    message: "The source and destination branch must be different.",
+    path: ["toBranchId"],
+  });
+
+export const receiveStockTransferSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        stockTransferItemId: z.string().uuid(),
+        // Deliberately reuses physicalQuantityAmount's "zero is valid"
+        // semantics, not quantityAmount's positive-only one — nothing
+        // arriving at all is a legitimate (if bad) outcome to record.
+        receivedQuantity: physicalQuantityAmount,
+        note: z.string().trim().max(300).optional().or(z.literal("")),
+      }),
+    )
+    .max(100)
+    .optional(),
+});
+
+export const cancelStockTransferSchema = z.object({
+  reason: z.string().trim().min(1, "A reason is required.").max(300),
+});
+
 export const replaceRecipeSchema = z.object({
   items: z
     .array(
