@@ -1542,6 +1542,160 @@ export const recipeItems = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Physical Stock Count (Commercial Launch Phase A.6). A `stockCounts` header
+// row (one per counting session, scoped to one branch) plus `stockCountItems`
+// line rows (one per item counted). Workflow, enforced in
+// src/lib/stock-count.ts, never here:
+//   open -> (submit) -> either
+//     - applied      immediately, if every item's variance is within the
+//                     documented "large variance" threshold (auto-apply,
+//                     MANAGE_INVENTORY is sufficient)
+//     - pending_approval, if ANY item's variance exceeds the threshold —
+//                     requires APPROVE_STOCK_COUNT to move on to:
+//         -> applied   (approve: variances are written to the stock ledger)
+//         -> rejected  (reject: count is kept for the audit trail, but NO
+//                       stock movement is ever written)
+// "applied" is terminal either way — once variances are written via
+// recordStockMovement() they follow that ledger's own append-only-correction
+// model (a mistaken applied count needs a fresh manual adjustment/count to
+// correct, same as every other stock_movements row; there is deliberately no
+// "un-apply").
+//
+// systemQuantityMilliunits/unitCostInPaisaSnapshot on each line are captured
+// at the moment the item is ADDED to the count (from branch_inventory_levels
+// and inventory_items.costPerUnitInPaisa respectively) — a snapshot, not a
+// live join, for the exact same reason orderItems.recipeCostInPaisa and
+// stock_movements.unitCostInPaisaSnapshot are snapshots: so a later purchase
+// changing the item's cost, or a later sale changing its stock, never
+// silently rewrites what this count actually found. Known, accepted
+// limitation: a sale rung up WHILE this count is still open (between a line
+// being added and the count being submitted) is not reflected in that line's
+// systemQuantityMilliunits snapshot, which can produce a variance that isn't
+// really theft/spoilage/error — just a normal sale mid-count. Real
+// restaurants handle this operationally (count during a lull, or pause
+// sales for the branch/item being counted); reconciling live sales against
+// an in-progress count is out of scope for this phase.
+//
+// Variance (physical - system) and its paisa value are DERIVED in
+// application code from the two snapshot columns, never stored — same
+// "compute from source columns, don't duplicate" convention
+// getSupplierDueReport uses for outstandingInPaisa.
+// ---------------------------------------------------------------------------
+
+export const stockCountStatusEnum = pgEnum("stock_count_status", [
+  "open",
+  "pending_approval",
+  "applied",
+  "rejected",
+]);
+
+export const stockCounts = pgTable(
+  "stock_counts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    status: stockCountStatusEnum("status").notNull().default("open"),
+    notes: text("notes"),
+    countedByUserId: uuid("counted_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    // Denormalized from the line items at submit time, so listing/filtering
+    // counts (e.g. "show me everything awaiting my approval") never needs a
+    // join/aggregate over stock_count_items just to know this.
+    hasLargeVariance: boolean("has_large_variance").notNull().default(false),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    rejectedByUserId: uuid("rejected_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+    rejectionReason: varchar("rejection_reason", { length: 300 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("stock_counts_restaurant_id_idx").on(table.restaurantId),
+    index("stock_counts_branch_id_idx").on(table.branchId),
+    index("stock_counts_status_idx").on(table.status),
+    // All-or-nothing pairs, same pattern as purchases_voided_fields_consistent.
+    check(
+      "stock_counts_approved_fields_consistent",
+      sql`(${table.approvedByUserId} IS NULL AND ${table.approvedAt} IS NULL)
+          OR (${table.approvedByUserId} IS NOT NULL AND ${table.approvedAt} IS NOT NULL)`,
+    ),
+    check(
+      "stock_counts_rejected_fields_consistent",
+      sql`(${table.status} <> 'rejected' AND ${table.rejectedByUserId} IS NULL AND ${table.rejectedAt} IS NULL AND ${table.rejectionReason} IS NULL)
+          OR (${table.status} = 'rejected' AND ${table.rejectedByUserId} IS NOT NULL AND ${table.rejectedAt} IS NOT NULL AND ${table.rejectionReason} IS NOT NULL)`,
+    ),
+    // A count still being entered has no submittedAt; every other status
+    // implies it was submitted at some point.
+    check(
+      "stock_counts_submitted_fields_consistent",
+      sql`(${table.status} = 'open' AND ${table.submittedAt} IS NULL)
+          OR (${table.status} <> 'open' AND ${table.submittedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const stockCountItems = pgTable(
+  "stock_count_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    stockCountId: uuid("stock_count_id")
+      .notNull()
+      .references(() => stockCounts.id, { onDelete: "cascade" }),
+    inventoryItemId: uuid("inventory_item_id")
+      .notNull()
+      .references(() => inventoryItems.id, { onDelete: "restrict" }),
+    // Snapshot of branch_inventory_levels.currentStockMilliunits (0 if no
+    // row existed yet) at the moment this line was added — see this
+    // section's header comment.
+    systemQuantityMilliunits: integer("system_quantity_milliunits").notNull(),
+    // Null until staff enters what they actually counted.
+    physicalQuantityMilliunits: integer("physical_quantity_milliunits"),
+    // Snapshot of inventory_items.cost_per_unit_in_paisa at the moment this
+    // line was added — used to preview/report the variance's paisa value.
+    // The stock movement eventually written by an applied count freezes its
+    // OWN cost snapshot at apply time via recordStockMovement, which may
+    // differ slightly if the item's cost moved between count and approval;
+    // that's expected, same "frozen at the moment it happened" philosophy
+    // as every other snapshot column in this schema.
+    unitCostInPaisaSnapshot: integer("unit_cost_in_paisa_snapshot").notNull(),
+    note: text("note"),
+    countedAt: timestamp("counted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("stock_count_items_stock_count_id_idx").on(table.stockCountId),
+    index("stock_count_items_inventory_item_id_idx").on(table.inventoryItemId),
+    uniqueIndex("stock_count_items_count_item_unique").on(table.stockCountId, table.inventoryItemId),
+    // systemQuantityMilliunits deliberately has NO non-negative check — a
+    // branch's cached stock is allowed to go negative by design (see
+    // branch_inventory_levels' own section comment / PHASE_7_NOTES.md), and
+    // a count snapshot must faithfully record whatever that value actually
+    // was, negative or not.
+    check("stock_count_items_unit_cost_non_negative", sql`${table.unitCostInPaisaSnapshot} >= 0`),
+    check(
+      "stock_count_items_physical_quantity_non_negative",
+      sql`${table.physicalQuantityMilliunits} IS NULL OR ${table.physicalQuantityMilliunits} >= 0`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Phase 8 — Customers (CRM) + loyalty. A customer is keyed by phone number
 // per restaurant (not globally — the same phone can be a customer at two
 // different unrelated restaurants, unlike `users.phone` which is a login
@@ -2775,6 +2929,41 @@ export const recipeItemsRelations = relations(recipeItems, ({ one }) => ({
   }),
   inventoryItem: one(inventoryItems, {
     fields: [recipeItems.inventoryItemId],
+    references: [inventoryItems.id],
+  }),
+}));
+
+export const stockCountsRelations = relations(stockCounts, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [stockCounts.restaurantId],
+    references: [restaurants.id],
+  }),
+  branch: one(branches, {
+    fields: [stockCounts.branchId],
+    references: [branches.id],
+  }),
+  countedBy: one(users, {
+    fields: [stockCounts.countedByUserId],
+    references: [users.id],
+  }),
+  approvedBy: one(users, {
+    fields: [stockCounts.approvedByUserId],
+    references: [users.id],
+  }),
+  rejectedBy: one(users, {
+    fields: [stockCounts.rejectedByUserId],
+    references: [users.id],
+  }),
+  items: many(stockCountItems),
+}));
+
+export const stockCountItemsRelations = relations(stockCountItems, ({ one }) => ({
+  stockCount: one(stockCounts, {
+    fields: [stockCountItems.stockCountId],
+    references: [stockCounts.id],
+  }),
+  inventoryItem: one(inventoryItems, {
+    fields: [stockCountItems.inventoryItemId],
     references: [inventoryItems.id],
   }),
 }));

@@ -27,6 +27,17 @@ export const PERMISSIONS = {
   MANAGE_INVENTORY: "manage_inventory",
   VIEW_PROFIT: "view_profit",
 
+  // Physical Stock Count (Commercial Launch Phase A.6) — MANAGE_INVENTORY
+  // already covers creating a count and entering physical quantities (the
+  // day-to-day counting work an inventory_manager does). Approving a count
+  // whose variance exceeds the "large variance" threshold is deliberately
+  // a SEPARATE, higher-trust permission: the person who physically counted
+  // the stock (and could be the one who took it) should not also be the
+  // one who signs off on writing the resulting shrinkage/overage into the
+  // books unchecked — a standard segregation-of-duties control. Small
+  // variances auto-apply under MANAGE_INVENTORY alone; see stock-count.ts.
+  APPROVE_STOCK_COUNT: "approve_stock_count",
+
   // Staff / org
   MANAGE_STAFF: "manage_staff",
   MANAGE_RESTAURANT_SETTINGS: "manage_restaurant_settings",
@@ -105,6 +116,8 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.EDIT_PRICE]: "Change menu item or variant prices",
   [PERMISSIONS.MANAGE_INVENTORY]: "Manage inventory items, stock movements, recipes",
   [PERMISSIONS.VIEW_PROFIT]: "View cost/margin and profit data",
+  [PERMISSIONS.APPROVE_STOCK_COUNT]:
+    "Approve or reject a physical stock count whose variance exceeds the auto-apply threshold",
   [PERMISSIONS.MANAGE_STAFF]: "Invite, edit, deactivate staff and assign roles",
   [PERMISSIONS.MANAGE_RESTAURANT_SETTINGS]: "Edit restaurant profile and settings",
   [PERMISSIONS.MANAGE_BRANCHES]: "Create and manage branches",
@@ -164,6 +177,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     PERMISSIONS.EDIT_MENU,
     PERMISSIONS.MANAGE_INVENTORY,
     PERMISSIONS.VIEW_PROFIT,
+    // A manager didn't do the physical count themselves (inventory_manager
+    // or a staff member did), so they're the right level to sign off on a
+    // large variance — same segregation-of-duties reasoning as
+    // CORRECT_CASH_REGISTER below.
+    PERMISSIONS.APPROVE_STOCK_COUNT,
     PERMISSIONS.MANAGE_STAFF,
     PERMISSIONS.MANAGE_TABLES,
     PERMISSIONS.MANAGE_RESERVATIONS,
@@ -220,6 +238,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     // Phase 21 — the role most likely submitting supply/equipment expense
     // requests; same request-only trust level as cashier above.
     PERMISSIONS.CREATE_EXPENSE_REQUEST,
+    // Deliberately NOT APPROVE_STOCK_COUNT — this is the role that most
+    // often performs the physical count itself, so letting it also
+    // approve its own large-variance write-offs would defeat the
+    // segregation-of-duties point of the permission (see its own comment
+    // above manager's grant).
   ],
   // Phase 21 — a role trusted with money/reports but not floor
   // operations: financial management, expense approval + payment,
@@ -243,6 +266,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     PERMISSIONS.MANAGE_CASH_REGISTER,
     PERMISSIONS.CORRECT_CASH_REGISTER,
     PERMISSIONS.MANAGE_DAILY_CLOSING,
+    // A financial-oversight role, not the one doing the physical count —
+    // same segregation-of-duties reasoning as manager's grant above.
+    PERMISSIONS.APPROVE_STOCK_COUNT,
   ],
 };
 

@@ -113,6 +113,36 @@ export const voidPurchaseSchema = z.object({
   reason: z.string().trim().min(1, "A reason is required.").max(300),
 });
 
+// Physical Stock Count (Commercial Launch Phase A.6). Physical quantity
+// deliberately uses `nonnegative`, not the `quantityAmount` helper above —
+// a real physical count can and should be able to record "found zero" (the
+// shelf was empty), which `quantityAmount`'s `.positive()` would reject.
+const physicalQuantityAmount = z
+  .number()
+  .nonnegative("A physical count can't be negative.")
+  .max(1_000_000, "Quantity is unreasonably large.")
+  .transform((units) => unitsToMilliunits(units));
+
+export const createStockCountSchema = z.object({
+  branchId: z.string().uuid("Select which branch this count is for."),
+  notes: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
+export const addStockCountItemSchema = z.object({
+  inventoryItemId: z.string().uuid(),
+  physicalQuantity: physicalQuantityAmount.nullable().optional(),
+  note: z.string().trim().max(300).optional().or(z.literal("")),
+});
+
+export const setStockCountItemQuantitySchema = z.object({
+  physicalQuantity: physicalQuantityAmount,
+  note: z.string().trim().max(300).optional().or(z.literal("")),
+});
+
+export const rejectStockCountSchema = z.object({
+  reason: z.string().trim().min(1, "A reason is required.").max(300),
+});
+
 export const replaceRecipeSchema = z.object({
   items: z
     .array(

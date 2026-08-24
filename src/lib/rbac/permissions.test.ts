@@ -50,4 +50,13 @@ describe("permission catalog", () => {
     expect(cashierPerms).not.toContain(PERMISSIONS.CANCEL_ORDER);
     expect(cashierPerms).not.toContain(PERMISSIONS.REFUND_ORDER);
   });
+
+  it("APPROVE_STOCK_COUNT is withheld from inventory_manager (segregation of duties: the role that usually performs the physical count shouldn't also approve its own large variances)", () => {
+    expect(DEFAULT_ROLE_PERMISSIONS.inventory_manager).toContain(PERMISSIONS.MANAGE_INVENTORY);
+    expect(DEFAULT_ROLE_PERMISSIONS.inventory_manager).not.toContain(PERMISSIONS.APPROVE_STOCK_COUNT);
+    expect(DEFAULT_ROLE_PERMISSIONS.manager).toContain(PERMISSIONS.APPROVE_STOCK_COUNT);
+    expect(DEFAULT_ROLE_PERMISSIONS.accountant).toContain(PERMISSIONS.APPROVE_STOCK_COUNT);
+    expect(DEFAULT_ROLE_PERMISSIONS.cashier).not.toContain(PERMISSIONS.APPROVE_STOCK_COUNT);
+    expect(DEFAULT_ROLE_PERMISSIONS.waiter).not.toContain(PERMISSIONS.APPROVE_STOCK_COUNT);
+  });
 });

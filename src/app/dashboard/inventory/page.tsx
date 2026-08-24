@@ -40,6 +40,7 @@ export default async function InventoryPage() {
         slug={active.slug}
         canViewProfit={roleHasPermission(active.role, PERMISSIONS.VIEW_PROFIT)}
         canManageAccountBooks={roleHasPermission(active.role, PERMISSIONS.MANAGE_ACCOUNT_BOOKS)}
+        canApproveStockCount={roleHasPermission(active.role, PERMISSIONS.APPROVE_STOCK_COUNT)}
       />
     </div>
   );

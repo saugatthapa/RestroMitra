@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiPost, apiPut, apiPatch, ApiError } from "@/lib/api-client";
 import { formatNPR } from "@/lib/money";
-import { formatQuantity } from "@/lib/quantity";
+import { formatQuantity, milliunitsToUnits } from "@/lib/quantity";
 import { INVENTORY_UNITS, INVENTORY_UNIT_LABELS, type InventoryUnit } from "@/lib/inventory-units";
 import { useDateSystem } from "@/lib/date-system";
 import { formatDate } from "@/lib/nepali-date";
@@ -83,6 +83,39 @@ type SupplierDueReport = {
   rows: SupplierDueRow[];
 };
 
+type StockCountStatus = "open" | "pending_approval" | "applied" | "rejected";
+
+type StockCountSummary = {
+  id: string;
+  branchId: string;
+  status: StockCountStatus;
+  notes: string | null;
+  hasLargeVariance: boolean;
+  countedByUserId: string | null;
+  submittedAt: string | null;
+  appliedAt: string | null;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  rejectedByUserId: string | null;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
+  createdAt: string;
+};
+
+type StockCountItemRow = {
+  id: string;
+  inventoryItemId: string;
+  systemQuantityMilliunits: number;
+  physicalQuantityMilliunits: number | null;
+  unitCostInPaisaSnapshot: number;
+  note: string | null;
+  varianceMilliunits: number | null;
+  varianceValueInPaisa: number | null;
+  isLarge: boolean;
+};
+
+type StockCountDetail = { stockCount: StockCountSummary; items: StockCountItemRow[] };
+
 type MenuItemSummary = { id: string; name: string };
 type RecipeLine = {
   id: string;
@@ -97,17 +130,19 @@ function base(slug: string) {
   return `/api/restaurants/${slug}`;
 }
 
-const TABS = ["Items", "Suppliers", "Purchases", "Supplier dues", "Recipes"] as const;
+const TABS = ["Items", "Suppliers", "Purchases", "Supplier dues", "Stock counts", "Recipes"] as const;
 type Tab = (typeof TABS)[number];
 
 export function InventoryBoard({
   slug,
   canViewProfit,
   canManageAccountBooks,
+  canApproveStockCount,
 }: {
   slug: string;
   canViewProfit: boolean;
   canManageAccountBooks: boolean;
+  canApproveStockCount: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("Items");
 
@@ -135,6 +170,7 @@ export function InventoryBoard({
         <PurchasesTab slug={slug} canViewProfit={canViewProfit} canManageAccountBooks={canManageAccountBooks} />
       )}
       {tab === "Supplier dues" && <SupplierDuesTab slug={slug} canManageAccountBooks={canManageAccountBooks} />}
+      {tab === "Stock counts" && <StockCountsTab slug={slug} canApproveStockCount={canApproveStockCount} />}
       {tab === "Recipes" && <RecipesTab slug={slug} canViewProfit={canViewProfit} />}
     </div>
   );
@@ -1696,6 +1732,635 @@ function RecipesTab({ slug, canViewProfit }: { slug: string; canViewProfit: bool
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Stock counts tab (Commercial Launch Phase A.6 — Physical Stock Count)
+// ---------------------------------------------------------------------------
+
+const STOCK_COUNT_STATUS_LABELS: Record<StockCountStatus, string> = {
+  open: "Open",
+  pending_approval: "Pending approval",
+  applied: "Applied",
+  rejected: "Rejected",
+};
+
+function StockCountStatusBadge({ status }: { status: StockCountStatus }) {
+  const cls =
+    status === "open"
+      ? "bg-neutral-100 text-neutral-700"
+      : status === "pending_approval"
+        ? "bg-amber-50 text-amber-700"
+        : status === "applied"
+          ? "bg-green-50 text-green-700"
+          : "bg-red-50 text-red-700";
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
+      {STOCK_COUNT_STATUS_LABELS[status]}
+    </span>
+  );
+}
+
+function StockCountsTab({ slug, canApproveStockCount }: { slug: string; canApproveStockCount: boolean }) {
+  const { branches } = useBranchSelection();
+  const [counts, setCounts] = useState<StockCountSummary[]>([]);
+  const [statusFilter, setStatusFilter] = useState<"all" | StockCountStatus>("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [viewingId, setViewingId] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
+
+  async function load() {
+    try {
+      const qs = statusFilter === "all" ? "" : `?status=${statusFilter}`;
+      const res = await apiGet<{ stockCounts: StockCountSummary[] }>(`${base(slug)}/stock-counts${qs}`);
+      setCounts(res.stockCounts);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load stock counts.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, statusFilter]);
+
+  function branchName(branchId: string) {
+    return branches.find((b) => b.id === branchId)?.name ?? "—";
+  }
+
+  if (loading) return <p className="text-sm text-neutral-500">Loading stock counts…</p>;
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          {(["all", "open", "pending_approval", "applied", "rejected"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                statusFilter === s ? "bg-orange-600 text-white" : "bg-neutral-100 text-neutral-600"
+              }`}
+            >
+              {s === "all" ? "All" : STOCK_COUNT_STATUS_LABELS[s]}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setShowCreate((v) => !v)} className="btn-primary">
+          {showCreate ? "Cancel" : "+ New count"}
+        </button>
+      </div>
+
+      {showCreate && (
+        <CreateStockCountForm
+          slug={slug}
+          onCreated={(count) => {
+            setShowCreate(false);
+            load();
+            setViewingId(count.id);
+          }}
+        />
+      )}
+
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+            <tr>
+              <th className="px-3 py-2">Branch</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">Created</th>
+              <th className="px-3 py-2">Submitted</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {counts.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
+                  No stock counts in this view.
+                </td>
+              </tr>
+            )}
+            {counts.map((c) => (
+              <tr key={c.id} className="border-t border-neutral-100">
+                <td className="px-3 py-2 font-medium text-neutral-900">{branchName(c.branchId)}</td>
+                <td className="px-3 py-2">
+                  <StockCountStatusBadge status={c.status} />
+                  {c.hasLargeVariance && c.status === "pending_approval" && (
+                    <span className="ml-2 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                      Large variance
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-neutral-500">{formatDate(c.createdAt, dateSystem, { withTime: true })}</td>
+                <td className="px-3 py-2 text-neutral-500">
+                  {c.submittedAt ? formatDate(c.submittedAt, dateSystem, { withTime: true }) : "—"}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <button onClick={() => setViewingId(c.id)} className="text-xs font-medium text-orange-700 hover:underline">
+                    {c.status === "open" ? "Continue" : "View"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {viewingId && (
+        <StockCountDetailModal
+          slug={slug}
+          countId={viewingId}
+          canApproveStockCount={canApproveStockCount}
+          onClose={() => setViewingId(null)}
+          onChanged={load}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateStockCountForm({
+  slug,
+  onCreated,
+}: {
+  slug: string;
+  onCreated: (count: StockCountSummary) => void;
+}) {
+  const { branches, branchId, setBranchId } = useBranchSelection();
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!branchId) {
+      setError("No branch available to count.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await apiPost<{ stockCount: StockCountSummary }>(`${base(slug)}/stock-counts`, {
+        branchId,
+        notes,
+      });
+      onCreated(res.stockCount);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not start a new stock count.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {branches.length > 1 && (
+          <label className="text-sm">
+            <span className="mb-1 block text-neutral-600">Branch</span>
+            <select required value={branchId} onChange={(e) => setBranchId(e.target.value)} className="input">
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="text-sm sm:col-span-2">
+          <span className="mb-1 block text-neutral-600">Notes (optional)</span>
+          <input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="input"
+            placeholder="e.g. Monthly count — dry storage"
+          />
+        </label>
+      </div>
+      <p className="mt-2 text-xs text-neutral-400">
+        Add items and record what you physically counted next. Submitting auto-applies the result unless a
+        line&apos;s variance is large enough to need sign-off first.
+      </p>
+      <button disabled={saving} className="btn-primary mt-3">
+        {saving ? "Starting…" : "Start count"}
+      </button>
+    </form>
+  );
+}
+
+function StockCountDetailModal({
+  slug,
+  countId,
+  canApproveStockCount,
+  onClose,
+  onChanged,
+}: {
+  slug: string;
+  countId: string;
+  canApproveStockCount: boolean;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const { branches } = useBranchSelection();
+  const dateSystem = useDateSystem();
+  const [detail, setDetail] = useState<StockCountDetail | null>(null);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [addItemId, setAddItemId] = useState("");
+  const [addQty, setAddQty] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [showReject, setShowReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejecting, setRejecting] = useState(false);
+
+  async function load() {
+    try {
+      const [detailRes, itemsRes] = await Promise.all([
+        apiGet<StockCountDetail>(`${base(slug)}/stock-counts/${countId}`),
+        apiGet<{ inventoryItems: InventoryItem[] }>(`${base(slug)}/inventory-items`),
+      ]);
+      setDetail(detailRes);
+      setItems(itemsRes.inventoryItems);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load this stock count.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countId]);
+
+  function itemInfo(inventoryItemId: string) {
+    return items.find((i) => i.id === inventoryItemId);
+  }
+
+  const addableItems = items.filter(
+    (i) => i.isActive && !detail?.items.some((li) => li.inventoryItemId === i.id),
+  );
+
+  async function submitAddItem(e: React.FormEvent) {
+    e.preventDefault();
+    if (!addItemId) return;
+    setAdding(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/stock-counts/${countId}/items`, {
+        inventoryItemId: addItemId,
+        physicalQuantity: addQty === "" ? null : Number(addQty),
+      });
+      setAddItemId("");
+      setAddQty("");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not add this item.");
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  function startEdit(row: StockCountItemRow) {
+    setEditingItemId(row.id);
+    setEditValue(row.physicalQuantityMilliunits === null ? "" : String(milliunitsToUnits(row.physicalQuantityMilliunits)));
+    setEditNote(row.note ?? "");
+  }
+
+  async function saveEdit(itemRowId: string) {
+    if (editValue === "") return;
+    setSavingEdit(true);
+    setError(null);
+    try {
+      await apiPatch(`${base(slug)}/stock-counts/${countId}/items/${itemRowId}`, {
+        physicalQuantity: Number(editValue),
+        note: editNote,
+      });
+      setEditingItemId(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save this count.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function doSubmit() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/stock-counts/${countId}/submit`, {});
+      await load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not submit this count.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function doApprove() {
+    setApproving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/stock-counts/${countId}/approve`, {});
+      await load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not approve this count.");
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  async function doReject(e: React.FormEvent) {
+    e.preventDefault();
+    setRejecting(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/stock-counts/${countId}/reject`, { reason: rejectReason });
+      setShowReject(false);
+      await load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not reject this count.");
+    } finally {
+      setRejecting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
+        {loading && <p className="text-sm text-neutral-500">Loading…</p>}
+        {!loading && detail && (
+          <>
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-neutral-900">
+                  Stock count — {branches.find((b) => b.id === detail.stockCount.branchId)?.name ?? "Branch"}
+                </h2>
+                <p className="mt-1 text-xs text-neutral-500">
+                  Started {formatDate(detail.stockCount.createdAt, dateSystem, { withTime: true })}
+                  {detail.stockCount.notes ? ` — ${detail.stockCount.notes}` : ""}
+                </p>
+              </div>
+              <StockCountStatusBadge status={detail.stockCount.status} />
+            </div>
+
+            {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+            {detail.stockCount.status === "pending_approval" && (
+              <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                One or more lines vary from the system quantity by more than the auto-apply threshold, so this
+                count needs sign-off before it changes stock.
+                {!canApproveStockCount && " Ask a manager or accountant to review it."}
+              </p>
+            )}
+            {detail.stockCount.status === "rejected" && (
+              <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                Rejected — {detail.stockCount.rejectionReason}. No stock was changed.
+              </p>
+            )}
+            {detail.stockCount.status === "applied" && (
+              <p className="mb-3 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-800">
+                Applied
+                {detail.stockCount.appliedAt ? ` ${formatDate(detail.stockCount.appliedAt, dateSystem, { withTime: true })}` : ""}
+                {" "}
+                — every line&apos;s variance has been written to the stock ledger.
+              </p>
+            )}
+
+            <div className="overflow-x-auto rounded-xl border border-neutral-200">
+              <table className="w-full text-sm">
+                <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+                  <tr>
+                    <th className="px-3 py-2">Item</th>
+                    <th className="px-3 py-2">System</th>
+                    <th className="px-3 py-2">Physical</th>
+                    <th className="px-3 py-2">Variance</th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.items.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
+                        No items added yet.
+                      </td>
+                    </tr>
+                  )}
+                  {detail.items.map((row) => {
+                    const info = itemInfo(row.inventoryItemId);
+                    const unit = info?.unit ?? "piece";
+                    const isEditing = editingItemId === row.id;
+                    return (
+                      <tr key={row.id} className="border-t border-neutral-100 align-top">
+                        <td className="px-3 py-2 font-medium text-neutral-900">
+                          {info?.name ?? "Unknown item"}
+                          {row.isLarge && (
+                            <span className="ml-2 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                              Large
+                            </span>
+                          )}
+                          {row.note && !isEditing && <p className="mt-0.5 text-xs text-neutral-400">{row.note}</p>}
+                        </td>
+                        <td className="px-3 py-2 text-neutral-500">{formatQuantity(row.systemQuantityMilliunits, unit)}</td>
+                        <td className="px-3 py-2">
+                          {isEditing ? (
+                            <div className="space-y-1">
+                              <input
+                                autoFocus
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                className="input w-24"
+                              />
+                              <input
+                                value={editNote}
+                                onChange={(e) => setEditNote(e.target.value)}
+                                placeholder="Note (optional)"
+                                className="input w-40 text-xs"
+                              />
+                            </div>
+                          ) : row.physicalQuantityMilliunits === null ? (
+                            <span className="text-neutral-400">Not counted</span>
+                          ) : (
+                            formatQuantity(row.physicalQuantityMilliunits, unit)
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          {row.varianceMilliunits === null ? (
+                            "—"
+                          ) : (
+                            <span
+                              className={
+                                row.varianceMilliunits < 0
+                                  ? "text-red-700"
+                                  : row.varianceMilliunits > 0
+                                    ? "text-green-700"
+                                    : "text-neutral-500"
+                              }
+                            >
+                              {row.varianceMilliunits > 0 ? "+" : ""}
+                              {formatQuantity(row.varianceMilliunits, unit)}
+                              {row.varianceValueInPaisa !== null && (
+                                <span className="ml-1 text-xs text-neutral-400">({formatNPR(row.varianceValueInPaisa)})</span>
+                              )}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {detail.stockCount.status === "open" &&
+                            (isEditing ? (
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingItemId(null)}
+                                  className="text-xs text-neutral-400 hover:underline"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={savingEdit || editValue === ""}
+                                  onClick={() => saveEdit(row.id)}
+                                  className="text-xs font-medium text-orange-700 hover:underline disabled:opacity-50"
+                                >
+                                  Save
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => startEdit(row)}
+                                className="text-xs font-medium text-orange-700 hover:underline"
+                              >
+                                {row.physicalQuantityMilliunits === null ? "Count" : "Edit"}
+                              </button>
+                            ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {detail.stockCount.status === "open" && (
+              <form onSubmit={submitAddItem} className="mt-3 flex flex-wrap items-end gap-2">
+                <label className="text-sm">
+                  <span className="mb-1 block text-neutral-600">Add item</span>
+                  <select value={addItemId} onChange={(e) => setAddItemId(e.target.value)} className="input" required>
+                    <option value="" disabled>
+                      Select an item
+                    </option>
+                    {addableItems.map((i) => (
+                      <option key={i.id} value={i.id}>
+                        {i.name} ({i.unit})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block text-neutral-600">Physical qty (optional now)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    value={addQty}
+                    onChange={(e) => setAddQty(e.target.value)}
+                    className="input w-32"
+                  />
+                </label>
+                <button disabled={adding || !addItemId} className="btn-secondary">
+                  {adding ? "Adding…" : "Add"}
+                </button>
+              </form>
+            )}
+
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={onClose} className="btn-secondary">
+                Close
+              </button>
+              {detail.stockCount.status === "open" && (
+                <button
+                  type="button"
+                  disabled={submitting || detail.items.length === 0}
+                  onClick={doSubmit}
+                  className="btn-primary disabled:opacity-50"
+                >
+                  {submitting ? "Submitting…" : "Submit count"}
+                </button>
+              )}
+              {detail.stockCount.status === "pending_approval" && canApproveStockCount && !showReject && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowReject(true)}
+                    className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+                  >
+                    Reject
+                  </button>
+                  <button type="button" disabled={approving} onClick={doApprove} className="btn-primary disabled:opacity-50">
+                    {approving ? "Approving…" : "Approve"}
+                  </button>
+                </>
+              )}
+            </div>
+
+            {showReject && (
+              <form onSubmit={doReject} className="mt-3 space-y-2 rounded-xl border border-red-200 bg-red-50 p-3">
+                <label className="block text-sm">
+                  <span className="mb-1 block text-neutral-700">Reason for rejecting</span>
+                  <input
+                    required
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    className="input"
+                    placeholder="e.g. Recount needed, numbers look off"
+                  />
+                </label>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setShowReject(false)} className="btn-secondary">
+                    Cancel
+                  </button>
+                  <button
+                    disabled={rejecting}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                  >
+                    {rejecting ? "Rejecting…" : "Confirm reject"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

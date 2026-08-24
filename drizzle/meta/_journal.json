@@ -281,6 +281,13 @@
       "when": 1787591779043,
       "tag": "0039_wastage_cost_snapshot_and_reasons",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1787592713585,
+      "tag": "0040_stock_counts",
+      "breakpoints": true
     }
   ]
 }
