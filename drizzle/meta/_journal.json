@@ -260,6 +260,13 @@
       "when": 1787588798054,
       "tag": "0036_daily_closing",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1787589942833,
+      "tag": "0037_supplier_dues",
+      "breakpoints": true
     }
   ]
 }

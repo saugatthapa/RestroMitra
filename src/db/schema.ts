@@ -1129,6 +1129,23 @@ export const purchases = pgTable(
     // time — a purchase's line items never change after the fact (no edit
     // endpoint), so this can't drift.
     totalInPaisa: integer("total_in_paisa").notNull(),
+    // Commercial-launch Supplier Dues/AP (Phase A.3) — false (the original,
+    // still-default behavior) books the FULL total as an immediately-paid
+    // debit at creation (recordPurchaseLedgerEntry, markAsDue: false). true
+    // books it as an OUTSTANDING due instead (markAsDue: true) — the
+    // supplier extended credit, tracked via the SAME ledger_entries
+    // due/settlement machinery Account Books already uses for everything
+    // else (dueStatus/settledAmountInPaisa), not a second parallel
+    // "amount paid" column on this table.
+    isCredit: boolean("is_credit").notNull().default(false),
+    // Only meaningful when isCredit is true — when the supplier expects
+    // payment. Lives here (not on ledger_entries, which has no due-date
+    // concept — it's a generic ledger used for many categories) since a
+    // due date is a purchase/invoice-level fact.
+    dueDate: date("due_date"),
+    isVoided: boolean("is_voided").notNull().default(false),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedByUserId: uuid("voided_by_user_id").references(() => users.id, { onDelete: "set null" }),
     notes: text("notes"),
     recordedByUserId: uuid("recorded_by_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -1142,6 +1159,15 @@ export const purchases = pgTable(
     index("purchases_supplier_id_idx").on(table.supplierId),
     index("purchases_branch_id_idx").on(table.branchId),
     check("purchases_total_non_negative", sql`${table.totalInPaisa} >= 0`),
+    // All-or-nothing, same pattern as register_shifts' closed-fields
+    // CHECK: a purchase is either never voided (both null, isVoided
+    // false) or fully voided (both set, isVoided true) — never half.
+    check(
+      "purchases_voided_fields_consistent",
+      sql`(${table.isVoided} = false AND ${table.voidedAt} IS NULL AND ${table.voidedByUserId} IS NULL)
+          OR
+          (${table.isVoided} = true AND ${table.voidedAt} IS NOT NULL)`,
+    ),
   ],
 );
 

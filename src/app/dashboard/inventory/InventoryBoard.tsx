@@ -31,14 +31,56 @@ type InventoryItem = {
   isLowStock: boolean;
 };
 
+type PurchaseLedgerEntry = {
+  id: string;
+  amountInPaisa: number;
+  dueStatus: "none" | "outstanding" | "settled";
+  settledAmountInPaisa: number;
+  isVoided: boolean;
+};
+
 type Purchase = {
   id: string;
   invoiceNumber: string | null;
   totalInPaisa: number;
   notes: string | null;
   createdAt: string;
+  isCredit: boolean;
+  dueDate: string | null;
+  isVoided: boolean;
   supplier: Supplier | null;
   items: { id: string; quantityMilliunits: number; unitCostInPaisa: number; lineTotalInPaisa: number; inventoryItem: InventoryItem }[];
+  ledgerEntry: PurchaseLedgerEntry | null;
+};
+
+type SupplierDueRow = {
+  purchaseId: string;
+  ledgerEntryId: string;
+  supplierId: string | null;
+  supplierName: string | null;
+  branchId: string;
+  invoiceNumber: string | null;
+  totalInPaisa: number;
+  settledAmountInPaisa: number;
+  outstandingInPaisa: number;
+  dueDate: string | null;
+  createdAt: string;
+  isOverdue: boolean;
+};
+
+type SupplierDueReport = {
+  totalDueInPaisa: number;
+  overdueInPaisa: number;
+  dueTodayInPaisa: number;
+  dueThisWeekInPaisa: number;
+  supplierWise: {
+    supplierId: string | null;
+    supplierName: string;
+    outstandingInPaisa: number;
+    overdueInPaisa: number;
+    purchaseCount: number;
+  }[];
+  rows: SupplierDueRow[];
 };
 
 type MenuItemSummary = { id: string; name: string };
@@ -55,10 +97,18 @@ function base(slug: string) {
   return `/api/restaurants/${slug}`;
 }
 
-const TABS = ["Items", "Suppliers", "Purchases", "Recipes"] as const;
+const TABS = ["Items", "Suppliers", "Purchases", "Supplier dues", "Recipes"] as const;
 type Tab = (typeof TABS)[number];
 
-export function InventoryBoard({ slug, canViewProfit }: { slug: string; canViewProfit: boolean }) {
+export function InventoryBoard({
+  slug,
+  canViewProfit,
+  canManageAccountBooks,
+}: {
+  slug: string;
+  canViewProfit: boolean;
+  canManageAccountBooks: boolean;
+}) {
   const [tab, setTab] = useState<Tab>("Items");
 
   return (
@@ -81,7 +131,10 @@ export function InventoryBoard({ slug, canViewProfit }: { slug: string; canViewP
 
       {tab === "Items" && <ItemsTab slug={slug} canViewProfit={canViewProfit} />}
       {tab === "Suppliers" && <SuppliersTab slug={slug} />}
-      {tab === "Purchases" && <PurchasesTab slug={slug} canViewProfit={canViewProfit} />}
+      {tab === "Purchases" && (
+        <PurchasesTab slug={slug} canViewProfit={canViewProfit} canManageAccountBooks={canManageAccountBooks} />
+      )}
+      {tab === "Supplier dues" && <SupplierDuesTab slug={slug} canManageAccountBooks={canManageAccountBooks} />}
       {tab === "Recipes" && <RecipesTab slug={slug} canViewProfit={canViewProfit} />}
     </div>
   );
@@ -654,13 +707,23 @@ function CreateSupplierForm({ slug, onCreated }: { slug: string; onCreated: () =
 
 type PurchaseLineDraft = { inventoryItemId: string; quantity: string; unitCost: string };
 
-function PurchasesTab({ slug, canViewProfit }: { slug: string; canViewProfit: boolean }) {
+function PurchasesTab({
+  slug,
+  canViewProfit,
+  canManageAccountBooks,
+}: {
+  slug: string;
+  canViewProfit: boolean;
+  canManageAccountBooks: boolean;
+}) {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [payingId, setPayingId] = useState<string | null>(null);
+  const [voidingId, setVoidingId] = useState<string | null>(null);
   const dateSystem = useDateSystem();
 
   async function load() {
@@ -715,29 +778,423 @@ function PurchasesTab({ slug, canViewProfit }: { slug: string; canViewProfit: bo
 
       <div className="space-y-2">
         {purchases.length === 0 && <p className="text-sm text-neutral-400">No purchases recorded yet.</p>}
-        {purchases.map((p) => (
-          <div key={p.id} className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm">
-            <div className="mb-1 flex items-center justify-between">
-              <p className="font-semibold text-neutral-900">
-                {p.supplier?.name ?? "No supplier"}
-                {p.invoiceNumber ? ` · Invoice ${p.invoiceNumber}` : ""}
-              </p>
-              <p className="text-neutral-500">{formatDate(p.createdAt, dateSystem, { withTime: true })}</p>
+        {purchases.map((p) => {
+          const outstandingInPaisa = p.ledgerEntry
+            ? p.ledgerEntry.amountInPaisa - p.ledgerEntry.settledAmountInPaisa
+            : 0;
+          const isOutstanding = !p.isVoided && p.ledgerEntry?.dueStatus === "outstanding";
+          return (
+            <div
+              key={p.id}
+              className={`rounded-2xl border bg-white p-4 text-sm ${
+                p.isVoided ? "border-neutral-200 opacity-60" : "border-neutral-200"
+              }`}
+            >
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold text-neutral-900">
+                  {p.supplier?.name ?? "No supplier"}
+                  {p.invoiceNumber ? ` · Invoice ${p.invoiceNumber}` : ""}
+                </p>
+                <div className="flex items-center gap-2">
+                  {p.isVoided && (
+                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-neutral-600">
+                      Voided
+                    </span>
+                  )}
+                  {!p.isVoided && p.isCredit && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        isOutstanding ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"
+                      }`}
+                    >
+                      {isOutstanding ? "Outstanding" : "Paid"}
+                    </span>
+                  )}
+                  <p className="text-neutral-500">{formatDate(p.createdAt, dateSystem, { withTime: true })}</p>
+                </div>
+              </div>
+              <ul className="text-neutral-600">
+                {p.items.map((line) => (
+                  <li key={line.id}>
+                    {formatQuantity(line.quantityMilliunits, line.inventoryItem.unit)} {line.inventoryItem.name}
+                    {canViewProfit ? ` — ${formatNPR(line.lineTotalInPaisa)}` : ""}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                {canViewProfit && (
+                  <p className="font-medium text-neutral-900">
+                    Total: {formatNPR(p.totalInPaisa)}
+                    {isOutstanding && canViewProfit && (
+                      <span className="ml-2 font-normal text-amber-700">
+                        ({formatNPR(outstandingInPaisa)} due{p.dueDate ? ` by ${p.dueDate}` : ""})
+                      </span>
+                    )}
+                  </p>
+                )}
+                <div className="flex gap-3">
+                  {isOutstanding && canManageAccountBooks && (
+                    <button
+                      onClick={() => setPayingId(p.id)}
+                      className="text-xs font-medium text-orange-700 hover:underline"
+                    >
+                      Record payment
+                    </button>
+                  )}
+                  {!p.isVoided && (
+                    <button
+                      onClick={() => setVoidingId(p.id)}
+                      className="text-xs font-medium text-red-700 hover:underline"
+                    >
+                      Void
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
-            <ul className="text-neutral-600">
-              {p.items.map((line) => (
-                <li key={line.id}>
-                  {formatQuantity(line.quantityMilliunits, line.inventoryItem.unit)} {line.inventoryItem.name}
-                  {canViewProfit ? ` — ${formatNPR(line.lineTotalInPaisa)}` : ""}
-                </li>
-              ))}
-            </ul>
-            {canViewProfit && (
-              <p className="mt-1 font-medium text-neutral-900">Total: {formatNPR(p.totalInPaisa)}</p>
-            )}
+          );
+        })}
+      </div>
+
+      {payingId && (
+        <RecordPaymentModal
+          slug={slug}
+          purchase={purchases.find((p) => p.id === payingId)!}
+          onClose={() => setPayingId(null)}
+          onSaved={() => {
+            setPayingId(null);
+            load();
+          }}
+        />
+      )}
+
+      {voidingId && (
+        <VoidPurchaseModal
+          slug={slug}
+          purchase={purchases.find((p) => p.id === voidingId)!}
+          onClose={() => setVoidingId(null)}
+          onSaved={() => {
+            setVoidingId(null);
+            load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function RecordPaymentModal({
+  slug,
+  purchase,
+  onClose,
+  onSaved,
+}: {
+  slug: string;
+  purchase: Purchase;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const remainingInPaisa = purchase.ledgerEntry
+    ? purchase.ledgerEntry.amountInPaisa - purchase.ledgerEntry.settledAmountInPaisa
+    : 0;
+  const [amount, setAmount] = useState(String(remainingInPaisa / 100));
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!purchase.ledgerEntry) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/ledger/${purchase.ledgerEntry.id}/settle`, {
+        amount: Number(amount),
+        note,
+      });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not record the payment.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">
+          Record payment — {purchase.supplier?.name ?? "Supplier"}
+        </h2>
+        <p className="mb-3 text-xs text-neutral-500">Remaining due: {formatNPR(remainingInPaisa)}</p>
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <form onSubmit={submit} className="space-y-3">
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-600">Amount paid (Rs.)</span>
+            <input
+              required
+              type="number"
+              min="0.01"
+              step="0.01"
+              max={remainingInPaisa / 100}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="input"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-600">Note (optional)</span>
+            <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
+          </label>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="btn-secondary">
+              Cancel
+            </button>
+            <button disabled={saving} className="btn-primary">
+              {saving ? "Saving…" : "Record payment"}
+            </button>
           </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function VoidPurchaseModal({
+  slug,
+  purchase,
+  onClose,
+  onSaved,
+}: {
+  slug: string;
+  purchase: Purchase;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/purchases/${purchase.id}/void`, { reason });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not void this purchase.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">
+          Void purchase — {purchase.supplier?.name ?? "Supplier"}
+        </h2>
+        <p className="mb-3 text-xs text-neutral-500">
+          Reverses the stock quantity this purchase brought in and cancels any amount still due. This does
+          not change the item&apos;s current average cost per unit. Can&apos;t be undone, and can&apos;t be
+          done once a payment has been recorded against it.
+        </p>
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <form onSubmit={submit} className="space-y-3">
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-600">Reason</span>
+            <input
+              required
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="input"
+              placeholder="e.g. Duplicate entry, wrong quantity"
+            />
+          </label>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="btn-secondary">
+              Cancel
+            </button>
+            <button disabled={saving} className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60">
+              {saving ? "Voiding…" : "Void purchase"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Supplier dues tab
+// ---------------------------------------------------------------------------
+
+function SupplierDuesTab({ slug, canManageAccountBooks }: { slug: string; canManageAccountBooks: boolean }) {
+  const [report, setReport] = useState<SupplierDueReport | null>(null);
+  const [status, setStatus] = useState<"all" | "overdue" | "due_today" | "due_this_week">("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [payingRow, setPayingRow] = useState<SupplierDueRow | null>(null);
+  const dateSystem = useDateSystem();
+
+  async function load() {
+    try {
+      const res = await apiGet<SupplierDueReport>(`${base(slug)}/suppliers/due-report?status=${status}`);
+      setReport(res);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load the supplier due report.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, status]);
+
+  if (loading) return <p className="text-sm text-neutral-500">Loading supplier dues…</p>;
+  if (!report) return error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null;
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border border-neutral-200 bg-white p-3">
+          <p className="text-xs text-neutral-500">Total due</p>
+          <p className="text-lg font-semibold text-neutral-900">{formatNPR(report.totalDueInPaisa)}</p>
+        </div>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+          <p className="text-xs text-red-600">Overdue</p>
+          <p className="text-lg font-semibold text-red-700">{formatNPR(report.overdueInPaisa)}</p>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs text-amber-600">Due today</p>
+          <p className="text-lg font-semibold text-amber-700">{formatNPR(report.dueTodayInPaisa)}</p>
+        </div>
+        <div className="rounded-xl border border-neutral-200 bg-white p-3">
+          <p className="text-xs text-neutral-500">Due this week</p>
+          <p className="text-lg font-semibold text-neutral-900">{formatNPR(report.dueThisWeekInPaisa)}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {(["all", "overdue", "due_today", "due_this_week"] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setStatus(s)}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${
+              status === s ? "bg-orange-600 text-white" : "bg-neutral-100 text-neutral-600"
+            }`}
+          >
+            {s === "all" ? "All" : s === "overdue" ? "Overdue" : s === "due_today" ? "Due today" : "Due this week"}
+          </button>
         ))}
       </div>
+
+      {report.supplierWise.length > 0 && (
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+              <tr>
+                <th className="px-3 py-2">Supplier</th>
+                <th className="px-3 py-2">Outstanding</th>
+                <th className="px-3 py-2">Overdue</th>
+                <th className="px-3 py-2">Purchases</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.supplierWise.map((s) => (
+                <tr key={s.supplierId ?? "unknown"} className="border-t border-neutral-100">
+                  <td className="px-3 py-2 font-medium text-neutral-900">{s.supplierName}</td>
+                  <td className="px-3 py-2">{formatNPR(s.outstandingInPaisa)}</td>
+                  <td className="px-3 py-2 text-red-700">{s.overdueInPaisa > 0 ? formatNPR(s.overdueInPaisa) : "—"}</td>
+                  <td className="px-3 py-2 text-neutral-500">{s.purchaseCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+            <tr>
+              <th className="px-3 py-2">Supplier</th>
+              <th className="px-3 py-2">Invoice</th>
+              <th className="px-3 py-2">Due date</th>
+              <th className="px-3 py-2">Outstanding</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.rows.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
+                  No outstanding supplier dues in this view.
+                </td>
+              </tr>
+            )}
+            {report.rows.map((r) => (
+              <tr key={r.purchaseId} className="border-t border-neutral-100">
+                <td className="px-3 py-2 font-medium text-neutral-900">{r.supplierName ?? "Unknown"}</td>
+                <td className="px-3 py-2 text-neutral-500">{r.invoiceNumber || "—"}</td>
+                <td className={`px-3 py-2 ${r.isOverdue ? "font-medium text-red-700" : "text-neutral-500"}`}>
+                  {r.dueDate ? formatDate(r.dueDate, dateSystem) : "—"}
+                  {r.isOverdue && " (overdue)"}
+                </td>
+                <td className="px-3 py-2">{formatNPR(r.outstandingInPaisa)}</td>
+                <td className="px-3 py-2 text-right">
+                  {canManageAccountBooks && (
+                    <button
+                      onClick={() => setPayingRow(r)}
+                      className="text-xs font-medium text-orange-700 hover:underline"
+                    >
+                      Record payment
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {payingRow && (
+        <RecordPaymentModal
+          slug={slug}
+          purchase={{
+            id: payingRow.purchaseId,
+            invoiceNumber: payingRow.invoiceNumber,
+            totalInPaisa: payingRow.totalInPaisa,
+            notes: null,
+            createdAt: payingRow.createdAt,
+            isCredit: true,
+            dueDate: payingRow.dueDate,
+            isVoided: false,
+            supplier: payingRow.supplierName
+              ? { id: payingRow.supplierId ?? "", name: payingRow.supplierName, phone: null, address: null, notes: null, isActive: true }
+              : null,
+            items: [],
+            ledgerEntry: {
+              id: payingRow.ledgerEntryId,
+              amountInPaisa: payingRow.totalInPaisa,
+              dueStatus: "outstanding",
+              settledAmountInPaisa: payingRow.settledAmountInPaisa,
+              isVoided: false,
+            },
+          }}
+          onClose={() => setPayingRow(null)}
+          onSaved={() => {
+            setPayingRow(null);
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -756,6 +1213,8 @@ function CreatePurchaseForm({
   const { branches, branchId, setBranchId } = useBranchSelection();
   const [supplierId, setSupplierId] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [isCredit, setIsCredit] = useState(false);
+  const [dueDate, setDueDate] = useState("");
   const [lines, setLines] = useState<PurchaseLineDraft[]>([
     { inventoryItemId: items[0]?.id ?? "", quantity: "", unitCost: "" },
   ]);
@@ -787,6 +1246,8 @@ function CreatePurchaseForm({
         branchId,
         supplierId: supplierId || null,
         invoiceNumber,
+        isCredit,
+        dueDate: isCredit && dueDate ? dueDate : null,
         items: lines.map((l) => ({
           inventoryItemId: l.inventoryItemId,
           quantity: Number(l.quantity),
@@ -837,6 +1298,21 @@ function CreatePurchaseForm({
           <span className="mb-1 block text-neutral-600">Invoice number (optional)</span>
           <input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} className="input" />
         </label>
+        <label className="flex items-center gap-2 text-sm text-neutral-700">
+          <input type="checkbox" checked={isCredit} onChange={(e) => setIsCredit(e.target.checked)} />
+          Bought on credit (supplier due)
+        </label>
+        {isCredit && (
+          <label className="text-sm">
+            <span className="mb-1 block text-neutral-600">Due date (optional)</span>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="input"
+            />
+          </label>
+        )}
       </div>
 
       <div className="mt-3 space-y-2">

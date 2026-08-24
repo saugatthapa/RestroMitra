@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { branches, inventoryItems, purchaseItems, purchases, suppliers } from "@/db/schema";
+import { branches, inventoryItems, ledgerEntries, purchaseItems, purchases, suppliers } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { createPurchaseSchema } from "@/lib/validation/inventory";
@@ -28,7 +28,39 @@ export async function GET(
       limit: 100,
     });
 
-    return NextResponse.json({ purchases: rows });
+    // Each purchase's due/paid status lives on its linked ledgerEntries row
+    // (referenceType="purchase"), not duplicated onto the purchase itself —
+    // see recordPurchaseLedgerEntry's comment in ledger.ts. Looked up here
+    // as one batched query rather than N+1 per purchase.
+    const purchaseIds = rows.map((r) => r.id);
+    const linkedLedgerEntries =
+      purchaseIds.length === 0
+        ? []
+        : await db
+            .select({
+              id: ledgerEntries.id,
+              referenceId: ledgerEntries.referenceId,
+              amountInPaisa: ledgerEntries.amountInPaisa,
+              dueStatus: ledgerEntries.dueStatus,
+              settledAmountInPaisa: ledgerEntries.settledAmountInPaisa,
+              isVoided: ledgerEntries.isVoided,
+            })
+            .from(ledgerEntries)
+            .where(
+              and(
+                eq(ledgerEntries.restaurantId, restaurantId),
+                eq(ledgerEntries.referenceType, "purchase"),
+                inArray(ledgerEntries.referenceId, purchaseIds),
+              ),
+            );
+    const ledgerByPurchaseId = new Map(linkedLedgerEntries.map((e) => [e.referenceId, e]));
+
+    const purchasesWithLedger = rows.map((r) => ({
+      ...r,
+      ledgerEntry: ledgerByPurchaseId.get(r.id) ?? null,
+    }));
+
+    return NextResponse.json({ purchases: purchasesWithLedger });
   } catch (err) {
     return toErrorResponse(err);
   }
@@ -117,6 +149,8 @@ export async function POST(
           invoiceNumber: data.invoiceNumber || null,
           totalInPaisa,
           notes: data.notes || null,
+          isCredit: data.isCredit,
+          dueDate: data.isCredit ? data.dueDate || null : null,
           recordedByUserId: session.user.id,
         })
         .returning();
@@ -150,21 +184,25 @@ export async function POST(
         });
       }
 
-      // Booked as a debit/cash purchase by default — a supplier bought on
-      // credit terms isn't tracked at this per-purchase level (see the
-      // "purchase" category's own comment in ledger.ts); an owner who buys
-      // on credit records the due via a manual Account Books entry instead.
-      await recordPurchaseLedgerEntry(tx, {
+      // Booked as an immediately-settled debit by default. A credit
+      // purchase (data.isCredit) books the same debit but marks it
+      // "outstanding" on the ledger entry — settled later via the existing
+      // generic /ledger/[entryId]/settle route (see recordPurchaseLedgerEntry's
+      // own comment in ledger.ts). The ledger entry's id is looked up again
+      // by the GET route below (never cached on the purchase row itself) so
+      // there is exactly one place a due amount is tracked.
+      const ledgerEntry = await recordPurchaseLedgerEntry(tx, {
         restaurantId,
         purchaseId: purchase.id,
         totalInPaisa,
         supplierName,
         invoiceNumber: purchase.invoiceNumber,
         timezone,
+        markAsDue: data.isCredit,
         recordedByUserId: session.user.id,
       });
 
-      return { purchase, items: insertedItems };
+      return { purchase, items: insertedItems, ledgerEntry };
     });
 
     await recordAuditLog({
@@ -177,7 +215,10 @@ export async function POST(
       metadata: { totalInPaisa, lineCount: lineTotals.length },
     });
 
-    return NextResponse.json({ purchase: result.purchase, items: result.items }, { status: 201 });
+    return NextResponse.json(
+      { purchase: result.purchase, items: result.items, ledgerEntry: result.ledgerEntry },
+      { status: 201 },
+    );
   } catch (err) {
     return toErrorResponse(err);
   }

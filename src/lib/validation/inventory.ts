@@ -75,23 +75,42 @@ export const recordStockAdjustmentSchema = z
     path: ["direction"],
   });
 
-export const createPurchaseSchema = z.object({
-  branchId: z.string().uuid("Select which branch received this delivery."),
-  supplierId: z.string().uuid().nullable().optional(),
-  invoiceNumber: z.string().trim().max(60).optional().or(z.literal("")),
-  notes: z.string().trim().max(1000).optional().or(z.literal("")),
-  items: z
-    .array(
-      z.object({
-        inventoryItemId: z.string().uuid(),
-        quantity: quantityAmount,
-        // Cost per ONE WHOLE UNIT (e.g. per kg), in rupees — matches
-        // inventoryItems.costPerUnitInPaisa's own unit basis.
-        unitCost: rupeeAmount,
-      }),
-    )
-    .min(1, "Add at least one line item.")
-    .max(100),
+// Deliberately no separate "amount due" field: a credit purchase always
+// books its FULL total as the outstanding due (same simplification as
+// recordSalesLedgerEntry — see that function's own comment), not a
+// partial-cash-plus-partial-credit split.
+export const createPurchaseSchema = z
+  .object({
+    branchId: z.string().uuid("Select which branch received this delivery."),
+    supplierId: z.string().uuid().nullable().optional(),
+    invoiceNumber: z.string().trim().max(60).optional().or(z.literal("")),
+    notes: z.string().trim().max(1000).optional().or(z.literal("")),
+    isCredit: z.boolean().optional().default(false),
+    dueDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected a YYYY-MM-DD date.")
+      .nullable()
+      .optional(),
+    items: z
+      .array(
+        z.object({
+          inventoryItemId: z.string().uuid(),
+          quantity: quantityAmount,
+          // Cost per ONE WHOLE UNIT (e.g. per kg), in rupees — matches
+          // inventoryItems.costPerUnitInPaisa's own unit basis.
+          unitCost: rupeeAmount,
+        }),
+      )
+      .min(1, "Add at least one line item.")
+      .max(100),
+  })
+  .refine((data) => data.isCredit || !data.dueDate, {
+    message: "A due date only applies to a credit purchase.",
+    path: ["dueDate"],
+  });
+
+export const voidPurchaseSchema = z.object({
+  reason: z.string().trim().min(1, "A reason is required.").max(300),
 });
 
 export const replaceRecipeSchema = z.object({

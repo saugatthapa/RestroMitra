@@ -39,6 +39,7 @@ export default async function InventoryPage() {
       <InventoryBoard
         slug={active.slug}
         canViewProfit={roleHasPermission(active.role, PERMISSIONS.VIEW_PROFIT)}
+        canManageAccountBooks={roleHasPermission(active.role, PERMISSIONS.MANAGE_ACCOUNT_BOOKS)}
       />
     </div>
   );

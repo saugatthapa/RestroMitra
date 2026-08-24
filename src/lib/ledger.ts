@@ -254,7 +254,16 @@ export async function reversePayrollLedgerEntry(
   });
 }
 
-/** Called from the purchase-creation route, right after the purchase transaction commits its header row. */
+/**
+ * Called from the purchase-creation route, right after the purchase
+ * transaction commits its header row. `markAsDue` books the purchase as an
+ * outstanding supplier due (dueStatus="outstanding") instead of an
+ * immediately-settled debit — used for credit purchases (Section 11-14 of
+ * the commercial-launch spec: Supplier Dues / Accounts Payable). The
+ * resulting ledgerEntries row is settled via the existing generic
+ * `/ledger/[entryId]/settle` route (settleLedgerDue above) — no separate
+ * supplier-payment endpoint is needed.
+ */
 export async function recordPurchaseLedgerEntry(
   tx: Transaction,
   params: {
@@ -264,6 +273,7 @@ export async function recordPurchaseLedgerEntry(
     supplierName?: string | null;
     invoiceNumber?: string | null;
     timezone: string;
+    markAsDue?: boolean;
     recordedByUserId?: string | null;
   },
 ) {
@@ -279,6 +289,7 @@ export async function recordPurchaseLedgerEntry(
     description: params.invoiceNumber ? `Purchase (invoice ${params.invoiceNumber})` : "Purchase",
     referenceType: "purchase",
     referenceId: params.purchaseId,
+    markAsDue: params.markAsDue,
     recordedByUserId: params.recordedByUserId ?? null,
   });
 }
