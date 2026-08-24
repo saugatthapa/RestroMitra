@@ -151,6 +151,7 @@ function ItemsTab({ slug, canViewProfit }: { slug: string; canViewProfit: boolea
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [adjustingId, setAdjustingId] = useState<string | null>(null);
+  const [wastingId, setWastingId] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -253,6 +254,12 @@ function ItemsTab({ slug, canViewProfit }: { slug: string; canViewProfit: boolea
                   >
                     Adjust stock
                   </button>
+                  <button
+                    onClick={() => setWastingId(item.id)}
+                    className="ml-3 text-xs font-medium text-red-700 hover:underline"
+                  >
+                    Record waste
+                  </button>
                 </td>
               </tr>
             ))}
@@ -267,6 +274,19 @@ function ItemsTab({ slug, canViewProfit }: { slug: string; canViewProfit: boolea
           onClose={() => setAdjustingId(null)}
           onSaved={() => {
             setAdjustingId(null);
+            load();
+          }}
+        />
+      )}
+
+      {wastingId && (
+        <RecordWasteModal
+          slug={slug}
+          item={items.find((i) => i.id === wastingId)!}
+          canViewProfit={canViewProfit}
+          onClose={() => setWastingId(null)}
+          onSaved={() => {
+            setWastingId(null);
             load();
           }}
         />
@@ -388,29 +408,13 @@ function AdjustStockModal({
   const [direction, setDirection] = useState<"add" | "remove">("add");
   const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState("");
-  const [isWaste, setIsWaste] = useState(false);
-  const [wasteReason, setWasteReason] = useState<WasteReasonValue | "">("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  function selectDirection(next: "add" | "remove") {
-    setDirection(next);
-    // Waste only makes sense for a removal — switching to "Add" drops it
-    // rather than leaving a stale, now-invalid selection sitting hidden.
-    if (next === "add") {
-      setIsWaste(false);
-      setWasteReason("");
-    }
-  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!branchId) {
       setError("No branch available for this adjustment.");
-      return;
-    }
-    if (isWaste && !wasteReason) {
-      setError("Select a waste reason.");
       return;
     }
     setSaving(true);
@@ -421,7 +425,6 @@ function AdjustStockModal({
         quantity: Number(quantity),
         direction,
         reason,
-        wasteReason: isWaste ? wasteReason : null,
       });
       onSaved();
     } catch (err) {
@@ -460,7 +463,7 @@ function AdjustStockModal({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => selectDirection("add")}
+              onClick={() => setDirection("add")}
               className={`flex-1 rounded-lg border px-3 py-1.5 text-sm ${
                 direction === "add"
                   ? "border-green-600 bg-green-50 font-medium text-green-700"
@@ -471,7 +474,7 @@ function AdjustStockModal({
             </button>
             <button
               type="button"
-              onClick={() => selectDirection("remove")}
+              onClick={() => setDirection("remove")}
               className={`flex-1 rounded-lg border px-3 py-1.5 text-sm ${
                 direction === "remove"
                   ? "border-red-600 bg-red-50 font-medium text-red-700"
@@ -493,55 +496,174 @@ function AdjustStockModal({
               className="input"
             />
           </label>
-          {direction === "remove" && (
-            <label className="flex items-center gap-2 text-sm text-neutral-700">
-              <input
-                type="checkbox"
-                checked={isWaste}
-                onChange={(e) => {
-                  setIsWaste(e.target.checked);
-                  if (!e.target.checked) setWasteReason("");
-                }}
-              />
-              This is waste (spoilage, breakage, etc.)
-            </label>
-          )}
-          {isWaste && (
-            <label className="block text-sm">
-              <span className="mb-1 block text-neutral-600">Waste reason</span>
-              <select
-                required
-                value={wasteReason}
-                onChange={(e) => setWasteReason(e.target.value as WasteReasonValue)}
-                className="input"
-              >
-                <option value="" disabled>
-                  Select a reason
-                </option>
-                {WASTE_REASONS.map((r) => (
-                  <option key={r} value={r}>
-                    {WASTE_REASON_LABELS[r]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
           <label className="block text-sm">
-            <span className="mb-1 block text-neutral-600">{isWaste ? "Details" : "Reason"}</span>
+            <span className="mb-1 block text-neutral-600">Reason</span>
             <input
               required
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               className="input"
-              placeholder={isWaste ? "e.g. Left out overnight" : "e.g. Stock count correction"}
+              placeholder="e.g. Stock count correction"
             />
           </label>
+          <p className="text-xs text-neutral-400">
+            Spoiled, expired, or otherwise wasted stock has its own &quot;Record waste&quot; action
+            instead — it tracks a reason and cost, and shows up in the Wastage report.
+          </p>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} className="btn-secondary">
               Cancel
             </button>
             <button disabled={saving} className="btn-primary">
               {saving ? "Saving…" : "Save adjustment"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Phase A.5 — a dedicated wastage-recording action, separate from the
+ * generic Adjust Stock modal above (the master prompt's own "dedicated
+ * workflow" requirement). Reuses the SAME backend endpoint
+ * (adjustments/route.ts already branches into a structured "waste" stock
+ * movement whenever a wasteReason is supplied, with its own
+ * "inventory.stock.wasted" audit action) rather than standing up a
+ * duplicate API surface — see that route's own doc comment. Always
+ * direction="remove"; waste never adds stock.
+ */
+function RecordWasteModal({
+  slug,
+  item,
+  canViewProfit,
+  onClose,
+  onSaved,
+}: {
+  slug: string;
+  item: InventoryItem;
+  canViewProfit: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { branches, branchId, setBranchId } = useBranchSelection();
+  const [quantity, setQuantity] = useState("");
+  const [wasteReason, setWasteReason] = useState<WasteReasonValue | "">("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const quantityNum = Number(quantity) || 0;
+  const estimatedCostInPaisa = Math.round(quantityNum * item.costPerUnitInPaisa);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!branchId) {
+      setError("No branch available for this record.");
+      return;
+    }
+    if (!wasteReason) {
+      setError("Select a reason.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/inventory-items/${item.id}/adjustments`, {
+        branchId,
+        quantity: quantityNum,
+        direction: "remove",
+        wasteReason,
+        reason: notes || WASTE_REASON_LABELS[wasteReason],
+      });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not record the waste.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Record waste — {item.name}</h2>
+        <p className="mb-3 text-xs text-neutral-500">
+          Current: {formatQuantity(item.currentStockMilliunits, item.unit)}
+        </p>
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <form onSubmit={submit} className="space-y-3">
+          {branches.length > 1 && (
+            <label className="block text-sm">
+              <span className="mb-1 block text-neutral-600">Branch</span>
+              <select
+                required
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+                className="input"
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-600">Quantity wasted ({item.unit})</span>
+            <input
+              required
+              type="number"
+              min="0.001"
+              step="0.001"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="input"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-600">Reason</span>
+            <select
+              required
+              value={wasteReason}
+              onChange={(e) => setWasteReason(e.target.value as WasteReasonValue)}
+              className="input"
+            >
+              <option value="" disabled>
+                Select a reason
+              </option>
+              {WASTE_REASONS.map((r) => (
+                <option key={r} value={r}>
+                  {WASTE_REASON_LABELS[r]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-600">Notes (optional)</span>
+            <input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="input"
+              placeholder="e.g. Left out overnight"
+            />
+          </label>
+          {canViewProfit && quantityNum > 0 && (
+            <p className="text-xs text-neutral-500">
+              Estimated cost of this waste: <span className="font-medium text-neutral-900">{formatNPR(estimatedCostInPaisa)}</span>
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="btn-secondary">
+              Cancel
+            </button>
+            <button
+              disabled={saving}
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              {saving ? "Saving…" : "Record waste"}
             </button>
           </div>
         </form>

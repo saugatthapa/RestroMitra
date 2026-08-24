@@ -82,22 +82,14 @@ export async function recordStockMovement(
     throw new InventoryError("Branch not found for this restaurant.");
   }
 
-  const [movement] = await tx
-    .insert(stockMovements)
-    .values({
-      restaurantId: params.restaurantId,
-      branchId: params.branchId,
-      inventoryItemId: params.inventoryItemId,
-      type: params.type,
-      quantityDeltaMilliunits: params.quantityDeltaMilliunits,
-      wasteReason: params.wasteReason ?? null,
-      referenceType: params.referenceType ?? null,
-      referenceId: params.referenceId ?? null,
-      note: params.note ?? null,
-      recordedByUserId: params.recordedByUserId ?? null,
-    })
-    .returning();
-
+  // Read/update the item FIRST (before inserting the movement row) so its
+  // resulting costPerUnitInPaisa — for a "purchase" movement this is
+  // already the NEW post-purchase weighted average, since applyPurchaseCosting
+  // updates it moments before calling this function; for every other
+  // movement type it's simply the current, unchanged cost — is available
+  // to freeze onto the movement row below. See stock_movements'
+  // unitCostInPaisaSnapshot/totalCostInPaisaSnapshot column comments in
+  // schema.ts for why this must be captured now, not re-derived later.
   const [updatedItem] = await tx
     .update(inventoryItems)
     .set({
@@ -119,6 +111,29 @@ export async function recordStockMovement(
     // the ledger insert above, so nothing is left half-applied.
     throw new InventoryError("Inventory item not found for this restaurant.");
   }
+
+  const unitCostInPaisaSnapshot = updatedItem.costPerUnitInPaisa;
+  const totalCostInPaisaSnapshot = Math.round(
+    (Math.abs(params.quantityDeltaMilliunits) * unitCostInPaisaSnapshot) / 1000,
+  );
+
+  const [movement] = await tx
+    .insert(stockMovements)
+    .values({
+      restaurantId: params.restaurantId,
+      branchId: params.branchId,
+      inventoryItemId: params.inventoryItemId,
+      type: params.type,
+      quantityDeltaMilliunits: params.quantityDeltaMilliunits,
+      wasteReason: params.wasteReason ?? null,
+      unitCostInPaisaSnapshot,
+      totalCostInPaisaSnapshot,
+      referenceType: params.referenceType ?? null,
+      referenceId: params.referenceId ?? null,
+      note: params.note ?? null,
+      recordedByUserId: params.recordedByUserId ?? null,
+    })
+    .returning();
 
   const [branchLevel] = await tx
     .insert(branchInventoryLevels)

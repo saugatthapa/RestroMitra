@@ -10,7 +10,9 @@ export const WASTE_REASONS = [
   "spoilage",
   "expired",
   "breakage",
+  "damaged",
   "overproduction",
+  "burned",
   "theft_or_loss",
   "other",
 ] as const;
@@ -20,7 +22,9 @@ export const WASTE_REASON_LABELS: Record<WasteReasonValue, string> = {
   spoilage: "Spoilage",
   expired: "Expired",
   breakage: "Breakage",
+  damaged: "Damaged",
   overproduction: "Overproduction",
+  burned: "Burned",
   theft_or_loss: "Theft / loss",
   other: "Other",
 };

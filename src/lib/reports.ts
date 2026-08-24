@@ -939,6 +939,14 @@ export type WastageSummary = {
  * — waste is stock that left without generating any revenue (the opposite
  * of a sale_deduction), so mixing it into "cost of GOODS SOLD" would
  * mislabel it. An owner sees it as a clearly separate cost signal instead.
+ *
+ * Phase A.5 — prefers stock_movements.totalCostInPaisaSnapshot, the frozen
+ * cost recordStockMovement wrote at the moment this waste actually
+ * happened, over inventoryItems' CURRENT costPerUnitInPaisa — same
+ * snapshot-preferred/live-fallback shape as getCogsSummary (see that
+ * function's own comment for why re-deriving cost from today's rate would
+ * misstate history). Falls back to the live join only for rows that
+ * predate this column.
  */
 export async function getWastageSummary(
   restaurantId: string,
@@ -952,7 +960,10 @@ export async function getWastageSummary(
     .select({
       wasteReason: stockMovements.wasteReason,
       costInPaisa: sql<string>`
-        coalesce(sum(round(abs(${stockMovements.quantityDeltaMilliunits}) * ${inventoryItems.costPerUnitInPaisa} / 1000.0)), 0)
+        coalesce(sum(coalesce(
+          ${stockMovements.totalCostInPaisaSnapshot},
+          round(abs(${stockMovements.quantityDeltaMilliunits}) * ${inventoryItems.costPerUnitInPaisa} / 1000.0)
+        )), 0)
       `,
       movementCount: sql<string>`count(*)`,
     })

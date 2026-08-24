@@ -1057,6 +1057,15 @@ export const wasteReasonEnum = pgEnum("waste_reason", [
   "breakage",
   "overproduction",
   "theft_or_loss",
+  // Commercial-launch Phase A.5 — "damaged"/"burned" added to match the
+  // spec's named reason list exactly (spoiled/expired/damaged/
+  // overproduction/burned/other). Added as NEW values rather than renaming
+  // "breakage"/"theft_or_loss" — a rename would need every historical row
+  // silently reinterpreted; existing data keeps its original label, new
+  // entries can use whichever fits best (damaged for e.g. a dropped tray,
+  // breakage for e.g. glassware — both stay valid, distinct options).
+  "damaged",
+  "burned",
   "other",
 ]);
 
@@ -1413,6 +1422,22 @@ export const stockMovements = pgTable(
     // CHECK constraint — this schema doesn't use CHECK constraints
     // elsewhere for cross-column rules, matching the existing convention.
     wasteReason: wasteReasonEnum("waste_reason"),
+    // Commercial-launch Phase A.5 — a FROZEN cost basis for this movement,
+    // written once by recordStockMovement using inventoryItems'
+    // costPerUnitInPaisa at the exact moment this movement happened (never
+    // recomputed later). Same reasoning as orderItems.recipeCostInPaisa:
+    // costPerUnitInPaisa is a live weighted average that keeps moving with
+    // every later purchase, so a wastage/COGS report re-deriving an old
+    // movement's cost from TODAY's rate would silently misstate history.
+    // unitCostInPaisaSnapshot is cost per ONE WHOLE UNIT (matching every
+    // other costPerUnitInPaisa-shaped column in this schema);
+    // totalCostInPaisaSnapshot is that rate applied to this movement's own
+    // |quantityDeltaMilliunits|. Both nullable — NULL only for rows written
+    // before this column existed; getWastageSummary (reports.ts) prefers
+    // these when present and falls back to a live join otherwise, exactly
+    // like getCogsSummary already does for orderItems.recipeCostInPaisa.
+    unitCostInPaisaSnapshot: integer("unit_cost_in_paisa_snapshot"),
+    totalCostInPaisaSnapshot: integer("total_cost_in_paisa_snapshot"),
     // Informational traceability to what caused this movement (a purchase
     // id, an order id) — same pattern as menu_item_id on order_items:
     // never read back for correctness, only for "why did this change".
@@ -1430,6 +1455,14 @@ export const stockMovements = pgTable(
     index("stock_movements_restaurant_id_idx").on(table.restaurantId),
     index("stock_movements_inventory_item_id_idx").on(table.inventoryItemId),
     index("stock_movements_branch_id_idx").on(table.branchId),
+    check(
+      "stock_movements_unit_cost_snapshot_non_negative",
+      sql`${table.unitCostInPaisaSnapshot} IS NULL OR ${table.unitCostInPaisaSnapshot} >= 0`,
+    ),
+    check(
+      "stock_movements_total_cost_snapshot_non_negative",
+      sql`${table.totalCostInPaisaSnapshot} IS NULL OR ${table.totalCostInPaisaSnapshot} >= 0`,
+    ),
   ],
 );
 
