@@ -37,6 +37,7 @@ const DICTIONARY = {
   "nav.accountBooks": { en: "Account Books", ne: "खाता बही" },
   "nav.website": { en: "Website", ne: "वेबसाइट" },
   "nav.auditLog": { en: "Activity Log", ne: "गतिविधि लग" },
+  "nav.register": { en: "Cash Register", ne: "नगद रजिस्टर" },
   "nav.branches": { en: "Branches", ne: "शाखाहरू" },
   "nav.billing": { en: "Billing", ne: "बिलिङ" },
   "nav.settings": { en: "Settings", ne: "सेटिङहरू" },

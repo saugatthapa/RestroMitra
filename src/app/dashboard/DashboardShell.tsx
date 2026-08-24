@@ -599,6 +599,13 @@ function DashboardShellContent({
           permission: PERMISSIONS.MANAGE_EXPENSES,
         },
         {
+          label: t("nav.register"),
+          href: "/dashboard/register",
+          enabled: true,
+          icon: <NavIcon.CashRegister />,
+          permission: PERMISSIONS.MANAGE_CASH_REGISTER,
+        },
+        {
           label: t("nav.accountBooks"),
           href: "/dashboard/account-books",
           enabled: true,

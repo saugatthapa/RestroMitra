@@ -134,6 +134,13 @@ export const NavIcon = {
       <path d="M12 7v5l3 3" />
     </svg>
   ),
+  CashRegister: () => (
+    <svg {...iconProps}>
+      <rect x="3" y="9" width="18" height="11" rx="2" />
+      <path d="M7 9V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v3" />
+      <path d="M8 14h.01M12 14h.01M16 14h.01" />
+    </svg>
+  ),
   Settings: () => (
     <svg {...iconProps}>
       <circle cx="12" cy="12" r="3" />

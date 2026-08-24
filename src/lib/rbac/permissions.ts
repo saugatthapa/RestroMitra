@@ -55,6 +55,14 @@ export const PERMISSIONS = {
   // Account Books (Phase 19)
   MANAGE_ACCOUNT_BOOKS: "manage_account_books",
 
+  // Cash Register / Shift Management (Commercial Launch Phase A.1) — split
+  // the same way expense approval vs. payment is split (see PAY_EXPENSE's
+  // comment): day-to-day open/close/cash-movement is a lower trust tier
+  // than reopening or correcting a shift that's already closed, which
+  // rewrites what was meant to be a locked financial record.
+  MANAGE_CASH_REGISTER: "manage_cash_register",
+  CORRECT_CASH_REGISTER: "correct_cash_register",
+
   // Payroll (Phase 21) — kept separate from every other financial
   // permission above: salary information must stay private (spec
   // section 31), so this is never bundled into MANAGE_EXPENSES or any
@@ -101,6 +109,8 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.APPROVE_EXPENSE]: "Approve or reject a pending expense",
   [PERMISSIONS.PAY_EXPENSE]: "Mark an approved expense as paid",
   [PERMISSIONS.MANAGE_ACCOUNT_BOOKS]: "View and record entries in the Account Books ledger, settle dues",
+  [PERMISSIONS.MANAGE_CASH_REGISTER]: "Open/close a cash register shift and record cash drops, additions, and payouts",
+  [PERMISSIONS.CORRECT_CASH_REGISTER]: "Reopen or correct a closed cash register shift",
   [PERMISSIONS.VIEW_PAYROLL]: "View payroll and salary information",
   [PERMISSIONS.MANAGE_PAYROLL]: "Calculate, approve, and pay employee payroll",
   [PERMISSIONS.VIEW_REPORTS]: "View analytics and reports",
@@ -163,6 +173,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     // don't get it by default (see their lists below), same reasoning as
     // MANAGE_EXPENSES not being on those roles either.
     PERMISSIONS.MANAGE_ACCOUNT_BOOKS,
+    // A manager routinely opens/closes the till and is also the person
+    // trusted to correct a closed shift (see CORRECT_CASH_REGISTER's own
+    // comment) — same trust pairing as APPROVE_EXPENSE/PAY_EXPENSE above.
+    PERMISSIONS.MANAGE_CASH_REGISTER,
+    PERMISSIONS.CORRECT_CASH_REGISTER,
     PERMISSIONS.VIEW_REPORTS,
     PERMISSIONS.VIEW_KDS,
     PERMISSIONS.VIEW_SERVICE_CALLS,
@@ -172,6 +187,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     PERMISSIONS.EDIT_ORDER,
     PERMISSIONS.MANAGE_CUSTOMERS,
     PERMISSIONS.VIEW_SERVICE_CALLS,
+    // The role that actually runs the till day to day — open/close/record
+    // cash movements, but NOT correct a shift after it's closed (that
+    // needs a manager/accountant/owner, see CORRECT_CASH_REGISTER).
+    PERMISSIONS.MANAGE_CASH_REGISTER,
     // Reservations are a front-desk task (answering the phone, walk-ins
     // asking to book ahead) same trust level as the CRM grant just above
     // — not money/profit-sensitive the way MANAGE_EXPENSES is, so cashier
@@ -208,6 +227,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     PERMISSIONS.VIEW_PAYROLL,
     PERMISSIONS.MANAGE_PAYROLL,
     PERMISSIONS.VIEW_REPORTS,
+    // Financial-management role — trusted with correcting a closed
+    // register shift's numbers same as a manager, per spec section 6.
+    PERMISSIONS.MANAGE_CASH_REGISTER,
+    PERMISSIONS.CORRECT_CASH_REGISTER,
   ],
 };
 

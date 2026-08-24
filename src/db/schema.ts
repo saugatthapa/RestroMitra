@@ -1744,6 +1744,222 @@ export const expenses = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Cash Register / Shift Management (Commercial Launch Phase A.1).
+//
+// One `registerShifts` row per open/close cycle of one physical till
+// ("registerName" — most single-counter restaurants never set more than
+// "Main Register", the default, but the schema allows more than one
+// concurrently-open till per branch). The backend is the source of truth
+// for "expected cash," never the UI: expected cash is DERIVED at read time
+// from data that already exists elsewhere rather than duplicated —
+//   + opening float          -> registerShifts.openingCashInPaisa
+//   + net cash sales/refunds -> SUM(payments.amountInPaisa) WHERE method
+//                                = 'cash' for orders at this branch, in
+//                                [openedAt, now/closedAt) — already signed
+//                                (refunds are negative rows), so one SUM
+//                                nets both without a second query
+//   + cash additions         -> SUM from registerCashMovements type='addition'
+//   - cash drops             -> SUM from registerCashMovements type='drop'
+//   - cash payouts           -> SUM from registerCashMovements type='payout'
+//   - cash expenses          -> SUM(expenses.amountInPaisa) WHERE
+//                                paymentMethod = 'cash' AND status = 'paid'
+//                                AND branchId = this branch, paidAt in range
+// See computeExpectedCashInPaisa in src/lib/cash-register.ts — the ONE
+// place this formula is allowed to live, same convention as
+// computeOrderTotals for order pricing.
+//
+// actualCashInPaisa/expectedCashInPaisa/varianceInPaisa are null while a
+// shift is open and are FROZEN (snapshotted) at close time — re-running
+// the same query later (after more orders land against the now-closed
+// shift's time window, which can't happen since new payments can't be
+// backdated into a closed window, but as a defense-in-depth principle)
+// must never silently change a closed shift's recorded numbers. Corrections
+// to a closed shift go through registerShiftCorrections below, never a
+// direct UPDATE that overwrites history.
+// ---------------------------------------------------------------------------
+
+export const registerShiftStatusEnum = pgEnum("register_shift_status", ["open", "closed"]);
+
+export const registerCashMovementTypeEnum = pgEnum("register_cash_movement_type", [
+  // Cash physically added to the till mid-shift (e.g. topping up change).
+  "addition",
+  // Cash physically removed from the till mid-shift for safekeeping (e.g.
+  // a manager pulling large bills to the safe) — still expected to
+  // reconcile at close, just not sitting in the drawer anymore.
+  "drop",
+  // Cash paid out of the till directly for something (a quick supply
+  // run) — distinct from the Expenses module's approval workflow; this is
+  // the "till source of truth," Expenses can separately record the same
+  // spend for categorized reporting if staff choose to.
+  "payout",
+]);
+
+export const registerShifts = pgTable(
+  "register_shifts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    registerName: varchar("register_name", { length: 60 }).notNull().default("Main Register"),
+    status: registerShiftStatusEnum("status").notNull().default("open"),
+    openedByUserId: uuid("opened_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
+    openingCashInPaisa: integer("opening_cash_in_paisa").notNull(),
+    openingNotes: text("opening_notes"),
+    closedByUserId: uuid("closed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    // Staff-counted physical cash at close time.
+    actualCashInPaisa: integer("actual_cash_in_paisa"),
+    // Snapshot of computeExpectedCashInPaisa() at the moment of close —
+    // frozen, never recomputed after the fact (see block comment above).
+    expectedCashInPaisa: integer("expected_cash_in_paisa"),
+    // actualCashInPaisa - expectedCashInPaisa, snapshotted alongside it.
+    varianceInPaisa: integer("variance_in_paisa"),
+    closingNotes: text("closing_notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("register_shifts_restaurant_id_idx").on(table.restaurantId),
+    index("register_shifts_branch_id_idx").on(table.branchId),
+    index("register_shifts_status_idx").on(table.status),
+    // "same cashier can't have two active shifts" — global across
+    // branches, matching the spec's literal wording (a person is either
+    // running a till right now, or they're not).
+    uniqueIndex("register_shifts_one_open_per_cashier")
+      .on(table.openedByUserId)
+      .where(sql`${table.status} = 'open'`),
+    // "same branch/register can't have two active shifts."
+    uniqueIndex("register_shifts_one_open_per_branch_register")
+      .on(table.branchId, table.registerName)
+      .where(sql`${table.status} = 'open'`),
+    check("register_shifts_opening_cash_non_negative", sql`${table.openingCashInPaisa} >= 0`),
+    check(
+      "register_shifts_actual_cash_non_negative",
+      sql`${table.actualCashInPaisa} IS NULL OR ${table.actualCashInPaisa} >= 0`,
+    ),
+    // Closed-shift fields are all-or-nothing: a shift is either fully open
+    // (every closing field null) or fully closed (every closing field
+    // set) — never a half-closed row.
+    check(
+      "register_shifts_closed_fields_consistent",
+      sql`(${table.status} = 'open' AND ${table.closedByUserId} IS NULL AND ${table.closedAt} IS NULL AND ${table.actualCashInPaisa} IS NULL AND ${table.expectedCashInPaisa} IS NULL AND ${table.varianceInPaisa} IS NULL)
+          OR
+          (${table.status} = 'closed' AND ${table.closedAt} IS NOT NULL AND ${table.actualCashInPaisa} IS NOT NULL AND ${table.expectedCashInPaisa} IS NOT NULL AND ${table.varianceInPaisa} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const registerCashMovements = pgTable(
+  "register_cash_movements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    shiftId: uuid("shift_id")
+      .notNull()
+      .references(() => registerShifts.id, { onDelete: "cascade" }),
+    type: registerCashMovementTypeEnum("type").notNull(),
+    // Always a positive magnitude — direction comes from `type`, not sign,
+    // matching purchaseItems/expenses' convention (unlike payments/
+    // ledgerEntries, which are signed). computeExpectedCashInPaisa applies
+    // the sign per type.
+    amountInPaisa: integer("amount_in_paisa").notNull(),
+    reason: varchar("reason", { length: 300 }),
+    recordedByUserId: uuid("recorded_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("register_cash_movements_shift_id_idx").on(table.shiftId),
+    check("register_cash_movements_amount_positive", sql`${table.amountInPaisa} > 0`),
+  ],
+);
+
+// A closed shift's actualCash/expectedCash/variance are never overwritten
+// directly (see registerShifts' block comment) — a manager/owner
+// correction instead appends a row here AND updates the shift's snapshot
+// fields to the corrected values, so the row-level history always shows
+// exactly what changed, by whom, and why, while the shift itself always
+// reflects the current, corrected truth (same "correction preserves the
+// original, never silently rewrites" pattern the spec asks for).
+export const registerShiftCorrections = pgTable(
+  "register_shift_corrections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    shiftId: uuid("shift_id")
+      .notNull()
+      .references(() => registerShifts.id, { onDelete: "cascade" }),
+    correctedByUserId: uuid("corrected_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    previousActualCashInPaisa: integer("previous_actual_cash_in_paisa").notNull(),
+    newActualCashInPaisa: integer("new_actual_cash_in_paisa").notNull(),
+    previousVarianceInPaisa: integer("previous_variance_in_paisa").notNull(),
+    newVarianceInPaisa: integer("new_variance_in_paisa").notNull(),
+    reason: varchar("reason", { length: 300 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("register_shift_corrections_shift_id_idx").on(table.shiftId)],
+);
+
+export const registerShiftsRelations = relations(registerShifts, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [registerShifts.restaurantId],
+    references: [restaurants.id],
+  }),
+  branch: one(branches, {
+    fields: [registerShifts.branchId],
+    references: [branches.id],
+  }),
+  openedBy: one(users, {
+    fields: [registerShifts.openedByUserId],
+    references: [users.id],
+  }),
+  closedBy: one(users, {
+    fields: [registerShifts.closedByUserId],
+    references: [users.id],
+  }),
+  cashMovements: many(registerCashMovements),
+  corrections: many(registerShiftCorrections),
+}));
+
+export const registerCashMovementsRelations = relations(registerCashMovements, ({ one }) => ({
+  shift: one(registerShifts, {
+    fields: [registerCashMovements.shiftId],
+    references: [registerShifts.id],
+  }),
+  recordedBy: one(users, {
+    fields: [registerCashMovements.recordedByUserId],
+    references: [users.id],
+  }),
+}));
+
+export const registerShiftCorrectionsRelations = relations(registerShiftCorrections, ({ one }) => ({
+  shift: one(registerShifts, {
+    fields: [registerShiftCorrections.shiftId],
+    references: [registerShifts.id],
+  }),
+  correctedBy: one(users, {
+    fields: [registerShiftCorrections.correctedByUserId],
+    references: [users.id],
+  }),
+}));
+
+// ---------------------------------------------------------------------------
 // Payroll (Phase 22) — salary info captured per staff member and the
 // payout history when an owner/accountant actually pays it. Deliberately
 // two tables rather than one: staffSalaryConfigs is the standing "what do
