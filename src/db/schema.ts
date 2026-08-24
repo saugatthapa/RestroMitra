@@ -912,6 +912,22 @@ export const payments = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // Commercial Launch Phase A.8 — Financial Reconciliation. Cash is
+    // deliberately EXCLUDED from this (enforced in
+    // src/lib/financial-reconciliation.ts, not here): cash is already
+    // reconciled by Cash Register shift close / Daily Closing (the till is
+    // physically counted against the expected figure). card/mobile_wallet/
+    // other payments never touch a till — the money settles to the
+    // restaurant's bank account separately (often days later, sometimes net
+    // of a gateway/processor fee), and until now nothing in this app ever
+    // tracked whether that settlement was actually confirmed. This is a
+    // deliberately MANUAL checklist column, not automated bank-API
+    // matching (no such integration exists) — see the master spec's own
+    // "report BLOCKED for anything impossible, never fake it" rule: a
+    // human confirms against their own bank/gateway statement and marks
+    // the payment reconciled here.
+    reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
+    reconciledByUserId: uuid("reconciled_by_user_id").references(() => users.id, { onDelete: "set null" }),
   },
   (table) => [
     index("payments_restaurant_id_idx").on(table.restaurantId),
@@ -923,6 +939,11 @@ export const payments = pgTable(
     uniqueIndex("payments_order_client_request_id_unique")
       .on(table.orderId, table.clientRequestId)
       .where(sql`${table.clientRequestId} IS NOT NULL`),
+    check(
+      "payments_reconciled_fields_consistent",
+      sql`(${table.reconciledAt} IS NULL AND ${table.reconciledByUserId} IS NULL)
+          OR (${table.reconciledAt} IS NOT NULL AND ${table.reconciledByUserId} IS NOT NULL)`,
+    ),
   ],
 );
 
@@ -2958,6 +2979,10 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   order: one(orders, { fields: [payments.orderId], references: [orders.id] }),
   recordedBy: one(users, {
     fields: [payments.recordedByUserId],
+    references: [users.id],
+  }),
+  reconciledBy: one(users, {
+    fields: [payments.reconciledByUserId],
     references: [users.id],
   }),
 }));

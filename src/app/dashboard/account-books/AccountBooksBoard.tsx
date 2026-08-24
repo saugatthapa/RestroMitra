@@ -13,6 +13,8 @@ import {
   type LedgerCategory,
   type LedgerDirection,
 } from "@/lib/ledger-categories";
+import { useActiveBranch } from "@/lib/branch-context";
+import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/payments";
 
 type LedgerEntry = {
   id: string;
@@ -41,7 +43,7 @@ type RollupRow = { key: string } & Totals;
 type Rollup = { granularity: "month" | "year"; from: string; to: string; rows: RollupRow[]; totals: Totals };
 type OutstandingDue = LedgerEntry & { remainingInPaisa: number };
 
-type Tab = "day" | "month" | "year" | "due";
+type Tab = "day" | "month" | "year" | "due" | "reconcile";
 
 function base(slug: string) {
   return `/api/restaurants/${slug}`;
@@ -105,6 +107,15 @@ export function AccountBooksBoard({ slug, canManage }: { slug: string; canManage
   const [showAddForm, setShowAddForm] = useState(false);
 
   async function load() {
+    // "reconcile" is its own self-contained view (ReconciliationView below)
+    // with its own data source (payments, not ledger entries) and its own
+    // loading/fetch lifecycle — nothing here to fetch for it. Force
+    // `loading` false so a mid-flight switch away from another tab doesn't
+    // leave this view stuck showing "Loading…" until that fetch settles.
+    if (tab === "reconcile") {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const granularity = tab === "due" ? "day" : tab;
@@ -154,7 +165,7 @@ export function AccountBooksBoard({ slug, canManage }: { slug: string; canManage
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-1 rounded-full border border-neutral-200 bg-white p-1">
-          {(["day", "month", "year", "due"] as Tab[]).map((t) => (
+          {(["day", "month", "year", "due", "reconcile"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -162,13 +173,15 @@ export function AccountBooksBoard({ slug, canManage }: { slug: string; canManage
                 tab === t ? "bg-orange-600 text-white" : "text-neutral-600 hover:bg-neutral-50"
               }`}
             >
-              {t === "due" ? "Due tracking" : `${t} book`}
+              {t === "due" ? "Due tracking" : t === "reconcile" ? "Reconciliation" : `${t} book`}
             </button>
           ))}
         </div>
-        <button onClick={() => setShowAddForm((v) => !v)} className="btn-primary">
-          {showAddForm ? "Cancel" : "+ Add entry"}
-        </button>
+        {tab !== "reconcile" && (
+          <button onClick={() => setShowAddForm((v) => !v)} className="btn-primary">
+            {showAddForm ? "Cancel" : "+ Add entry"}
+          </button>
+        )}
       </div>
 
       {(totalOutstandingReceivable > 0 || totalOutstandingPayable > 0) && (
@@ -212,6 +225,8 @@ export function AccountBooksBoard({ slug, canManage }: { slug: string; canManage
         />
       ) : tab === "due" ? (
         <DueTrackingView slug={slug} dues={outstandingDues} onSettled={load} />
+      ) : tab === "reconcile" ? (
+        <ReconciliationView slug={slug} />
       ) : (
         <RollupView
           rollup={rollup}
@@ -776,5 +791,206 @@ function AddEntryForm({
         {saving ? "Adding…" : "Add entry"}
       </button>
     </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Financial Reconciliation (Commercial Launch Phase A.8)
+// ---------------------------------------------------------------------------
+// Manual checklist, not automated bank matching — see
+// src/lib/financial-reconciliation.ts's module doc comment for the full
+// reasoning. A human checks their own bank/gateway statement outside this
+// app, then marks the matching payment(s) reconciled here. Cash never
+// appears — it's already reconciled via Cash Register / Daily Closing.
+
+type ReconciliationStatusFilter = "unreconciled" | "reconciled" | "all";
+
+type PaymentReconciliationRow = {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  branchId: string;
+  amountInPaisa: number;
+  method: PaymentMethod;
+  note: string | null;
+  createdAt: string;
+  reconciledAt: string | null;
+  reconciledByUserId: string | null;
+};
+
+type ReconciliationSummaryRow = {
+  method: PaymentMethod;
+  reconciledCount: number;
+  reconciledTotalInPaisa: number;
+  unreconciledCount: number;
+  unreconciledTotalInPaisa: number;
+};
+
+function ReconciliationView({ slug }: { slug: string }) {
+  const { branches, activeBranchId } = useActiveBranch();
+  const dateSystem = useDateSystem();
+  const [status, setStatus] = useState<ReconciliationStatusFilter>("unreconciled");
+  const [method, setMethod] = useState<PaymentMethod | "">("");
+  const [rows, setRows] = useState<PaymentReconciliationRow[]>([]);
+  const [summary, setSummary] = useState<ReconciliationSummaryRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const branchName = (branchId: string) => branches.find((b) => b.id === branchId)?.name ?? "—";
+
+  async function load() {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ status });
+      if (activeBranchId) params.set("branchId", activeBranchId);
+      if (method) params.set("method", method);
+      const [listRes, summaryRes] = await Promise.all([
+        apiGet<{ payments: PaymentReconciliationRow[] }>(
+          `${base(slug)}/reconciliation?${params}`,
+        ),
+        apiGet<{ summary: ReconciliationSummaryRow[] }>(
+          `${base(slug)}/reconciliation/summary?${activeBranchId ? `branchId=${activeBranchId}` : ""}`,
+        ),
+      ]);
+      setRows(listRes.payments);
+      setSummary(summaryRes.summary);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load reconciliation data.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, status, method, activeBranchId]);
+
+  async function toggle(row: PaymentReconciliationRow) {
+    try {
+      await apiPost(`${base(slug)}/reconciliation/${row.id}/${row.reconciledAt ? "unmark" : "mark"}`, {});
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update this payment.");
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <p className="text-sm text-neutral-500">
+        Card, mobile wallet, and other non-cash payments — confirm each against your bank or
+        gateway statement, then mark it reconciled. Cash is reconciled separately via Cash
+        Register shift close / Daily Closing.
+      </p>
+
+      {summary.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {summary.map((s) => (
+            <div key={s.method} className="rounded-2xl border border-neutral-200 bg-white p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                {PAYMENT_METHOD_LABELS[s.method]}
+              </p>
+              <p className="mt-1 text-sm text-amber-700">
+                {formatNPR(s.unreconciledTotalInPaisa)} unreconciled
+                <span className="text-neutral-400"> ({s.unreconciledCount})</span>
+              </p>
+              <p className="text-sm text-green-700">
+                {formatNPR(s.reconciledTotalInPaisa)} reconciled
+                <span className="text-neutral-400"> ({s.reconciledCount})</span>
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex gap-1 rounded-full border border-neutral-200 bg-white p-1">
+          {(["unreconciled", "reconciled", "all"] as ReconciliationStatusFilter[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatus(s)}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium capitalize transition ${
+                status === s ? "bg-orange-600 text-white" : "text-neutral-600 hover:bg-neutral-50"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <select
+          value={method}
+          onChange={(e) => setMethod(e.target.value as PaymentMethod | "")}
+          className="input w-auto text-xs"
+        >
+          <option value="">All methods</option>
+          <option value="card">Card</option>
+          <option value="mobile_wallet">Mobile wallet</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-neutral-400">Nothing to show for this filter.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+              <tr>
+                <th className="px-3 py-2">Date</th>
+                <th className="px-3 py-2">Order</th>
+                {branches.length > 1 && <th className="px-3 py-2">Branch</th>}
+                <th className="px-3 py-2">Method</th>
+                <th className="px-3 py-2 text-right">Amount</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="border-t border-neutral-100">
+                  <td className="px-3 py-2 text-neutral-500">
+                    {formatDate(row.createdAt, dateSystem, { withTime: true })}
+                  </td>
+                  <td className="px-3 py-2 text-neutral-700">{row.orderNumber}</td>
+                  {branches.length > 1 && (
+                    <td className="px-3 py-2 text-neutral-500">{branchName(row.branchId)}</td>
+                  )}
+                  <td className="px-3 py-2 text-neutral-500">{PAYMENT_METHOD_LABELS[row.method]}</td>
+                  <td
+                    className={`px-3 py-2 text-right font-medium ${
+                      row.amountInPaisa < 0 ? "text-red-700" : "text-neutral-800"
+                    }`}
+                  >
+                    {formatNPR(row.amountInPaisa)}
+                    {row.amountInPaisa < 0 && <span className="ml-1 text-xs text-neutral-400">(refund)</span>}
+                  </td>
+                  <td className="px-3 py-2">
+                    {row.reconciledAt ? (
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                        Reconciled
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                        Unreconciled
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button onClick={() => toggle(row)} className="btn-secondary text-xs">
+                      {row.reconciledAt ? "Unmark" : "Mark reconciled"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

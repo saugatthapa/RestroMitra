@@ -3,6 +3,12 @@ import { rupeesToPaisa } from "@/lib/money";
 import { PAYMENT_METHODS } from "@/lib/payments";
 import { orderAdjustmentsInputSchema } from "@/lib/validation/order-adjustments";
 
+// Commercial Launch Phase A.8 — cash is excluded at the query-param/lib
+// layer (see financial-reconciliation.ts's assertReconcilableMethod), not
+// here, so an invalid value still gets a clean Zod 400 rather than a
+// method-specific error message from a query-string parse.
+const RECONCILABLE_METHODS = ["card", "mobile_wallet", "other"] as const;
+
 const rupeeAmount = z
   .number()
   .positive("Amount must be greater than zero.")
@@ -93,4 +99,22 @@ export const createStaffOrderSchema = z.object({
       points: z.number().int().min(1),
     })
     .optional(),
+});
+
+// Commercial Launch Phase A.8 — Financial Reconciliation.
+// from/to accept either a bare date ("2026-08-01") or a full ISO timestamp
+// — parsed with `new Date(...)` in financial-reconciliation.ts, which
+// handles both. Validated here only as "a string `new Date` can parse",
+// not against a stricter datetime() format, since a bare date is the more
+// natural thing for a human picking a date range.
+const dateOrDatetime = z
+  .string()
+  .refine((v) => !Number.isNaN(new Date(v).getTime()), "Invalid date.");
+
+export const reconciliationQuerySchema = z.object({
+  branchId: z.string().uuid().optional(),
+  method: z.enum(RECONCILABLE_METHODS).optional(),
+  from: dateOrDatetime.optional(),
+  to: dateOrDatetime.optional(),
+  status: z.enum(["unreconciled", "reconciled", "all"]).optional(),
 });

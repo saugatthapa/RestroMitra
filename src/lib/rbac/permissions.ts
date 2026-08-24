@@ -129,7 +129,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.CREATE_EXPENSE_REQUEST]: "Submit an expense for approval",
   [PERMISSIONS.APPROVE_EXPENSE]: "Approve or reject a pending expense",
   [PERMISSIONS.PAY_EXPENSE]: "Mark an approved expense as paid",
-  [PERMISSIONS.MANAGE_ACCOUNT_BOOKS]: "View and record entries in the Account Books ledger, settle dues",
+  [PERMISSIONS.MANAGE_ACCOUNT_BOOKS]: "View and record entries in the Account Books ledger, settle dues, and reconcile non-cash payments against bank/gateway statements",
   [PERMISSIONS.MANAGE_CASH_REGISTER]: "Open/close a cash register shift and record cash drops, additions, and payouts",
   [PERMISSIONS.CORRECT_CASH_REGISTER]: "Reopen or correct a closed cash register shift",
   [PERMISSIONS.MANAGE_DAILY_CLOSING]:
