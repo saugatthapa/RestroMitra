@@ -791,6 +791,22 @@ export const orderItems = pgTable(
     lineSubtotalInPaisa: integer("line_subtotal_in_paisa").notNull(), // unitPrice * quantity
     addonsTotalInPaisa: integer("addons_total_in_paisa").notNull().default(0),
     lineTotalInPaisa: integer("line_total_in_paisa").notNull(), // subtotal + addons
+    // Commercial-launch Phase A.4 — a FROZEN cost-of-goods snapshot for this
+    // line, written once by deductRecipeStockForOrder at the exact moment
+    // (confirmed -> preparing) stock is actually deducted, using whatever
+    // inventoryItems.costPerUnitInPaisa was THEN. Deliberately never
+    // recomputed afterward — costPerUnitInPaisa is a live weighted-average
+    // that keeps moving with every later purchase, so re-deriving an old
+    // order's COGS from TODAY's cost would silently misstate history (a
+    // purchase price change in August would retroactively change March's
+    // reported margin). NULL means "no recipe was defined for this item at
+    // deduction time" (unknown cost, not zero cost) — the same
+    // coverage-honesty distinction getCogsSummary's itemsWithRecipeCount
+    // already makes, now captured per-line instead of only as an aggregate
+    // ratio. getCogsSummary/getProductProfitability (reports.ts) prefer
+    // this snapshot when present and fall back to a live recipe join only
+    // for pre-migration rows that predate this column.
+    recipeCostInPaisa: integer("recipe_cost_in_paisa"),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -801,6 +817,10 @@ export const orderItems = pgTable(
     // RC audit — app-layer already rejects quantity outside [1, 50]
     // (createStaffOrderSchema et al.); this is the DB-level backstop.
     check("order_items_quantity_positive", sql`${table.quantity} > 0`),
+    check(
+      "order_items_recipe_cost_non_negative",
+      sql`${table.recipeCostInPaisa} IS NULL OR ${table.recipeCostInPaisa} >= 0`,
+    ),
   ],
 );
 

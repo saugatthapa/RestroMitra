@@ -267,6 +267,13 @@
       "when": 1787589942833,
       "tag": "0037_supplier_dues",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1787590902745,
+      "tag": "0038_order_item_recipe_cost_snapshot",
+      "breakpoints": true
     }
   ]
 }

@@ -239,8 +239,19 @@ export async function applyPurchaseCosting(
  * once per order — no separate "already deducted" flag needed.
  *
  * Order items with no menuItemId (the menu item was deleted since the
- * order was placed) or no recipe defined are silently skipped — recipes
- * are opt-in per menu item, not a hard requirement to take an order.
+ * order was placed) or no recipe defined are silently skipped for stock
+ * deduction — recipes are opt-in per menu item, not a hard requirement to
+ * take an order.
+ *
+ * Commercial-launch Phase A.4 — this is ALSO the one moment
+ * orderItems.recipeCostInPaisa gets written: the line's COGS, computed
+ * from whatever inventoryItems.costPerUnitInPaisa is right now (the same
+ * formula getCogsSummary's SQL and the recipe-preview route both use:
+ * quantity * quantityPerServingMilliunits * costPerUnitInPaisa / 1000,
+ * summed across every recipe line), then frozen — never recomputed later.
+ * Left NULL (not zero) for an item with no menuItemId or no recipe, so a
+ * report reading this column can still tell "genuinely free ingredients"
+ * apart from "cost unknown, no recipe existed."
  */
 export async function deductRecipeStockForOrder(
   tx: Transaction,
@@ -260,12 +271,23 @@ export async function deductRecipeStockForOrder(
     if (!item.menuItemId) continue;
 
     const recipe = await tx
-      .select()
+      .select({
+        inventoryItemId: recipeItems.inventoryItemId,
+        quantityPerServingMilliunits: recipeItems.quantityPerServingMilliunits,
+        costPerUnitInPaisa: inventoryItems.costPerUnitInPaisa,
+      })
       .from(recipeItems)
+      .innerJoin(inventoryItems, eq(inventoryItems.id, recipeItems.inventoryItemId))
       .where(eq(recipeItems.menuItemId, item.menuItemId));
 
+    if (recipe.length === 0) continue; // recipeCostInPaisa stays NULL — unknown, not zero
+
+    let recipeCostInPaisa = 0;
     for (const line of recipe) {
       const deductionMilliunits = line.quantityPerServingMilliunits * item.quantity;
+      recipeCostInPaisa += Math.round(
+        (line.quantityPerServingMilliunits * item.quantity * line.costPerUnitInPaisa) / 1000,
+      );
       if (deductionMilliunits === 0) continue;
 
       await recordStockMovement(tx, {
@@ -280,6 +302,8 @@ export async function deductRecipeStockForOrder(
         recordedByUserId: params.recordedByUserId ?? null,
       });
     }
+
+    await tx.update(orderItems).set({ recipeCostInPaisa }).where(eq(orderItems.id, item.id));
   }
 }
 

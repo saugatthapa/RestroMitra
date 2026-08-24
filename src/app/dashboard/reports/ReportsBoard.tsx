@@ -145,13 +145,30 @@ const PRESETS = [
   { label: "This month", from: () => firstOfMonthIso(), to: () => todayIso() },
 ] as const;
 
-export function ReportsBoard({ slug }: { slug: string }) {
+type ProductProfitabilityRow = {
+  name: string;
+  quantitySold: number;
+  revenueInPaisa: number;
+  cogsInPaisa: number;
+  grossProfitInPaisa: number;
+  marginPercent: number | null;
+  hasFullCostCoverage: boolean;
+};
+
+type ProfitabilitySortKey = "revenue" | "quantity" | "cogs" | "grossProfit" | "margin";
+
+export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewProfit: boolean }) {
   const [from, setFrom] = useState(daysAgoIso(29));
   const [to, setTo] = useState(todayIso());
   const [activePreset, setActivePreset] = useState<string | null>("Last 30 days");
   const [data, setData] = useState<ReportSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [products, setProducts] = useState<ProductProfitabilityRow[] | null>(null);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<ProfitabilitySortKey>("revenue");
+  const [sortDesc, setSortDesc] = useState(true);
   const dateSystem = useDateSystem();
   // Header's BranchSwitcher — see BranchProvider's own comment for why this
   // is a client-side context read rather than a prop threaded down from the
@@ -184,6 +201,64 @@ export function ReportsBoard({ slug }: { slug: string }) {
       cancelled = true;
     };
   }, [slug, from, to, activeBranchId]);
+
+  // Fetched separately from the main summary (its own loading/error state)
+  // since it's gated behind VIEW_PROFIT specifically — a role that can see
+  // this Reports page (VIEW_REPORTS) but not profit data never issues this
+  // request at all, avoiding a guaranteed 403 for them.
+  useEffect(() => {
+    if (!canViewProfit) {
+      setProductsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    async function load() {
+      setProductsLoading(true);
+      try {
+        const params = new URLSearchParams({ from, to });
+        if (activeBranchId) params.set("branchId", activeBranchId);
+        const res = await apiGet<{ products: ProductProfitabilityRow[] }>(
+          `${base(slug)}/reports/product-profitability?${params}`,
+        );
+        if (!cancelled) {
+          setProducts(res.products);
+          setProductsError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setProductsError(err instanceof ApiError ? err.message : "Could not load product profitability.");
+        }
+      } finally {
+        if (!cancelled) setProductsLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, from, to, activeBranchId, canViewProfit]);
+
+  const sortedProducts = useMemo(() => {
+    if (!products) return [];
+    const key: Record<ProfitabilitySortKey, (r: ProductProfitabilityRow) => number> = {
+      revenue: (r) => r.revenueInPaisa,
+      quantity: (r) => r.quantitySold,
+      cogs: (r) => r.cogsInPaisa,
+      grossProfit: (r) => r.grossProfitInPaisa,
+      margin: (r) => r.marginPercent ?? -Infinity,
+    };
+    const pick = key[sortKey];
+    return [...products].sort((a, b) => (sortDesc ? pick(b) - pick(a) : pick(a) - pick(b)));
+  }, [products, sortKey, sortDesc]);
+
+  function toggleSort(key: ProfitabilitySortKey) {
+    if (sortKey === key) {
+      setSortDesc((d) => !d);
+    } else {
+      setSortKey(key);
+      setSortDesc(true);
+    }
+  }
 
   function applyPreset(preset: (typeof PRESETS)[number]) {
     setFrom(preset.from());
@@ -606,6 +681,65 @@ export function ReportsBoard({ slug }: { slug: string }) {
                 )}
               </div>
             </div>
+
+            {canViewProfit && (
+              <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+                <h2 className="mb-3 text-sm font-semibold text-neutral-900">Product-level profitability</h2>
+                {productsError && (
+                  <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{productsError}</p>
+                )}
+                {productsLoading ? (
+                  <p className="text-sm text-neutral-400">Loading…</p>
+                ) : !products || products.length === 0 ? (
+                  <p className="text-sm text-neutral-400">No completed orders in this range.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="text-left text-xs uppercase tracking-wide text-neutral-500">
+                        <tr>
+                          <th className="pb-2">Item</th>
+                          <ProfitabilitySortHeader label="Qty" sortKeyName="quantity" {...{ sortKey, sortDesc, toggleSort }} />
+                          <ProfitabilitySortHeader label="Revenue" sortKeyName="revenue" {...{ sortKey, sortDesc, toggleSort }} />
+                          <ProfitabilitySortHeader label="COGS" sortKeyName="cogs" {...{ sortKey, sortDesc, toggleSort }} />
+                          <ProfitabilitySortHeader label="Gross profit" sortKeyName="grossProfit" {...{ sortKey, sortDesc, toggleSort }} />
+                          <ProfitabilitySortHeader label="Margin" sortKeyName="margin" {...{ sortKey, sortDesc, toggleSort }} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedProducts.map((row) => (
+                          <tr key={row.name} className="border-t border-neutral-100">
+                            <td className="py-1.5 text-neutral-800">
+                              {row.name}
+                              {!row.hasFullCostCoverage && (
+                                <span
+                                  className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700"
+                                  title="At least one unit sold in this range had no recipe defined — COGS/margin here is a partial figure, not the full cost."
+                                >
+                                  Partial cost
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-1.5 text-right text-neutral-600">{row.quantitySold}</td>
+                            <td className="py-1.5 text-right text-neutral-900">{formatRupees(row.revenueInPaisa)}</td>
+                            <td className="py-1.5 text-right text-neutral-600">{formatRupees(row.cogsInPaisa)}</td>
+                            <td
+                              className={`py-1.5 text-right font-medium ${
+                                row.grossProfitInPaisa < 0 ? "text-red-700" : "text-neutral-900"
+                              }`}
+                            >
+                              {formatRupees(row.grossProfitInPaisa)}
+                            </td>
+                            <td className="py-1.5 text-right text-neutral-600">
+                              {row.marginPercent === null ? "—" : `${row.marginPercent.toFixed(1)}%`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -637,5 +771,37 @@ function BreakdownBar({
         />
       </div>
     </div>
+  );
+}
+
+/** A clickable column header for the product-profitability table — click
+ * toggles ascending/descending on that column, matching the master
+ * prompt's "sortable" requirement without needing server-side sort params
+ * (every field the UI could sort by is already present in each row). */
+function ProfitabilitySortHeader({
+  label,
+  sortKeyName,
+  sortKey,
+  sortDesc,
+  toggleSort,
+}: {
+  label: string;
+  sortKeyName: ProfitabilitySortKey;
+  sortKey: ProfitabilitySortKey;
+  sortDesc: boolean;
+  toggleSort: (key: ProfitabilitySortKey) => void;
+}) {
+  const active = sortKey === sortKeyName;
+  return (
+    <th className="pb-2 text-right">
+      <button
+        type="button"
+        onClick={() => toggleSort(sortKeyName)}
+        className={`inline-flex items-center gap-0.5 ${active ? "text-neutral-900" : "text-neutral-500"} hover:text-neutral-900`}
+      >
+        {label}
+        {active && <span className="text-[10px]">{sortDesc ? "▼" : "▲"}</span>}
+      </button>
+    </th>
   );
 }

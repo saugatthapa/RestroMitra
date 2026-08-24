@@ -691,6 +691,26 @@ export async function getExpenseCategoryBreakdown(
   return rows.map((r) => ({ category: r.category, totalInPaisa: Number(r.totalInPaisa) }));
 }
 
+/**
+ * Excludes order_items belonging to a FULLY refunded order (net payments
+ * <= 0 AND at least one refund recorded — see the payments-vs-revenue
+ * comment on getSalesSummary for why net-paid, not orders.status, is the
+ * signal). Shared by getCogsSummary and getProductProfitability so a
+ * line's revenue and its COGS always agree on which orders count — see
+ * getCogsSummary's own comment for the partial-refund caveat (not handled
+ * here either, for the same reason: no line-item link between a refund and
+ * specific order_items to prorate against).
+ */
+function excludeFullyRefundedOrders() {
+  return sql`NOT EXISTS (
+    SELECT 1 FROM ${payments}
+    WHERE ${payments.orderId} = ${orders.id}
+    GROUP BY ${payments.orderId}
+    HAVING SUM(${payments.amountInPaisa}) <= 0
+       AND SUM(CASE WHEN ${payments.amountInPaisa} < 0 THEN 1 ELSE 0 END) > 0
+  )`;
+}
+
 export type CogsSummary = {
   cogsInPaisa: number;
   /** How many distinct menu items sold in this range actually had a
@@ -735,6 +755,19 @@ export type CogsSummary = {
  * the exact paisa (unlike a payment or purchase line total) — a
  * rounding difference of a paisa or two across many order lines is
  * immaterial here.
+ *
+ * Phase A.4 — each line PREFERS orderItems.recipeCostInPaisa, the frozen
+ * snapshot written by deductRecipeStockForOrder at the moment stock was
+ * actually deducted (see that function's own comment for why: costPerUnit
+ * is a live weighted average, so recomputing an old order's COGS from
+ * TODAY's cost would silently misstate history). Only when that snapshot
+ * is NULL — an order placed before this column existed, or an item that
+ * genuinely had no recipe at deduction time — does this fall back to the
+ * live recipeItems/inventoryItems join, i.e. exactly the query this
+ * function ran before Phase A.4. Postgres's COALESCE short-circuits (per
+ * its own docs: arguments after the first non-null aren't evaluated), so
+ * the correlated subquery below only runs for that shrinking minority of
+ * rows, not for every line.
  */
 export async function getCogsSummary(
   restaurantId: string,
@@ -744,20 +777,27 @@ export async function getCogsSummary(
 ): Promise<CogsSummary> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
+  const liveRecipeCostSubquery = sql`(
+    SELECT round(sum(${orderItems.quantity} * ${recipeItems.quantityPerServingMilliunits} * ${inventoryItems.costPerUnitInPaisa}) / 1000.0)
+    FROM ${recipeItems}
+    INNER JOIN ${inventoryItems} ON ${inventoryItems.id} = ${recipeItems.inventoryItemId}
+    WHERE ${recipeItems.menuItemId} = ${orderItems.menuItemId}
+  )`;
+  const hasRecipeNowSubquery = sql`EXISTS (SELECT 1 FROM ${recipeItems} WHERE ${recipeItems.menuItemId} = ${orderItems.menuItemId})`;
+
   const [row] = await db
     .select({
       cogsInPaisa: sql<string>`
-        coalesce(sum(case when ${recipeItems.id} is not null
-          then round(${orderItems.quantity} * ${recipeItems.quantityPerServingMilliunits} * ${inventoryItems.costPerUnitInPaisa} / 1000.0)
-          else 0 end), 0)
+        coalesce(sum(coalesce(${orderItems.recipeCostInPaisa}, ${liveRecipeCostSubquery}, 0)), 0)
       `,
       soldItemCount: sql<string>`count(distinct ${orderItems.menuItemId})`,
-      itemsWithRecipeCount: sql<string>`count(distinct case when ${recipeItems.id} is not null then ${orderItems.menuItemId} end)`,
+      itemsWithRecipeCount: sql<string>`
+        count(distinct case when ${orderItems.recipeCostInPaisa} is not null or ${hasRecipeNowSubquery}
+          then ${orderItems.menuItemId} end)
+      `,
     })
     .from(orderItems)
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
-    .leftJoin(recipeItems, eq(recipeItems.menuItemId, orderItems.menuItemId))
-    .leftJoin(inventoryItems, eq(inventoryItems.id, recipeItems.inventoryItemId))
     .where(
       and(
         eq(orders.restaurantId, restaurantId),
@@ -777,13 +817,7 @@ export async function getCogsSummary(
         // line-item link between a refund and specific order_items, so
         // there's no correct way to reduce COGS proportionally — this is
         // an honest, documented limitation, not silently glossed over.
-        sql`NOT EXISTS (
-          SELECT 1 FROM ${payments}
-          WHERE ${payments.orderId} = ${orders.id}
-          GROUP BY ${payments.orderId}
-          HAVING SUM(${payments.amountInPaisa}) <= 0
-             AND SUM(CASE WHEN ${payments.amountInPaisa} < 0 THEN 1 ELSE 0 END) > 0
-        )`,
+        excludeFullyRefundedOrders(),
       ),
     );
 
@@ -792,6 +826,94 @@ export async function getCogsSummary(
     soldItemCount: Number(row?.soldItemCount ?? 0),
     itemsWithRecipeCount: Number(row?.itemsWithRecipeCount ?? 0),
   };
+}
+
+export type ProductProfitabilityRow = {
+  name: string;
+  quantitySold: number;
+  revenueInPaisa: number;
+  cogsInPaisa: number;
+  grossProfitInPaisa: number;
+  /** Null when revenueInPaisa is 0 — an undefined percentage, not a
+   *  misleading 0% or "-Infinity%". */
+  marginPercent: number | null;
+  /** Same coverage-honesty signal as CogsSummary.itemsWithRecipeCount,
+   *  but per row here: false means this item's cogsInPaisa (and therefore
+   *  grossProfitInPaisa/marginPercent) is a partial/unknown-cost figure —
+   *  no recipe was ever defined for at least one unit sold in this range. */
+  hasFullCostCoverage: boolean;
+};
+
+/**
+ * Commercial-launch Phase A.4 — Product-Level Profitability: per menu item
+ * (grouped by name snapshot, same historical-stability convention
+ * getTopMenuItems already uses — a rename/deletion after the sale doesn't
+ * rewrite which name a past order's revenue is attributed to), how much it
+ * sold for, what it cost (same snapshot-preferred/live-fallback formula as
+ * getCogsSummary — see that function's own comment), and the resulting
+ * gross profit / margin %. Ordered by revenue desc by default; the
+ * dashboard table itself supports re-sorting by any column, so this
+ * doesn't need a `sortBy` parameter — every field the UI could sort by is
+ * already present in each row.
+ *
+ * Same fully-refunded-order exclusion as getCogsSummary (via
+ * excludeFullyRefundedOrders) — applied here to BOTH revenue and cogs, so
+ * a reversed sale never appears as if it still generated (or cost)
+ * anything.
+ */
+export async function getProductProfitability(
+  restaurantId: string,
+  range: ReportDateRange,
+  timezone: string,
+  branchId?: string,
+): Promise<ProductProfitabilityRow[]> {
+  const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
+
+  const liveRecipeCostSubquery = sql`(
+    SELECT round(sum(${orderItems.quantity} * ${recipeItems.quantityPerServingMilliunits} * ${inventoryItems.costPerUnitInPaisa}) / 1000.0)
+    FROM ${recipeItems}
+    INNER JOIN ${inventoryItems} ON ${inventoryItems.id} = ${recipeItems.inventoryItemId}
+    WHERE ${recipeItems.menuItemId} = ${orderItems.menuItemId}
+  )`;
+  const hasRecipeNowSubquery = sql`EXISTS (SELECT 1 FROM ${recipeItems} WHERE ${recipeItems.menuItemId} = ${orderItems.menuItemId})`;
+
+  const rows = await db
+    .select({
+      name: orderItems.menuItemNameSnapshot,
+      quantitySold: sql<string>`sum(${orderItems.quantity})`,
+      revenueInPaisa: sql<string>`sum(${orderItems.lineTotalInPaisa})`,
+      cogsInPaisa: sql<string>`coalesce(sum(coalesce(${orderItems.recipeCostInPaisa}, ${liveRecipeCostSubquery}, 0)), 0)`,
+      hasFullCostCoverage: sql<boolean>`bool_and(${orderItems.recipeCostInPaisa} is not null or ${hasRecipeNowSubquery})`,
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(
+      and(
+        eq(orders.restaurantId, restaurantId),
+        eq(orders.status, "completed"),
+        gte(orders.placedAt, dayStart),
+        lt(orders.placedAt, dayAfterEnd),
+        ...(branchId ? [eq(orders.branchId, branchId)] : []),
+        excludeFullyRefundedOrders(),
+      ),
+    )
+    .groupBy(orderItems.menuItemNameSnapshot)
+    .orderBy(desc(sql`sum(${orderItems.lineTotalInPaisa})`));
+
+  return rows.map((r) => {
+    const revenueInPaisa = Number(r.revenueInPaisa);
+    const cogsInPaisa = Number(r.cogsInPaisa);
+    const grossProfitInPaisa = revenueInPaisa - cogsInPaisa;
+    return {
+      name: r.name,
+      quantitySold: Number(r.quantitySold),
+      revenueInPaisa,
+      cogsInPaisa,
+      grossProfitInPaisa,
+      marginPercent: revenueInPaisa > 0 ? Math.round((grossProfitInPaisa / revenueInPaisa) * 10000) / 100 : null,
+      hasFullCostCoverage: r.hasFullCostCoverage,
+    };
+  });
 }
 
 export type WastageSummary = {

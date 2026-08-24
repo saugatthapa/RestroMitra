@@ -1,0 +1,2 @@
+ALTER TABLE "order_items" ADD COLUMN "recipe_cost_in_paisa" integer;--> statement-breakpoint
+ALTER TABLE "order_items" ADD CONSTRAINT "order_items_recipe_cost_non_negative" CHECK ("order_items"."recipe_cost_in_paisa" IS NULL OR "order_items"."recipe_cost_in_paisa" >= 0);

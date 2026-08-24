@@ -26,7 +26,10 @@ export default async function ReportsPage() {
           Sales, expenses, and profit for {active.name}.
         </p>
       </div>
-      <ReportsBoard slug={active.slug} />
+      <ReportsBoard
+        slug={active.slug}
+        canViewProfit={roleHasPermission(active.role, PERMISSIONS.VIEW_PROFIT)}
+      />
     </div>
   );
 }
