@@ -8,9 +8,15 @@ import { updateCustomerSchema } from "@/lib/validation/customers";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { reconcileBirthdayBonus } from "@/lib/loyalty";
+import { getCustomerOutstandingBalance, listLedgerEntries } from "@/lib/ledger";
 
 const RECENT_ORDERS_LIMIT = 25;
 const RECENT_LEDGER_LIMIT = 50;
+// Commercial Launch Phase B.5 — Customer Credit. Recent credit/tab history
+// shown on the CRM profile — same "one call rather than three round trips"
+// reasoning as the loyalty ledger below, not a paginated ledger view (that
+// already exists at Account Books' own MANAGE_ACCOUNT_BOOKS-gated screen).
+const RECENT_CREDIT_LIMIT = 50;
 
 /**
  * Customer detail view: the CRM record itself, plus a recent-order history
@@ -48,7 +54,7 @@ export async function GET(
       if (refreshed) customer = refreshed;
     }
 
-    const [recentOrders, loyaltyLedger] = await Promise.all([
+    const [recentOrders, loyaltyLedger, outstandingCreditInPaisa, creditLedger] = await Promise.all([
       db.query.orders.findMany({
         where: (o, { and: dAnd, eq: dEq }) =>
           dAnd(dEq(o.customerId, customerId), dEq(o.restaurantId, restaurantId)),
@@ -68,9 +74,18 @@ export async function GET(
         orderBy: (t, { desc }) => [desc(t.createdAt)],
         limit: RECENT_LEDGER_LIMIT,
       }),
+      // Commercial Launch Phase B.5 — Customer Credit.
+      getCustomerOutstandingBalance(restaurantId, customerId),
+      listLedgerEntries(restaurantId, { customerId }, RECENT_CREDIT_LIMIT),
     ]);
 
-    return NextResponse.json({ customer, recentOrders, loyaltyLedger });
+    return NextResponse.json({
+      customer,
+      recentOrders,
+      loyaltyLedger,
+      outstandingCreditInPaisa,
+      creditLedger,
+    });
   } catch (err) {
     return toErrorResponse(err);
   }
@@ -117,6 +132,7 @@ export async function PATCH(
         ...(data.dateOfBirth !== undefined ? { dateOfBirth: data.dateOfBirth || null } : {}),
         ...(data.notes !== undefined ? { notes: data.notes || null } : {}),
         ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+        ...(data.creditLimit !== undefined ? { creditLimitInPaisa: data.creditLimit } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(customers.id, customerId), eq(customers.restaurantId, restaurantId)))

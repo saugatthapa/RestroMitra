@@ -330,6 +330,13 @@
       "when": 1787665336995,
       "tag": "0046_mfa",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1787667431629,
+      "tag": "0047_customer_credit",
+      "breakpoints": true
     }
   ]
 }

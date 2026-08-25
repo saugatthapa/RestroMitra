@@ -32,6 +32,7 @@ export default async function CustomersPage() {
       <CustomersBoard
         slug={active.slug}
         canManageCustomers={roleHasPermission(active.role, PERMISSIONS.MANAGE_CUSTOMERS)}
+        canManageAccountBooks={roleHasPermission(active.role, PERMISSIONS.MANAGE_ACCOUNT_BOOKS)}
       />
     </div>
   );

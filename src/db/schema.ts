@@ -1491,6 +1491,25 @@ export const ledgerEntries = pgTable(
     // "expense" | "purchase" | "due_settlement"); null for a manual entry.
     referenceType: varchar("reference_type", { length: 40 }),
     referenceId: uuid("reference_id"),
+    // Commercial Launch Phase B.5 — Customer Credit. Links this entry to a
+    // specific CRM customer record, IN ADDITION TO counterpartyName (which
+    // stays free text for the common case of no CRM record at all) —
+    // populated automatically when a completed order that finishes unpaid/
+    // partially paid is linked to a customer (see recordSalesLedgerEntry's
+    // call site in orders/[orderId]/status/route.ts), or manually when a
+    // staff member links a manual Account Books entry to a customer. This
+    // is deliberately NOT a second ledger/table for "customer credit" — a
+    // customer's outstanding balance is just "their outstanding
+    // ledgerEntries rows, summed" (see getCustomerOutstandingBalance/
+    // settleCustomerCredit in ledger.ts), reusing the exact same
+    // dueStatus/settledAmountInPaisa/settleLedgerDue machinery Account
+    // Books' own due tracking already has, rather than duplicating it.
+    // onDelete "set null" rather than "cascade": a customer record is never
+    // hard-deleted anywhere in this app (see customers PATCH route's own
+    // comment — it's a soft isActive toggle), but financial history must
+    // never disappear even in the hypothetical case a customer row is
+    // removed some other way.
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
     dueStatus: ledgerDueStatusEnum("due_status").notNull().default("none"),
     // Running total of what's been collected/paid against an outstanding
     // entry via settleLedgerDue — supports partial settlement (a customer
@@ -1513,6 +1532,7 @@ export const ledgerEntries = pgTable(
     index("ledger_entries_restaurant_id_idx").on(table.restaurantId),
     index("ledger_entries_entry_date_idx").on(table.entryDate),
     index("ledger_entries_due_status_idx").on(table.dueStatus),
+    index("ledger_entries_customer_id_idx").on(table.customerId),
   ],
 );
 
@@ -2085,6 +2105,19 @@ export const customers = pgTable(
     longestVisitStreak: integer("longest_visit_streak").notNull().default(0),
     lastVisitDate: date("last_visit_date"),
     lastBirthdayBonusYear: integer("last_birthday_bonus_year"),
+    // Commercial Launch Phase B.5 — Customer Credit. Null = no limit set
+    // (the default; credit is tracked but never capped). When set, it's an
+    // ADVISORY ceiling only — surfaced in the CRM UI as a warning once a
+    // customer's outstanding ledger balance (see getCustomerOutstandingBalance
+    // in ledger.ts) reaches or exceeds it, not a hard block on order
+    // completion. A hard block would mean the order-completion status
+    // transition (orders/[orderId]/status/route.ts) can newly fail for a
+    // reason unrelated to the order itself, which is a much more invasive
+    // change than this feature calls for — see that route's own "->completed
+    // is also the single point a sale is booked into Account Books" comment;
+    // completion always succeeds, same as today, and staff see the warning
+    // on the customer's own profile to decide for themselves.
+    creditLimitInPaisa: integer("credit_limit_in_paisa"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

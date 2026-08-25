@@ -22,6 +22,7 @@ type Customer = {
   lifetimePointsEarned: number;
   totalOrdersCount: number;
   totalSpentInPaisa: number;
+  creditLimitInPaisa: number | null;
   isActive: boolean;
   createdAt: string;
 };
@@ -38,6 +39,22 @@ type LoyaltyLedgerEntry = {
   id: string;
   type: "earn" | "redeem" | "adjustment";
   pointsDelta: number;
+  note: string | null;
+  createdAt: string;
+};
+
+// Commercial Launch Phase B.5 — Customer Credit. Mirrors the shape
+// AccountBooksBoard.tsx's own LedgerEntry type uses — same API response
+// shape (listLedgerEntries), just the fields this view actually reads.
+type CreditLedgerEntry = {
+  id: string;
+  entryDate: string;
+  direction: "credit" | "debit";
+  category: string;
+  amountInPaisa: number;
+  settledAmountInPaisa: number;
+  dueStatus: "none" | "outstanding" | "settled";
+  description: string;
   note: string | null;
   createdAt: string;
 };
@@ -66,9 +83,11 @@ function tierBadgeClass(tier: string) {
 export function CustomersBoard({
   slug,
   canManageCustomers,
+  canManageAccountBooks,
 }: {
   slug: string;
   canManageCustomers: boolean;
+  canManageAccountBooks: boolean;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -82,7 +101,12 @@ export function CustomersBoard({
 
   if (selectedId) {
     return (
-      <CustomerDetail slug={slug} customerId={selectedId} onBack={() => setSelectedId(null)} />
+      <CustomerDetail
+        slug={slug}
+        customerId={selectedId}
+        canManageAccountBooks={canManageAccountBooks}
+        onBack={() => setSelectedId(null)}
+      />
     );
   }
 
@@ -317,15 +341,19 @@ function AddCustomerForm({ slug, onAdded }: { slug: string; onAdded: () => void 
 function CustomerDetail({
   slug,
   customerId,
+  canManageAccountBooks,
   onBack,
 }: {
   slug: string;
   customerId: string;
+  canManageAccountBooks: boolean;
   onBack: () => void;
 }) {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [ledger, setLedger] = useState<LoyaltyLedgerEntry[]>([]);
+  const [outstandingCreditInPaisa, setOutstandingCreditInPaisa] = useState(0);
+  const [creditLedger, setCreditLedger] = useState<CreditLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAdjust, setShowAdjust] = useState(false);
@@ -337,10 +365,14 @@ function CustomerDetail({
         customer: Customer;
         recentOrders: OrderSummary[];
         loyaltyLedger: LoyaltyLedgerEntry[];
+        outstandingCreditInPaisa: number;
+        creditLedger: CreditLedgerEntry[];
       }>(`${base(slug)}/customers/${customerId}`);
       setCustomer(res.customer);
       setOrders(res.recentOrders);
       setLedger(res.loyaltyLedger);
+      setOutstandingCreditInPaisa(res.outstandingCreditInPaisa);
+      setCreditLedger(res.creditLedger);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not load customer.");
@@ -414,6 +446,26 @@ function CustomerDetail({
           <Stat label="Orders" value={String(customer.totalOrdersCount)} />
           <Stat label="Total spent" value={formatRupees(customer.totalSpentInPaisa)} />
         </div>
+        {(outstandingCreditInPaisa > 0 || customer.creditLimitInPaisa !== null) && (
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat
+              label="Outstanding tab"
+              value={formatRupees(outstandingCreditInPaisa)}
+              tone={
+                outstandingCreditInPaisa > 0 &&
+                customer.creditLimitInPaisa !== null &&
+                outstandingCreditInPaisa >= customer.creditLimitInPaisa
+                  ? "warning"
+                  : outstandingCreditInPaisa > 0
+                    ? "info"
+                    : undefined
+              }
+            />
+            {customer.creditLimitInPaisa !== null && (
+              <Stat label="Credit limit" value={formatRupees(customer.creditLimitInPaisa)} />
+            )}
+          </div>
+        )}
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat
             label="Visit streak"
@@ -448,6 +500,15 @@ function CustomerDetail({
           dateOfBirth={customer.dateOfBirth}
           onSaved={load}
         />
+
+        {canManageAccountBooks && (
+          <CreditLimitEditor
+            slug={slug}
+            customerId={customerId}
+            creditLimitInPaisa={customer.creditLimitInPaisa}
+            onSaved={load}
+          />
+        )}
 
         <div className="mt-4 flex flex-wrap gap-2">
           <button onClick={() => setShowAdjust((v) => !v)} className="btn-secondary">
@@ -512,6 +573,243 @@ function CustomerDetail({
           )}
         </div>
       </div>
+
+      <CreditTabSection
+        slug={slug}
+        customerId={customerId}
+        outstandingCreditInPaisa={outstandingCreditInPaisa}
+        creditLedger={creditLedger}
+        canManageAccountBooks={canManageAccountBooks}
+        onSettled={load}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Customer Credit / Tab (Commercial Launch Phase B.5)
+// ---------------------------------------------------------------------------
+// A customer's "tab" is just their own outstanding Account Books ledger
+// entries (see getCustomerOutstandingBalance/settleCustomerCredit in
+// ledger.ts) — an order completed unpaid/partially paid while linked to
+// this customer lands here automatically, with zero extra staff action.
+// Settling reuses the exact same due-settlement machinery Account Books'
+// own "due tracking" tab already has, just scoped to one customer and
+// applied oldest-charge-first for a single lump-sum payment.
+
+function CreditTabSection({
+  slug,
+  customerId,
+  outstandingCreditInPaisa,
+  creditLedger,
+  canManageAccountBooks,
+  onSettled,
+}: {
+  slug: string;
+  customerId: string;
+  outstandingCreditInPaisa: number;
+  creditLedger: CreditLedgerEntry[];
+  canManageAccountBooks: boolean;
+  onSettled: () => void;
+}) {
+  const [showSettle, setShowSettle] = useState(false);
+  const dateSystem = useDateSystem();
+
+  if (creditLedger.length === 0) {
+    return null; // No credit history at all for this customer — nothing to show.
+  }
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-neutral-900">Customer tab (credit)</h3>
+        {canManageAccountBooks && outstandingCreditInPaisa > 0 && (
+          <button onClick={() => setShowSettle((v) => !v)} className="btn-secondary text-xs">
+            {showSettle ? "Cancel" : "Record payment"}
+          </button>
+        )}
+      </div>
+      <p className="mb-3 text-xs text-neutral-500">
+        Orders billed to this customer that finished unpaid or partly paid — settling here reuses
+        Account Books&apos; own due-tracking, applied to the oldest charge first.
+      </p>
+
+      {showSettle && (
+        <SettleCreditForm
+          slug={slug}
+          customerId={customerId}
+          outstandingCreditInPaisa={outstandingCreditInPaisa}
+          onSettled={() => {
+            setShowSettle(false);
+            onSettled();
+          }}
+        />
+      )}
+
+      <ul className="mt-3 divide-y divide-neutral-100 text-sm">
+        {creditLedger.map((entry) => (
+          <li key={entry.id} className="flex items-center justify-between py-2">
+            <span>
+              <span className="text-neutral-400">
+                {new Date(`${entry.entryDate}T00:00:00Z`).toLocaleDateString(
+                  dateSystem === "BS" ? undefined : "en-NP",
+                  { day: "numeric", month: "short", timeZone: "UTC" },
+                )}
+              </span>{" "}
+              {entry.description}
+              {entry.dueStatus === "outstanding" && (
+                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                  Outstanding
+                </span>
+              )}
+              {entry.dueStatus === "settled" && entry.category === "sales" && (
+                <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-500">
+                  Settled
+                </span>
+              )}
+            </span>
+            <span
+              className={
+                entry.category === "due_settlement"
+                  ? "text-green-700"
+                  : entry.dueStatus === "outstanding"
+                    ? "text-amber-700"
+                    : "text-neutral-700"
+              }
+            >
+              {formatRupees(entry.amountInPaisa)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SettleCreditForm({
+  slug,
+  customerId,
+  outstandingCreditInPaisa,
+  onSettled,
+}: {
+  slug: string;
+  customerId: string;
+  outstandingCreditInPaisa: number;
+  onSettled: () => void;
+}) {
+  const [amount, setAmount] = useState(String(outstandingCreditInPaisa / 100));
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/customers/${customerId}/credit/settle`, {
+        amount: Number(amount),
+        note: note || undefined,
+      });
+      onSettled();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not record this payment.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="mb-3 flex flex-wrap items-end gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+      {error && <p className="w-full text-xs text-red-700">{error}</p>}
+      <label className="text-xs">
+        <span className="mb-1 block text-neutral-600">Amount received (Rs)</span>
+        <input
+          required
+          type="number"
+          min={0.01}
+          step={0.01}
+          max={outstandingCreditInPaisa / 100}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="input"
+        />
+      </label>
+      <label className="text-xs">
+        <span className="mb-1 block text-neutral-600">Note (optional)</span>
+        <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
+      </label>
+      <button disabled={saving} className="btn-primary text-xs disabled:opacity-50">
+        {saving ? "Recording…" : "Record payment"}
+      </button>
+      <span className="text-xs text-neutral-400">Owed: {formatRupees(outstandingCreditInPaisa)}</span>
+    </form>
+  );
+}
+
+/** Small inline editor for the optional credit/tab ceiling — same
+ * edit-in-place shape as BirthdayEditor just above. Only rendered for
+ * callers with MANAGE_ACCOUNT_BOOKS (see CustomerDetail) — same
+ * segregation of duties as the settle action itself: setting how much
+ * credit a customer can be extended is a financial-books decision. */
+function CreditLimitEditor({
+  slug,
+  customerId,
+  creditLimitInPaisa,
+  onSaved,
+}: {
+  slug: string;
+  customerId: string;
+  creditLimitInPaisa: number | null;
+  onSaved: () => void;
+}) {
+  const [value, setValue] = useState(creditLimitInPaisa !== null ? String(creditLimitInPaisa / 100) : "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setValue(creditLimitInPaisa !== null ? String(creditLimitInPaisa / 100) : "");
+  }, [creditLimitInPaisa]);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPatch(`${base(slug)}/customers/${customerId}`, {
+        creditLimit: value.trim() === "" ? null : Number(value),
+      });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save the credit limit.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const unchanged = value === (creditLimitInPaisa !== null ? String(creditLimitInPaisa / 100) : "");
+
+  return (
+    <div className="mt-3 flex flex-wrap items-end gap-2">
+      <label className="text-sm">
+        <span className="mb-1 block text-neutral-600">Credit / tab limit (Rs, optional)</span>
+        <input
+          type="number"
+          min={0}
+          step={0.01}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="No limit"
+          className="input"
+        />
+      </label>
+      <button onClick={save} disabled={saving || unchanged} className="btn-secondary text-xs disabled:opacity-50">
+        {saving ? "Saving…" : "Save limit"}
+      </button>
+      {error && <p className="text-xs text-red-700">{error}</p>}
+      <p className="w-full text-xs text-neutral-400">
+        Advisory only — shown as a warning on this profile once their tab reaches this amount;
+        it never blocks an order. Leave blank for no limit.
+      </p>
     </div>
   );
 }
@@ -585,11 +883,21 @@ function BirthdayEditor({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "info" | "warning";
+}) {
+  const valueClass =
+    tone === "warning" ? "text-amber-700" : tone === "info" ? "text-orange-700" : "text-neutral-900";
   return (
-    <div className="rounded-xl bg-neutral-50 px-3 py-2">
+    <div className={`rounded-xl px-3 py-2 ${tone === "warning" ? "bg-amber-50" : "bg-neutral-50"}`}>
       <p className="text-xs text-neutral-500">{label}</p>
-      <p className="text-base font-semibold text-neutral-900">{value}</p>
+      <p className={`text-base font-semibold ${valueClass}`}>{value}</p>
     </div>
   );
 }

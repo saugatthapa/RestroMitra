@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
+import { customers } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { createLedgerEntrySchema } from "@/lib/validation/ledger";
@@ -70,6 +72,22 @@ export async function POST(request: Request, ctx: { params: Promise<{ slug: stri
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
 
+    // Commercial Launch Phase B.5 — Customer Credit. A manual entry may
+    // optionally link to a CRM customer (e.g. "put this on their tab") —
+    // verified to belong to this restaurant before use, same tenancy check
+    // every other id lookup in this codebase does before trusting a
+    // client-supplied id.
+    if (data.customerId) {
+      const [customer] = await db
+        .select({ id: customers.id })
+        .from(customers)
+        .where(and(eq(customers.id, data.customerId), eq(customers.restaurantId, restaurantId)))
+        .limit(1);
+      if (!customer) {
+        return NextResponse.json({ error: "Customer not found." }, { status: 404 });
+      }
+    }
+
     const entry = await db.transaction((tx) =>
       recordLedgerEntry(tx, {
         restaurantId,
@@ -83,6 +101,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ slug: stri
         note: data.note || null,
         markAsDue: data.markAsDue,
         recordedByUserId: session.user.id,
+        customerId: data.customerId ?? null,
       }),
     );
 

@@ -206,6 +206,12 @@ export async function PATCH(
           customerName: row.customerName,
           timezone,
           recordedByUserId: session.user.id,
+          // Commercial Launch Phase B.5 — Customer Credit. When this order
+          // is linked to a CRM customer, link the ledger entry too — an
+          // order that finishes unpaid/partially paid automatically joins
+          // that customer's own tab (see ledger.ts's Customer Credit
+          // section), no extra staff action required.
+          customerId: row.customerId,
         });
       }
 

@@ -21,6 +21,11 @@ export const createLedgerEntrySchema = z.object({
   description: z.string().trim().min(1, "A description is required.").max(300),
   note: z.string().trim().max(1000).optional().or(z.literal("")),
   markAsDue: z.boolean().optional(),
+  // Commercial Launch Phase B.5 — Customer Credit. Optional link to a CRM
+  // customer record for a manual entry (e.g. "put this on their tab" for a
+  // sale not tied to a POS order) — the route verifies this id actually
+  // belongs to the caller's restaurant before use.
+  customerId: z.string().uuid().optional(),
 });
 
 export const settleLedgerDueSchema = z.object({

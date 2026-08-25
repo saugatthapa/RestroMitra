@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { db, type Transaction } from "@/db";
 import { ledgerEntries } from "@/db/schema";
 import { HttpError } from "@/lib/http-error";
@@ -19,6 +19,11 @@ export type LedgerEntryFilters = {
   direction?: LedgerDirection;
   dueStatus?: LedgerDueStatus;
   includeVoided?: boolean;
+  // Commercial Launch Phase B.5 — Customer Credit. Narrows to entries
+  // linked to one CRM customer (see the customerId column comment in
+  // schema.ts) — used by the customer detail route's credit history and by
+  // getCustomerOutstandingBalance/settleCustomerCredit below.
+  customerId?: string;
 };
 
 /**
@@ -46,6 +51,7 @@ export async function listLedgerEntries(
         filters.dueStatus ? eq(ledgerEntries.dueStatus, filters.dueStatus) : undefined,
         filters.from ? gte(ledgerEntries.entryDate, filters.from) : undefined,
         filters.to ? lte(ledgerEntries.entryDate, filters.to) : undefined,
+        filters.customerId ? eq(ledgerEntries.customerId, filters.customerId) : undefined,
       ),
     )
     .orderBy(desc(ledgerEntries.entryDate), desc(ledgerEntries.createdAt))
@@ -83,6 +89,13 @@ export async function recordLedgerEntry(
     referenceId?: string | null;
     markAsDue?: boolean;
     recordedByUserId?: string | null;
+    // Commercial Launch Phase B.5 — Customer Credit. Optional link to a
+    // CRM customer (see the column's own comment in schema.ts) — the
+    // caller is responsible for having already verified this customer
+    // belongs to `restaurantId` (see the ledger route's/credit route's own
+    // lookups), same trust boundary as every other id this function
+    // accepts without re-checking tenancy itself.
+    customerId?: string | null;
   },
 ) {
   if (!Number.isInteger(params.amountInPaisa) || params.amountInPaisa <= 0) {
@@ -104,6 +117,7 @@ export async function recordLedgerEntry(
       referenceId: params.referenceId ?? null,
       dueStatus: params.markAsDue ? "outstanding" : "none",
       recordedByUserId: params.recordedByUserId ?? null,
+      customerId: params.customerId ?? null,
     })
     .returning();
 
@@ -137,6 +151,13 @@ export async function recordSalesLedgerEntry(
     entryDate?: string;
     timezone: string;
     recordedByUserId?: string | null;
+    // Commercial Launch Phase B.5 — Customer Credit. When the order is
+    // linked to a CRM customer, this links the resulting ledger entry too
+    // — so an order finishing unpaid/partially paid automatically becomes
+    // part of that customer's own credit/tab (see getCustomerOutstandingBalance/
+    // settleCustomerCredit) with zero extra staff action, the same way it
+    // already becomes part of Account Books' restaurant-wide due tracking.
+    customerId?: string | null;
   },
 ) {
   if (params.totalInPaisa <= 0) return null; // a free/zero-total order books nothing
@@ -154,6 +175,7 @@ export async function recordSalesLedgerEntry(
     referenceId: params.orderId,
     markAsDue: params.paymentStatus !== "paid",
     recordedByUserId: params.recordedByUserId ?? null,
+    customerId: params.customerId ?? null,
   });
 }
 
@@ -436,7 +458,136 @@ export async function settleLedgerDue(
     referenceType: "due_settlement",
     referenceId: original.id,
     recordedByUserId: params.recordedByUserId ?? null,
+    // Carries the original due's customer link (if any) forward onto its
+    // settlement entry too, so a customer's own credit history (see
+    // getCustomerOutstandingBalance/settleCustomerCredit below) shows the
+    // payment alongside the charge it paid down.
+    customerId: original.customerId,
   });
 
   return { original: updated, settlementEntry };
+}
+
+// ---------------------------------------------------------------------------
+// Commercial Launch Phase B.5 — Customer Credit. A customer's "credit" or
+// "tab" is deliberately NOT a second ledger/stored-balance column on
+// customers — it's simply the sum of that customer's own outstanding
+// ledgerEntries rows (linked via customerId, see the column's own comment
+// in schema.ts), computed on read. This avoids a second source of truth
+// that could drift from the ledger (the way loyaltyPointsBalance is a
+// maintained running total is a DIFFERENT, lighter-weight case — points
+// aren't money, and every mutation already goes through one choke point,
+// recordLoyaltyTransaction). Settling a customer's balance reuses
+// settleLedgerDue's own CAS-protected per-entry settlement rather than any
+// new update logic — settleCustomerCredit is purely an oldest-first
+// allocator across that customer's outstanding entries.
+// ---------------------------------------------------------------------------
+
+/**
+ * Sums what a customer currently owes across all their outstanding ledger
+ * entries (their "tab") — the same amountInPaisa - settledAmountInPaisa
+ * math Account Books' own outstanding-dues view uses per entry, just
+ * aggregated in SQL rather than loaded row-by-row.
+ */
+export async function getCustomerOutstandingBalance(
+  restaurantId: string,
+  customerId: string,
+): Promise<number> {
+  const [row] = await db
+    .select({
+      outstandingInPaisa: sql<string>`coalesce(sum(${ledgerEntries.amountInPaisa} - ${ledgerEntries.settledAmountInPaisa}), 0)`,
+    })
+    .from(ledgerEntries)
+    .where(
+      and(
+        eq(ledgerEntries.restaurantId, restaurantId),
+        eq(ledgerEntries.customerId, customerId),
+        eq(ledgerEntries.dueStatus, "outstanding"),
+        eq(ledgerEntries.isVoided, false),
+      ),
+    );
+  return Number(row?.outstandingInPaisa ?? 0);
+}
+
+/**
+ * Applies a single lump-sum payment against a customer's outstanding tab,
+ * oldest charge first (entryDate then createdAt ascending) — the real-world
+ * shape of "a regular customer settles up," as opposed to picking one
+ * specific past order to pay off (that's still possible directly via
+ * settleLedgerDue/the /ledger/[entryId]/settle route, for the rarer case a
+ * staff member wants to target one entry specifically).
+ *
+ * Rejects upfront if the payment would exceed the customer's current total
+ * outstanding balance (mirrors settleLedgerDue's own "can't overpay a
+ * single entry" rule, just applied to the sum) — no entry is touched in
+ * that case. Once allocation starts, each entry is settled via the exact
+ * same settleLedgerDue() the single-entry route uses, so if a concurrent
+ * settlement (a second staff member, or the single-entry route) touches one
+ * of these entries mid-loop, that entry's own CAS throws and — because
+ * this always runs inside a caller-provided transaction — the WHOLE
+ * lump-sum payment rolls back rather than applying partially. The caller
+ * should surface that as "please refresh and try again," same as any other
+ * settleLedgerDue 409.
+ */
+export async function settleCustomerCredit(
+  tx: Transaction,
+  params: {
+    restaurantId: string;
+    customerId: string;
+    amountInPaisa: number;
+    note?: string | null;
+    timezone: string;
+    recordedByUserId?: string | null;
+  },
+) {
+  if (!Number.isInteger(params.amountInPaisa) || params.amountInPaisa <= 0) {
+    throw new LedgerError("Payment amount must be a positive whole-paisa amount.");
+  }
+
+  const outstanding = await tx
+    .select()
+    .from(ledgerEntries)
+    .where(
+      and(
+        eq(ledgerEntries.restaurantId, params.restaurantId),
+        eq(ledgerEntries.customerId, params.customerId),
+        eq(ledgerEntries.dueStatus, "outstanding"),
+        eq(ledgerEntries.isVoided, false),
+      ),
+    )
+    .orderBy(asc(ledgerEntries.entryDate), asc(ledgerEntries.createdAt));
+
+  const totalOutstandingInPaisa = outstanding.reduce(
+    (sum, entry) => sum + (entry.amountInPaisa - entry.settledAmountInPaisa),
+    0,
+  );
+  if (totalOutstandingInPaisa <= 0) {
+    throw new LedgerError("This customer has no outstanding balance to settle.");
+  }
+  if (params.amountInPaisa > totalOutstandingInPaisa) {
+    throw new LedgerError(
+      `Payment exceeds this customer's outstanding balance (${totalOutstandingInPaisa} paisa owed).`,
+    );
+  }
+
+  let remainingInPaisa = params.amountInPaisa;
+  const settlements: Awaited<ReturnType<typeof settleLedgerDue>>[] = [];
+  for (const entry of outstanding) {
+    if (remainingInPaisa <= 0) break;
+    const dueRemainingInPaisa = entry.amountInPaisa - entry.settledAmountInPaisa;
+    if (dueRemainingInPaisa <= 0) continue;
+    const applyInPaisa = Math.min(dueRemainingInPaisa, remainingInPaisa);
+    const result = await settleLedgerDue(tx, {
+      restaurantId: params.restaurantId,
+      entryId: entry.id,
+      amountInPaisa: applyInPaisa,
+      note: params.note ?? null,
+      timezone: params.timezone,
+      recordedByUserId: params.recordedByUserId ?? null,
+    });
+    settlements.push(result);
+    remainingInPaisa -= applyInPaisa;
+  }
+
+  return { settlements, appliedInPaisa: params.amountInPaisa - remainingInPaisa };
 }
