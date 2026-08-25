@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { apiGet, apiPatch, apiPost, ApiError } from "@/lib/api-client";
+import { apiGet, apiPatch, apiPost, apiDelete, ApiError } from "@/lib/api-client";
 import { openKotTicket } from "@/lib/kot-print-client";
 import { formatNPR, rupeesToPaisa, paisaToRupees, basisPointsToPercent } from "@/lib/money";
 import { useDateSystem } from "@/lib/date-system";
@@ -69,6 +69,11 @@ type Order = {
   discountValue: number | null;
   discountInPaisa: number;
   discountReason: string | null;
+  // Commercial Launch Phase B.6 — Coupons. Set when the current discount
+  // slot came from a redeemed coupon rather than a manual entry — see
+  // src/lib/coupons.ts's own comment on the orders column. Drives whether
+  // CouponPanel shows "apply a code" or "remove the applied coupon".
+  appliedCouponId: string | null;
   serviceChargeBasisPoints: number;
   serviceChargeInPaisa: number;
   totalInPaisa: number;
@@ -379,8 +384,9 @@ export function OrderBillView({
       </div>
 
       {canApplyDiscount && order.status !== "cancelled" && (
-        <div className="mt-4 print:hidden">
+        <div className="mt-4 flex flex-wrap gap-2 print:hidden">
           <AdjustmentsPanel slug={slug} orderId={orderId} order={order} onSaved={load} />
+          <CouponPanel slug={slug} orderId={orderId} order={order} onSaved={load} />
         </div>
       )}
 
@@ -690,6 +696,111 @@ function RecordRefundForm({
         >
           {submitting ? "Recording…" : `Refund ${formatNPR(rupeesToPaisa(Number(amount) || 0))}`}
         </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Commercial Launch Phase B.6 — Coupons. Applies (POST) or removes (DELETE)
+ * a coupon via the dedicated .../orders/[orderId]/coupon route — see that
+ * route's own doc comment. Coupons and the manual discount set by
+ * AdjustmentsPanel above share the SAME discount slot, so applying a coupon
+ * here overwrites (and removing clears) whatever AdjustmentsPanel shows,
+ * and vice versa; onSaved() refetches the order either way so both panels
+ * always reflect the one true current state.
+ */
+function CouponPanel({
+  slug,
+  orderId,
+  order,
+  onSaved,
+}: {
+  slug: string;
+  orderId: string;
+  order: Order;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function applyCode() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/orders/${orderId}/coupon`, { code });
+      setCode("");
+      setOpen(false);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not apply this coupon.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function removeCoupon() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiDelete(`${base(slug)}/orders/${orderId}/coupon`);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not remove the coupon.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (order.appliedCouponId) {
+    return (
+      <div className="flex flex-col gap-1">
+        <button onClick={removeCoupon} disabled={submitting} className="btn-secondary">
+          {submitting ? "Removing…" : "Remove coupon"}
+        </button>
+        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="btn-secondary">
+        Apply coupon code
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-5">
+      <p className="mb-3 text-sm font-semibold text-neutral-900">Apply coupon</p>
+      <div className="space-y-2">
+        <input
+          className="input font-mono uppercase"
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          placeholder="Coupon code"
+          autoFocus
+        />
+        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+        <div className="flex gap-2">
+          <button
+            onClick={applyCode}
+            disabled={submitting || !code.trim()}
+            className="btn-primary flex-1"
+          >
+            {submitting ? "Applying…" : "Apply"}
+          </button>
+          <button
+            onClick={() => setOpen(false)}
+            disabled={submitting}
+            className="btn-secondary flex-1"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   );

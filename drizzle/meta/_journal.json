@@ -337,6 +337,13 @@
       "when": 1787667431629,
       "tag": "0047_customer_credit",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1787669538920,
+      "tag": "0048_coupons_and_hold",
+      "breakpoints": true
     }
   ]
 }

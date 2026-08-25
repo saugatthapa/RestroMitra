@@ -799,6 +799,30 @@ export const orders = pgTable(
     // + taxInPaisa (see computeOrderTotals in order-adjustments.ts — the
     // single place this formula is allowed to live).
     totalInPaisa: integer("total_in_paisa").notNull(),
+    // Commercial Launch Phase B.6 — Coupons. Set when the CURRENT discount
+    // on this order came from redeeming a coupon (see src/lib/coupons.ts),
+    // null when there's no discount or it's a manual one entered via the
+    // adjustments route. This is purely a "what's currently applied"
+    // pointer, not a historical log — see couponRedemptions for the audit
+    // trail of every redemption a coupon has ever had. "set null" (not
+    // restrict/cascade) since a coupon can be deactivated without needing
+    // to touch every order that ever redeemed it.
+    appliedCouponId: uuid("applied_coupon_id").references(() => coupons.id, { onDelete: "set null" }),
+    // Commercial Launch Phase B.7 — Table Operations (hold/resume). A
+    // staff-initiated pause on this order's forward progress — e.g. the
+    // kitchen was asked to wait, or the bill is being held open while the
+    // party steps out. Deliberately NOT a new `status` value: `status`
+    // drives KDS visibility, order_status_history, reports, and the
+    // completion side effects (loyalty/ledger) throughout this app, and
+    // folding "held" into that state machine would ripple through all of
+    // it. Instead this is an orthogonal flag the status-transition route
+    // checks and rejects most transitions against while true (see
+    // orders/[orderId]/status/route.ts and hold/resume routes) — the order
+    // stays exactly where it was, just frozen, until resumed.
+    isOnHold: boolean("is_on_hold").notNull().default(false),
+    heldAt: timestamp("held_at", { withTimezone: true }),
+    heldByUserId: uuid("held_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    holdReason: varchar("hold_reason", { length: 300 }),
     // Phase 17 — Kitchen Order Ticket. kotSequence is a small, human-facing
     // "ticket #N" counter that resets every day (see kot_counters below and
     // assignKotSequence in src/lib/kot.ts) — deliberately NOT orderNumber
@@ -1533,6 +1557,90 @@ export const ledgerEntries = pgTable(
     index("ledger_entries_entry_date_idx").on(table.entryDate),
     index("ledger_entries_due_status_idx").on(table.dueStatus),
     index("ledger_entries_customer_id_idx").on(table.customerId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Coupons — Commercial Launch Phase B.6. A reusable, staff-defined promo
+// code that resolves into the SAME discountType/discountValue slot orders
+// already has (see orders.discountType's own comment) — reuses
+// computeDiscountInPaisa (order-adjustments.ts) unchanged rather than a
+// parallel pricing formula; a coupon is just another way to fill that one
+// discount slot, so it's mutually exclusive with a manual discount on the
+// same order (applying one replaces the other — see src/lib/coupons.ts).
+//
+// usageCount is a maintained running total (same "one choke point,
+// CAS-guarded against usageLimit" pattern as mfaBackupCodes/loyalty
+// balances), with couponRedemptions as the append-only audit trail of
+// every individual use — mirroring loyaltyTransactions' own
+// running-total-plus-ledger split.
+// ---------------------------------------------------------------------------
+
+export const coupons = pgTable(
+  "coupons",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    // Always stored upper-cased (see coupons.ts) so lookup is a plain
+    // equality check, not a case-insensitive query.
+    code: varchar("code", { length: 30 }).notNull(),
+    discountType: discountTypeEnum("discount_type").notNull(),
+    // Same convention as orders.discountValue: basis points for
+    // "percentage", paisa for "flat".
+    discountValue: integer("discount_value").notNull(),
+    // Caps a PERCENTAGE coupon's actual paisa discount on a large order
+    // (e.g. "20% off, up to Rs 200") — meaningless/ignored for a "flat"
+    // coupon, which is already a fixed paisa amount. Null = no cap.
+    maxDiscountInPaisa: integer("max_discount_in_paisa"),
+    // Order subtotal must reach this before the coupon resolves at all —
+    // null = no minimum.
+    minOrderSubtotalInPaisa: integer("min_order_subtotal_in_paisa"),
+    // Total redemptions allowed across all orders/customers — null =
+    // unlimited. Enforced via a compare-and-swap on usageCount at redeem
+    // time (see redeemCoupon in coupons.ts), not just this check.
+    usageLimit: integer("usage_limit"),
+    usageCount: integer("usage_count").notNull().default(0),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    isActive: boolean("is_active").notNull().default(true),
+    note: text("note"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("coupons_restaurant_id_idx").on(table.restaurantId),
+    uniqueIndex("coupons_restaurant_code_unique").on(table.restaurantId, table.code),
+    check("coupons_usage_count_non_negative", sql`${table.usageCount} >= 0`),
+  ],
+);
+
+export const couponRedemptions = pgTable(
+  "coupon_redemptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    couponId: uuid("coupon_id")
+      .notNull()
+      .references(() => coupons.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    // The actual paisa amount this redemption discounted the order by —
+    // stored rather than re-derived, since a percentage coupon's paisa
+    // value depends on that specific order's subtotal at redemption time.
+    discountInPaisa: integer("discount_in_paisa").notNull(),
+    redeemedByUserId: uuid("redeemed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("coupon_redemptions_restaurant_id_idx").on(table.restaurantId),
+    index("coupon_redemptions_coupon_id_idx").on(table.couponId),
+    index("coupon_redemptions_order_id_idx").on(table.orderId),
   ],
 );
 

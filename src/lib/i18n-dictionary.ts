@@ -33,6 +33,7 @@ const DICTIONARY = {
   "nav.inventory": { en: "Inventory", ne: "सामान सूची" },
   "nav.staff": { en: "Staff", ne: "कर्मचारी" },
   "nav.customers": { en: "Customers", ne: "ग्राहकहरू" },
+  "nav.coupons": { en: "Coupons", ne: "कूपनहरू" },
   "nav.expenses": { en: "Expenses", ne: "खर्चहरू" },
   "nav.accountBooks": { en: "Account Books", ne: "खाता बही" },
   "nav.website": { en: "Website", ne: "वेबसाइट" },

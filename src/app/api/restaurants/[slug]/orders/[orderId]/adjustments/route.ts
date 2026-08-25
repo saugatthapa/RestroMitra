@@ -11,6 +11,7 @@ import {
 import { orderAdjustmentsInputSchema, resolveOrderAdjustmentsInput } from "@/lib/validation/order-adjustments";
 import { computeOrderTotals } from "@/lib/order-adjustments";
 import { computeBillingSummary } from "@/lib/payments";
+import { unredeemCoupon } from "@/lib/coupons";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { requireBranchAccess } from "@/lib/rbac/guard";
@@ -100,9 +101,24 @@ export async function PATCH(
         } as const;
       }
 
+      // This route sets the discount slot directly (manual discount, or
+      // clearing it) — it's not coupon-aware. If a coupon is currently
+      // occupying that slot, release its usage count before overwriting it,
+      // same as the dedicated coupon-remove route does, so a manual
+      // discount replacing a coupon doesn't permanently burn the coupon's
+      // usage slot for no reason.
+      if (order.appliedCouponId) {
+        await unredeemCoupon(tx, {
+          restaurantId,
+          couponId: order.appliedCouponId,
+          orderId,
+        });
+      }
+
       const [updated] = await tx
         .update(orders)
         .set({
+          appliedCouponId: null,
           discountType: resolved.discountType,
           discountValue: resolved.discountValue,
           discountInPaisa: totals.discountInPaisa,

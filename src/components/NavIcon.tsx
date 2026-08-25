@@ -91,6 +91,12 @@ export const NavIcon = {
       <path d="M6.5 18.5a6 6 0 0 1 11 0" />
     </svg>
   ),
+  Coupons: () => (
+    <svg {...iconProps}>
+      <path d="M4.5 8a2.5 2.5 0 0 0 0 5v1.5A2.5 2.5 0 0 0 7 17h10a2.5 2.5 0 0 0 2.5-2.5V13a2.5 2.5 0 0 1 0-5V6.5A2.5 2.5 0 0 0 17 4H7a2.5 2.5 0 0 0-2.5 2.5V8Z" />
+      <path d="M9 4v13" strokeDasharray="2 2" />
+    </svg>
+  ),
   Expenses: () => (
     <svg {...iconProps}>
       <path d="M4 7a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v2" />

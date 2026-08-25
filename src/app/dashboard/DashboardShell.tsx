@@ -592,6 +592,16 @@ function DashboardShellContent({
           permission: PERMISSIONS.MANAGE_CUSTOMERS,
         },
         {
+          // Commercial Launch Phase B.6 — Coupons. Same trust tier as a
+          // manual discount (see coupons/route.ts's own comment): a
+          // reusable code is just another way to grant a discount.
+          label: t("nav.coupons"),
+          href: "/dashboard/coupons",
+          enabled: true,
+          icon: <NavIcon.Coupons />,
+          permission: PERMISSIONS.APPLY_DISCOUNT,
+        },
+        {
           label: t("nav.expenses"),
           href: "/dashboard/expenses",
           enabled: true,
