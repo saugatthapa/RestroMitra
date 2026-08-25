@@ -109,6 +109,7 @@ export async function listPaymentsForReconciliation(
   restaurantId: string,
   filters: ReconciliationFilters = {},
   status: ReconciliationStatus = "unreconciled",
+  limit = 500,
 ): Promise<PaymentReconciliationRow[]> {
   const rows = await db
     .select({
@@ -127,7 +128,7 @@ export async function listPaymentsForReconciliation(
     .innerJoin(orders, eq(payments.orderId, orders.id))
     .where(buildReconciliationWhere(restaurantId, filters, status))
     .orderBy(status === "unreconciled" ? asc(payments.createdAt) : desc(payments.createdAt))
-    .limit(500);
+    .limit(limit);
 
   return rows.map((r) => ({ ...r, method: r.method as PaymentMethod }));
 }

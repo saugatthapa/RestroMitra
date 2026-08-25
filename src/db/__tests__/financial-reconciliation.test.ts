@@ -274,6 +274,17 @@ describe.skipIf(!hasDb)("Financial reconciliation (integration)", () => {
     expect(otherRow!.reconciledCount).toBeGreaterThanOrEqual(2);
   });
 
+  it("Commercial Launch Phase B.5 (Data Export): a custom limit narrows the result count, for the export route's higher-than-UI-default use case", async () => {
+    await createPayment({ restaurantId, targetBranchId: branchId, method: "card" });
+    await createPayment({ restaurantId, targetBranchId: branchId, method: "card" });
+
+    const limited = await fr.listPaymentsForReconciliation(restaurantId, { branchId }, "all", 1);
+    expect(limited.length).toBeLessThanOrEqual(1);
+
+    const unlimited = await fr.listPaymentsForReconciliation(restaurantId, { branchId }, "all");
+    expect(unlimited.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("getReconciliationSummary reports separate reconciled/unreconciled totals per method", async () => {
     const { paymentId: reconciledOne } = await createPayment({
       restaurantId,

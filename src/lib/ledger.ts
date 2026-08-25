@@ -1,15 +1,55 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
-import type { Transaction } from "@/db";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { db, type Transaction } from "@/db";
 import { ledgerEntries } from "@/db/schema";
 import { HttpError } from "@/lib/http-error";
-import type { LedgerCategory, LedgerDirection } from "@/lib/ledger-categories";
+import type { LedgerCategory, LedgerDirection, LedgerDueStatus } from "@/lib/ledger-categories";
 import { restaurantDate } from "@/lib/restaurant-date";
 
 export class LedgerError extends HttpError {
   constructor(message: string, status = 400) {
     super(message, status);
   }
+}
+
+export type LedgerEntryFilters = {
+  from?: string;
+  to?: string;
+  category?: LedgerCategory;
+  direction?: LedgerDirection;
+  dueStatus?: LedgerDueStatus;
+  includeVoided?: boolean;
+};
+
+/**
+ * Lists ledger entries for a restaurant, filtered/ordered exactly the way
+ * GET /api/restaurants/[slug]/ledger does — this function IS that route's
+ * query, extracted so the Data Export route (Commercial Launch Phase B.5)
+ * can reuse the identical filter logic at a higher row limit rather than
+ * duplicating it. `limit` defaults to 500 so the existing route's behavior
+ * is unchanged by this refactor.
+ */
+export async function listLedgerEntries(
+  restaurantId: string,
+  filters: LedgerEntryFilters = {},
+  limit = 500,
+) {
+  return db
+    .select()
+    .from(ledgerEntries)
+    .where(
+      and(
+        eq(ledgerEntries.restaurantId, restaurantId),
+        filters.includeVoided ? undefined : eq(ledgerEntries.isVoided, false),
+        filters.category ? eq(ledgerEntries.category, filters.category) : undefined,
+        filters.direction ? eq(ledgerEntries.direction, filters.direction) : undefined,
+        filters.dueStatus ? eq(ledgerEntries.dueStatus, filters.dueStatus) : undefined,
+        filters.from ? gte(ledgerEntries.entryDate, filters.from) : undefined,
+        filters.to ? lte(ledgerEntries.entryDate, filters.to) : undefined,
+      ),
+    )
+    .orderBy(desc(ledgerEntries.entryDate), desc(ledgerEntries.createdAt))
+    .limit(limit);
 }
 
 /**

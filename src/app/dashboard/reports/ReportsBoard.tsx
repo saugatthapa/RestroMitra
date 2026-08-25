@@ -13,6 +13,7 @@ import { formatDate, formatBsHint } from "@/lib/nepali-date";
 import { localDateIso } from "@/lib/local-date";
 import { WASTE_REASON_LABELS, type WasteReasonValue } from "@/lib/waste-reasons";
 import { ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
+import { toCsv } from "@/lib/csv";
 
 // Chart chrome tokens, matching RevenueTrendChart's validated palette
 // (dataviz skill, palette.md) — used here for the small inline breakdown
@@ -150,6 +151,125 @@ function daysAgoIso(days: number) {
 function firstOfMonthIso() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/**
+ * Commercial Launch Phase B.5 — Data Export. Builds a multi-section CSV
+ * from data ALREADY in this component's state — no new server route,
+ * unlike the ledger/reconciliation exports (see those routes' own
+ * comments) — the Reports summary is a single small already-fetched
+ * payload, so re-fetching it server-side just to serialize it would be
+ * pure duplication. Sections are separated by a blank line and a
+ * `## Heading` marker row (a plain single-column CSV row, not a real CSV
+ * directive) — Excel/Sheets/LibreOffice all render this as a readable
+ * multi-table sheet.
+ */
+function buildReportsCsv(
+  data: ReportSummary,
+  products: ProductProfitabilityRow[] | null,
+  canViewProfit: boolean,
+): string {
+  const parts: string[] = [];
+
+  parts.push(
+    toCsv(
+      [
+        { label: "Range", value: `${data.range.from} to ${data.range.to}` },
+        { label: "Revenue (Rs)", value: paisaToRupeesLabel(data.sales.revenueInPaisa) },
+        { label: "Orders", value: data.sales.orderCount },
+        { label: "Average order value (Rs)", value: paisaToRupeesLabel(data.sales.averageOrderValueInPaisa) },
+        { label: "Cancelled orders", value: data.sales.cancelledCount },
+        { label: "Total expenses (Rs)", value: paisaToRupeesLabel(data.totalExpensesInPaisa) },
+        { label: "Net profit (Rs)", value: paisaToRupeesLabel(data.netProfitInPaisa) },
+        { label: "Total tips (Rs)", value: paisaToRupeesLabel(data.totalTipsInPaisa) },
+        ...(canViewProfit
+          ? [
+              { label: "COGS (Rs)", value: paisaToRupeesLabel(data.cogsInPaisa) },
+              { label: "Gross profit (Rs)", value: paisaToRupeesLabel(data.grossProfitInPaisa) },
+              { label: "Gross margin (%)", value: data.grossMarginPercent ?? "" },
+            ]
+          : []),
+      ],
+      [
+        { header: "Metric", value: (r) => r.label },
+        { header: "Value", value: (r) => r.value },
+      ],
+    ),
+  );
+
+  parts.push(
+    `## Top-selling items\r\n` +
+      toCsv(data.topItems, [
+        { header: "Item", value: (r) => r.name },
+        { header: "Quantity sold", value: (r) => r.quantitySold },
+        { header: "Revenue (Rs)", value: (r) => paisaToRupeesLabel(r.revenueInPaisa) },
+      ]),
+  );
+
+  parts.push(
+    `## Payment method breakdown\r\n` +
+      toCsv(data.paymentBreakdown, [
+        { header: "Method", value: (r) => PAYMENT_METHOD_LABELS[r.method] },
+        { header: "Total (Rs)", value: (r) => paisaToRupeesLabel(r.totalInPaisa) },
+      ]),
+  );
+
+  parts.push(
+    `## Expense breakdown\r\n` +
+      toCsv(data.expenseBreakdown, [
+        { header: "Category", value: (r) => r.category },
+        { header: "Total (Rs)", value: (r) => paisaToRupeesLabel(r.totalInPaisa) },
+      ]),
+  );
+
+  if (data.orderPerformance.cancellationReasons.length > 0) {
+    parts.push(
+      `## Cancellation reasons\r\n` +
+        toCsv(data.orderPerformance.cancellationReasons, [
+          { header: "Reason", value: (r) => r.reason },
+          { header: "Count", value: (r) => r.count },
+        ]),
+    );
+  }
+
+  if (canViewProfit && products && products.length > 0) {
+    parts.push(
+      `## Product-level profitability\r\n` +
+        toCsv(products, [
+          { header: "Item", value: (r) => r.name },
+          { header: "Quantity sold", value: (r) => r.quantitySold },
+          { header: "Revenue (Rs)", value: (r) => paisaToRupeesLabel(r.revenueInPaisa) },
+          { header: "COGS (Rs)", value: (r) => paisaToRupeesLabel(r.cogsInPaisa) },
+          { header: "Gross profit (Rs)", value: (r) => paisaToRupeesLabel(r.grossProfitInPaisa) },
+          { header: "Margin (%)", value: (r) => r.marginPercent ?? "" },
+          { header: "Full cost coverage", value: (r) => r.hasFullCostCoverage },
+        ]),
+    );
+  }
+
+  return parts.join("\r\n");
+}
+
+// Plain decimal (not the "Rs X,XXX.XX" display string) so exported figures
+// sum correctly in a spreadsheet — same helper/rationale as the ledger and
+// reconciliation CSV exports' own money columns.
+function paisaToRupeesLabel(paisa: number): number {
+  return paisa / 100;
+}
+
+/** Client-side blob download — same pattern already established in
+ * qr-poster.ts's downloadQrPoster (canvas -> blob -> object URL -> a[download]
+ * click -> revoke), just for a text/csv blob instead of a PNG. */
+function downloadCsvFile(csv: string, fileName: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // Presets before a custom range — dataviz skill's "date range first, presets
@@ -359,6 +479,18 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
             />
             {dateSystem === "BS" && <span className="text-xs text-neutral-400">{formatBsHint(to)}</span>}
           </label>
+          <button
+            type="button"
+            disabled={!data}
+            onClick={() => {
+              if (!data) return;
+              const csv = buildReportsCsv(data, products, canViewProfit);
+              downloadCsvFile(csv, `reports-${from}-to-${to}.csv`);
+            }}
+            className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Export CSV
+          </button>
         </div>
       </div>
 

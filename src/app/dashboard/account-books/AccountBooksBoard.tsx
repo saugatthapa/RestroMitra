@@ -53,6 +53,36 @@ function todayIso() {
   return localDateIso();
 }
 
+function lastDayOfMonthIso(firstOfMonthIsoDate: string): string {
+  const [y, m] = firstOfMonthIsoDate.split("-").map(Number);
+  // Day 0 of next month == last day of this month.
+  const d = new Date(Date.UTC(y, m, 0));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+/** Builds the ledger CSV export URL matching whatever date range the
+ * current tab is visibly showing — a day-book export covers that one day,
+ * a month/year rollup export covers that whole month/year, and the due-
+ * tracking tab exports outstanding dues unscoped by date (same as its own
+ * view). Commercial Launch Phase B.5 — Data Export. */
+function ledgerExportUrl(slug: string, tab: Tab, anchorDate: string): string {
+  const params = new URLSearchParams();
+  if (tab === "day") {
+    params.set("from", anchorDate);
+    params.set("to", anchorDate);
+  } else if (tab === "month") {
+    params.set("from", anchorDate);
+    params.set("to", lastDayOfMonthIso(anchorDate));
+  } else if (tab === "year") {
+    const year = anchorDate.slice(0, 4);
+    params.set("from", `${year}-01-01`);
+    params.set("to", `${year}-12-31`);
+  } else if (tab === "due") {
+    params.set("dueStatus", "outstanding");
+  }
+  return `${base(slug)}/ledger/export?${params}`;
+}
+
 function shiftDate(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
@@ -178,9 +208,18 @@ export function AccountBooksBoard({ slug, canManage }: { slug: string; canManage
           ))}
         </div>
         {tab !== "reconcile" && (
-          <button onClick={() => setShowAddForm((v) => !v)} className="btn-primary">
-            {showAddForm ? "Cancel" : "+ Add entry"}
-          </button>
+          <div className="flex items-center gap-2">
+            <a
+              href={ledgerExportUrl(slug, tab, anchorDate)}
+              download
+              className="btn-secondary text-xs"
+            >
+              Export CSV
+            </a>
+            <button onClick={() => setShowAddForm((v) => !v)} className="btn-primary">
+              {showAddForm ? "Cancel" : "+ Add entry"}
+            </button>
+          </div>
         )}
       </div>
 
@@ -930,6 +969,18 @@ function ReconciliationView({ slug }: { slug: string }) {
           <option value="mobile_wallet">Mobile wallet</option>
           <option value="other">Other</option>
         </select>
+        <a
+          href={`${base(slug)}/reconciliation/export?${(() => {
+            const params = new URLSearchParams({ status });
+            if (activeBranchId) params.set("branchId", activeBranchId);
+            if (method) params.set("method", method);
+            return params;
+          })()}`}
+          download
+          className="btn-secondary ml-auto text-xs"
+        >
+          Export CSV
+        </a>
       </div>
 
       {loading ? (

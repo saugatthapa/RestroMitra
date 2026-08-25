@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db";
-import { ledgerEntries } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { createLedgerEntrySchema } from "@/lib/validation/ledger";
-import { recordLedgerEntry } from "@/lib/ledger";
+import { listLedgerEntries, recordLedgerEntry } from "@/lib/ledger";
 import { LEDGER_CATEGORIES, LEDGER_DIRECTIONS, LEDGER_DUE_STATUSES } from "@/lib/ledger-categories";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
@@ -44,22 +42,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
       : null;
     const includeVoided = url.searchParams.get("includeVoided") === "true";
 
-    const rows = await db
-      .select()
-      .from(ledgerEntries)
-      .where(
-        and(
-          eq(ledgerEntries.restaurantId, restaurantId),
-          includeVoided ? undefined : eq(ledgerEntries.isVoided, false),
-          category ? eq(ledgerEntries.category, category) : undefined,
-          direction ? eq(ledgerEntries.direction, direction) : undefined,
-          dueStatus ? eq(ledgerEntries.dueStatus, dueStatus) : undefined,
-          from ? gte(ledgerEntries.entryDate, from) : undefined,
-          to ? lte(ledgerEntries.entryDate, to) : undefined,
-        ),
-      )
-      .orderBy(desc(ledgerEntries.entryDate), desc(ledgerEntries.createdAt))
-      .limit(LEDGER_LIST_LIMIT);
+    const rows = await listLedgerEntries(
+      restaurantId,
+      { from: from ?? undefined, to: to ?? undefined, category: category ?? undefined, direction: direction ?? undefined, dueStatus: dueStatus ?? undefined, includeVoided },
+      LEDGER_LIST_LIMIT,
+    );
 
     return NextResponse.json({ entries: rows });
   } catch (err) {
