@@ -1,11 +1,17 @@
 import "server-only";
-import { and, eq, gte, lt, ne, sql } from "drizzle-orm";
+import { and, eq, gte, lt, ne, notInArray, sql } from "drizzle-orm";
 import type { Transaction } from "@/db";
 import { db } from "@/db";
 import { restaurantTables, orders, reservations } from "@/db/schema";
 import { deriveTableStatus, type TableStatus } from "@/lib/table-status";
 import { HttpError } from "@/lib/http-error";
 import { restaurantStartOfDay } from "@/lib/restaurant-date";
+
+// Orders in either of these statuses are done moving — never a transfer/
+// merge target, and excluded from "how many active orders does this table
+// have" everywhere in this file. Kept as one constant so transferOrderToTable
+// and mergeTables can't drift on the definition of "active".
+const INACTIVE_ORDER_STATUSES = ["cancelled", "completed"] as const;
 
 export class TableError extends HttpError {
   constructor(message: string, status = 400) {
@@ -318,4 +324,190 @@ export async function getTodayUpcomingReservationsByTable(
     byTable.set(row.tableId, list);
   }
   return byTable;
+}
+
+// ---------------------------------------------------------------------------
+// Commercial Launch Phase B.7 — Table Operations (transfer / merge / hold /
+// resume). `orders.tableId` is a plain nullable FK that, until this phase,
+// no route ever mutated after order creation — PHASE_12_NOTES.md flagged
+// this as a deliberately deferred, straightforward addition: update
+// tableId, then re-sync both tables' derived status in the same
+// transaction. That's exactly what transferOrderToTable/mergeTables do
+// below; no schema change was needed for either.
+// ---------------------------------------------------------------------------
+
+/**
+ * Moves ONE order onto a different table. Row-locks both the order and the
+ * destination table for the duration of the transaction (same FOR UPDATE
+ * discipline as requireTableRowLock's own doc comment), rejects a
+ * cancelled/completed order (nothing left to move) and a destination
+ * that's out_of_service (reusing the same rule assertTableAcceptsOrders
+ * enforces at order-creation time). Re-syncs BOTH the source and
+ * destination table's derived status afterward — the source may drop back
+ * to `available`, the destination may become `occupied`.
+ */
+export async function transferOrderToTable(
+  tx: Transaction,
+  params: { restaurantId: string; orderId: string; toTableId: string },
+): Promise<{ order: typeof orders.$inferSelect; fromTableId: string | null }> {
+  const orderRows = await tx
+    .select()
+    .from(orders)
+    .where(and(eq(orders.id, params.orderId), eq(orders.restaurantId, params.restaurantId)))
+    .for("update")
+    .limit(1);
+  const order = orderRows[0];
+  if (!order) {
+    throw new TableError("Order not found.", 404);
+  }
+  if (INACTIVE_ORDER_STATUSES.includes(order.status as (typeof INACTIVE_ORDER_STATUSES)[number])) {
+    throw new TableError("Can't transfer a cancelled or completed order.");
+  }
+  if (order.tableId === params.toTableId) {
+    throw new TableError("This order is already on that table.");
+  }
+
+  const toTable = await requireTableRowLock(tx, params.restaurantId, params.toTableId);
+  if (toTable.status === "out_of_service") {
+    throw new TableError("This table is marked out of service and can't accept new orders.");
+  }
+  // A table is a physical fixture at one branch — an order transferred onto
+  // a table in a different branch would leave orders.branchId (this
+  // order's own operating branch, set at creation) disagreeing with where
+  // it now physically sits, breaking every branch-scoped report/KDS/floor
+  // plan query that joins the two. Cross-branch moves aren't a "transfer"
+  // in any physical sense anyway.
+  if (toTable.branchId !== order.branchId) {
+    throw new TableError("Can't transfer an order to a table in a different branch.");
+  }
+
+  const fromTableId = order.tableId;
+  const [updated] = await tx
+    .update(orders)
+    .set({ tableId: params.toTableId, updatedAt: new Date() })
+    .where(and(eq(orders.id, params.orderId), eq(orders.restaurantId, params.restaurantId)))
+    .returning();
+
+  await syncTableStatusFromOrders(tx, fromTableId);
+  await syncTableStatusFromOrders(tx, params.toTableId);
+
+  return { order: updated, fromTableId };
+}
+
+/**
+ * Batch-transfers EVERY active order from one table onto another — the
+ * "these two tables just became one party" action. Built directly on
+ * transferOrderToTable's own primitive (one call per active order) rather
+ * than a parallel bulk-UPDATE, so a merge can never silently diverge from
+ * what a single transfer does (same rejects, same per-table status
+ * re-sync — the per-table sync is naturally idempotent/redundant across
+ * the loop, which is fine, not a correctness issue).
+ */
+export async function mergeTables(
+  tx: Transaction,
+  params: { restaurantId: string; fromTableId: string; toTableId: string },
+): Promise<{ movedOrderIds: string[] }> {
+  if (params.fromTableId === params.toTableId) {
+    throw new TableError("Choose two different tables to merge.");
+  }
+
+  // Lock the source table too (not just the destination, which
+  // transferOrderToTable already locks per-order) so two concurrent merges
+  // FROM the same source table serialize instead of racing over which
+  // orders each one sees as "active".
+  await requireTableRowLock(tx, params.restaurantId, params.fromTableId);
+
+  const activeOrders = await tx
+    .select({ id: orders.id })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.restaurantId, params.restaurantId),
+        eq(orders.tableId, params.fromTableId),
+        notInArray(orders.status, [...INACTIVE_ORDER_STATUSES]),
+      ),
+    );
+  if (activeOrders.length === 0) {
+    throw new TableError("The source table has no active orders to merge.");
+  }
+
+  const movedOrderIds: string[] = [];
+  for (const row of activeOrders) {
+    await transferOrderToTable(tx, {
+      restaurantId: params.restaurantId,
+      orderId: row.id,
+      toTableId: params.toTableId,
+    });
+    movedOrderIds.push(row.id);
+  }
+
+  return { movedOrderIds };
+}
+
+/**
+ * Pauses an order's forward progress — see the isOnHold column's own doc
+ * comment in schema.ts for why this is an orthogonal flag rather than a
+ * new `status` value. Idempotent-safe: holding an already-held order just
+ * overwrites the reason/timestamp rather than erroring, since two staff
+ * members hitting "hold" moments apart shouldn't surface a conflict.
+ */
+export async function holdOrder(
+  tx: Transaction,
+  params: { restaurantId: string; orderId: string; userId: string; reason?: string | null },
+): Promise<typeof orders.$inferSelect> {
+  const orderRows = await tx
+    .select({ id: orders.id, status: orders.status })
+    .from(orders)
+    .where(and(eq(orders.id, params.orderId), eq(orders.restaurantId, params.restaurantId)))
+    .for("update")
+    .limit(1);
+  const order = orderRows[0];
+  if (!order) {
+    throw new TableError("Order not found.", 404);
+  }
+  if (INACTIVE_ORDER_STATUSES.includes(order.status as (typeof INACTIVE_ORDER_STATUSES)[number])) {
+    throw new TableError("Can't hold a cancelled or completed order.");
+  }
+
+  const [updated] = await tx
+    .update(orders)
+    .set({
+      isOnHold: true,
+      heldAt: new Date(),
+      heldByUserId: params.userId,
+      holdReason: params.reason ?? null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(orders.id, params.orderId), eq(orders.restaurantId, params.restaurantId)))
+    .returning();
+  return updated;
+}
+
+/** The symmetric inverse of holdOrder — clears all four hold columns. A safe no-op-but-returns-row if the order wasn't on hold. */
+export async function resumeOrder(
+  tx: Transaction,
+  params: { restaurantId: string; orderId: string },
+): Promise<typeof orders.$inferSelect> {
+  const orderRows = await tx
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.id, params.orderId), eq(orders.restaurantId, params.restaurantId)))
+    .for("update")
+    .limit(1);
+  if (!orderRows[0]) {
+    throw new TableError("Order not found.", 404);
+  }
+
+  const [updated] = await tx
+    .update(orders)
+    .set({
+      isOnHold: false,
+      heldAt: null,
+      heldByUserId: null,
+      holdReason: null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(orders.id, params.orderId), eq(orders.restaurantId, params.restaurantId)))
+    .returning();
+  return updated;
 }

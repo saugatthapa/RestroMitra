@@ -36,3 +36,16 @@ export const updateOrderStatusSchema = z.object({
   status: z.enum(ORDER_STATUSES),
   reason: z.string().trim().max(300).optional(),
 });
+
+// Commercial Launch Phase B.7 — Table Operations.
+export const transferOrderSchema = z.object({
+  toTableId: z.string().uuid(),
+});
+
+export const mergeTableSchema = z.object({
+  fromTableId: z.string().uuid(),
+});
+
+export const holdOrderSchema = z.object({
+  reason: z.string().trim().max(300).optional().or(z.literal("")),
+});

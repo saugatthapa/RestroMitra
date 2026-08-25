@@ -34,6 +34,9 @@ type ActiveOrder = {
   totalInPaisa: number;
   customerName: string | null;
   placedAt: string;
+  // Commercial Launch Phase B.7 — Table Operations.
+  isOnHold: boolean;
+  holdReason: string | null;
 };
 
 type UpcomingReservation = {
@@ -85,6 +88,12 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
   const [detail, setDetail] = useState<TableDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  // Commercial Launch Phase B.7 — Table Operations UI state.
+  const [transferringOrderId, setTransferringOrderId] = useState<string | null>(null);
+  const [transferTargetTableId, setTransferTargetTableId] = useState("");
+  const [merging, setMerging] = useState(false);
+  const [mergeSourceTableId, setMergeSourceTableId] = useState("");
+  const [tableOpBusy, setTableOpBusy] = useState(false);
 
   const dragState = useRef<{
     id: string;
@@ -145,6 +154,10 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
   function closeDetail() {
     setSelectedTableId(null);
     setDetail(null);
+    setTransferringOrderId(null);
+    setTransferTargetTableId("");
+    setMerging(false);
+    setMergeSourceTableId("");
   }
 
   async function changeStatus(tableId: string, status: TableStatus) {
@@ -161,6 +174,81 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
 
   function openInPOS(tableId: string) {
     router.push(`/dashboard/pos?table=${tableId}`);
+  }
+
+  // -------------------------------------------------------------------
+  // Commercial Launch Phase B.7 — Table Operations. Errors surface via
+  // alert(), matching this file's existing convention (changeStatus,
+  // handleAddTable) rather than introducing a different inline-error
+  // pattern just for this feature.
+  // -------------------------------------------------------------------
+
+  async function refreshDetail(tableId: string) {
+    try {
+      const res = await apiGet<TableDetail>(`${base(slug)}/tables/${tableId}`);
+      setDetail(res);
+    } catch {
+      // Best-effort refresh — the action itself already succeeded/failed
+      // and reported its own error; a failed refresh just leaves stale
+      // detail data until the user re-opens the panel.
+    }
+  }
+
+  async function transferOrder(orderId: string) {
+    if (!transferTargetTableId) return;
+    setTableOpBusy(true);
+    try {
+      await apiPost(`${base(slug)}/orders/${orderId}/transfer`, { toTableId: transferTargetTableId });
+      setTransferringOrderId(null);
+      setTransferTargetTableId("");
+      await load();
+      if (selectedTableId) await refreshDetail(selectedTableId);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Could not transfer this order.");
+    } finally {
+      setTableOpBusy(false);
+    }
+  }
+
+  async function mergeIntoCurrentTable() {
+    if (!detail || !mergeSourceTableId) return;
+    setTableOpBusy(true);
+    try {
+      await apiPost(`${base(slug)}/tables/${detail.table.id}/merge`, { fromTableId: mergeSourceTableId });
+      setMerging(false);
+      setMergeSourceTableId("");
+      await load();
+      await refreshDetail(detail.table.id);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Could not merge these tables.");
+    } finally {
+      setTableOpBusy(false);
+    }
+  }
+
+  async function holdOrder(orderId: string) {
+    const reason = window.prompt("Reason for holding this order (optional)", "") ?? "";
+    setTableOpBusy(true);
+    try {
+      await apiPost(`${base(slug)}/orders/${orderId}/hold`, { reason });
+      if (selectedTableId) await refreshDetail(selectedTableId);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Could not hold this order.");
+    } finally {
+      setTableOpBusy(false);
+    }
+  }
+
+  async function resumeOrder(orderId: string) {
+    setTableOpBusy(true);
+    try {
+      await apiPost(`${base(slug)}/orders/${orderId}/resume`, {});
+      if (selectedTableId) await refreshDetail(selectedTableId);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Could not resume this order.");
+    } finally {
+      setTableOpBusy(false);
+    }
   }
 
   async function handleAddTable() {
@@ -384,16 +472,136 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
                     <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                       Active orders
                     </p>
-                    <ul className="space-y-1">
+                    <ul className="space-y-1.5">
                       {detail.activeOrders.map((o) => (
                         <li key={o.id} className="rounded-lg bg-neutral-50 px-3 py-2 text-xs">
-                          <span className="font-medium">{o.orderNumber}</span> — {o.status}
-                          {o.customerName ? ` · ${o.customerName}` : ""}
+                          <div className="flex flex-wrap items-center justify-between gap-1">
+                            <span>
+                              <span className="font-medium">{o.orderNumber}</span> — {o.status}
+                              {o.customerName ? ` · ${o.customerName}` : ""}
+                              {o.isOnHold && (
+                                <span className="ml-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
+                                  On hold
+                                </span>
+                              )}
+                            </span>
+                            <span className="flex flex-wrap gap-1">
+                              {o.isOnHold ? (
+                                <button
+                                  onClick={() => resumeOrder(o.id)}
+                                  disabled={tableOpBusy}
+                                  className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] font-medium text-neutral-700 hover:border-neutral-400"
+                                >
+                                  Resume
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => holdOrder(o.id)}
+                                  disabled={tableOpBusy}
+                                  className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] font-medium text-neutral-700 hover:border-neutral-400"
+                                >
+                                  Hold
+                                </button>
+                              )}
+                              <button
+                                onClick={() =>
+                                  setTransferringOrderId((cur) => (cur === o.id ? null : o.id))
+                                }
+                                disabled={tableOpBusy}
+                                className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] font-medium text-neutral-700 hover:border-neutral-400"
+                              >
+                                Transfer
+                              </button>
+                            </span>
+                          </div>
+                          {o.isOnHold && o.holdReason && (
+                            <p className="mt-1 text-[10px] text-amber-700">Reason: {o.holdReason}</p>
+                          )}
+                          {transferringOrderId === o.id && (
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              <select
+                                value={transferTargetTableId}
+                                onChange={(e) => setTransferTargetTableId(e.target.value)}
+                                className="input py-1 text-xs"
+                              >
+                                <option value="">Move to table…</option>
+                                {tables
+                                  .filter((t) => t.id !== detail.table.id && t.branchId === detail.table.branchId)
+                                  .map((t) => (
+                                    <option key={t.id} value={t.id}>
+                                      {t.name}
+                                    </option>
+                                  ))}
+                              </select>
+                              <button
+                                onClick={() => transferOrder(o.id)}
+                                disabled={tableOpBusy || !transferTargetTableId}
+                                className="btn-primary px-2 py-1 text-[10px]"
+                              >
+                                Move
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setTransferringOrderId(null);
+                                  setTransferTargetTableId("");
+                                }}
+                                disabled={tableOpBusy}
+                                className="btn-secondary px-2 py-1 text-[10px]"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
                         </li>
                       ))}
                     </ul>
                   </div>
                 )}
+
+                <div className="mb-4">
+                  {merging ? (
+                    <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-neutral-50 px-3 py-2">
+                      <select
+                        value={mergeSourceTableId}
+                        onChange={(e) => setMergeSourceTableId(e.target.value)}
+                        className="input py-1 text-xs"
+                      >
+                        <option value="">Merge orders from…</option>
+                        {tables
+                          .filter((t) => t.id !== detail.table.id && t.branchId === detail.table.branchId)
+                          .map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                      </select>
+                      <button
+                        onClick={mergeIntoCurrentTable}
+                        disabled={tableOpBusy || !mergeSourceTableId}
+                        className="btn-primary px-2 py-1 text-[10px]"
+                      >
+                        Merge into {detail.table.name}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setMerging(false);
+                          setMergeSourceTableId("");
+                        }}
+                        disabled={tableOpBusy}
+                        className="btn-secondary px-2 py-1 text-[10px]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setMerging(true)}
+                      className="text-xs font-medium text-neutral-500 underline decoration-dotted hover:text-neutral-700"
+                    >
+                      Merge another table into this one
+                    </button>
+                  )}
+                </div>
 
                 {detail.upcomingReservations.length > 0 && (
                   <div className="mb-4">

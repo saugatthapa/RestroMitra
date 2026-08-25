@@ -94,6 +94,19 @@ export async function PATCH(
       );
     }
 
+    // Commercial Launch Phase B.7 — Table Operations (hold/resume). An
+    // on-hold order stays frozen wherever it is — see the isOnHold column's
+    // own doc comment in schema.ts for why this is a flag orthogonal to
+    // `status` rather than folded into the state machine. The one
+    // exception is cancelling: staff must always be able to cancel an
+    // order, held or not (e.g. the held party never came back).
+    if (existing.isOnHold && targetStatus !== "cancelled") {
+      return NextResponse.json(
+        { error: "This order is on hold. Resume it before changing its status." },
+        { status: 400 },
+      );
+    }
+
     // confirmed -> preparing is the single point where recipe ingredients
     // are deducted from stock — see deductRecipeStockForOrder's own
     // comment for why this transition is naturally idempotent (the order

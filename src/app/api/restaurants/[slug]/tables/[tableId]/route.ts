@@ -52,6 +52,10 @@ export async function GET(
         totalInPaisa: true,
         customerName: true,
         placedAt: true,
+        // Commercial Launch Phase B.7 — Table Operations, so the floor
+        // plan's table detail panel can show/toggle hold state per order.
+        isOnHold: true,
+        holdReason: true,
       },
     });
 
