@@ -4,6 +4,9 @@ import { db } from "@/db";
 import { userRoles, users, staffSalaryConfigs, payrollPayments } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
+import { getPayrollComputation } from "@/lib/payroll";
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * The Payroll tab's roster: every active staff member (owner included, so
@@ -11,14 +14,28 @@ import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpe
  * their standing salary config if one's been set, and when they were last
  * paid — enough for the UI to show a "Pay" button pre-filled with sane
  * defaults without a second round trip per row.
+ *
+ * Commercial Launch Phase B.2 — `?periodStart=&periodEnd=` (both required
+ * together, YYYY-MM-DD) additionally computes each staff member's owed
+ * amount for that period from attendance (see getPayrollComputation) —
+ * the Payroll tab's period picker uses this to show "here's what everyone
+ * is owed for August" before anyone clicks Pay. Omitted (or malformed)
+ * params just skip the computation — `computation` stays null on every
+ * row, same as before this phase.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   ctx: { params: Promise<{ slug: string }> },
 ) {
   try {
     const { slug } = await ctx.params;
-    const { restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.VIEW_PAYROLL);
+    const { restaurantId, timezone } = await resolveRestaurantContext(slug, PERMISSIONS.VIEW_PAYROLL);
+
+    const url = new URL(request.url);
+    const periodStart = url.searchParams.get("periodStart");
+    const periodEnd = url.searchParams.get("periodEnd");
+    const hasValidPeriod =
+      !!periodStart && !!periodEnd && ISO_DATE.test(periodStart) && ISO_DATE.test(periodEnd) && periodStart <= periodEnd;
 
     const staffRows = await db
       .select({
@@ -45,6 +62,26 @@ export async function GET(
       .groupBy(payrollPayments.userRoleId);
     const lastPaidByUserRoleId = new Map(lastPaidRows.map((r) => [r.userRoleId, r.lastPaidAt]));
 
+    // Only worth computing for a row that actually HAS a salary config —
+    // getPayrollComputation returns null for one that doesn't anyway, but
+    // skipping the query entirely avoids N pointless round trips on a
+    // roster where most staff have no salary set yet.
+    const computations = hasValidPeriod
+      ? new Map(
+          await Promise.all(
+            staffRows
+              .filter((r) => r.salary !== null)
+              .map(
+                async (r) =>
+                  [
+                    r.userRoleId,
+                    await getPayrollComputation(restaurantId, r.userRoleId, periodStart!, periodEnd!, timezone),
+                  ] as const,
+              ),
+          ),
+        )
+      : new Map();
+
     return NextResponse.json({
       staff: staffRows
         .map((r) => ({
@@ -55,6 +92,7 @@ export async function GET(
           role: r.role,
           salary: r.salary,
           lastPaidAt: lastPaidByUserRoleId.get(r.userRoleId) ?? null,
+          computation: computations.get(r.userRoleId) ?? null,
         }))
         .sort((a, b) => a.fullName.localeCompare(b.fullName)),
     });

@@ -9,6 +9,7 @@ import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { recordPayrollLedgerEntry } from "@/lib/ledger";
 import { restaurantDate } from "@/lib/restaurant-date";
+import { getPayrollComputation } from "@/lib/payroll";
 
 const PAYROLL_LIST_LIMIT = 500;
 
@@ -81,6 +82,17 @@ export async function POST(
 
     const paymentDate = restaurantDate(timezone);
 
+    // Commercial Launch Phase B.2 — when a period is given, recompute the
+    // owed amount server-side (never trust a client-supplied computed
+    // figure — it could be stale or tampered) and snapshot it alongside
+    // whatever amount is actually being paid, even if a human typed in
+    // something different. See the computedAmountInPaisa column comment
+    // in schema.ts.
+    const computation =
+      data.periodStart && data.periodEnd
+        ? await getPayrollComputation(restaurantId, data.userRoleId, data.periodStart, data.periodEnd, timezone)
+        : null;
+
     // Committed together, same "one write, two rows, one transaction"
     // shape as expense payment — a payroll payment should never exist
     // without its matching (name-redacted) Account Books debit.
@@ -98,6 +110,9 @@ export async function POST(
           paymentMethod: data.paymentMethod,
           note: data.note || null,
           paidByUserId: session.user.id,
+          computedAmountInPaisa: computation?.owedAmountInPaisa ?? null,
+          attendanceMinutesSnapshot: computation?.attendanceMinutes ?? null,
+          attendanceDaysSnapshot: computation?.attendanceDays ?? null,
         })
         .returning();
 

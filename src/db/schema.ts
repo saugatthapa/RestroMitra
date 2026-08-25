@@ -2584,6 +2584,20 @@ export const payrollPayments = pgTable(
     periodEnd: date("period_end"),
     paymentMethod: expensePaymentMethodEnum("payment_method").notNull(),
     note: text("note"),
+    // Commercial Launch Phase B.2 — Payroll Upgrades. Populated only when
+    // this payment was recorded via the computed-pay flow (see
+    // src/lib/payroll.ts's getPayrollComputation) — null for a manually-
+    // typed one-off payment (bonus, advance) that never went through that
+    // computation. Lets a later reviewer see "the system computed X based
+    // on Y days / Z hours; W was actually paid" and judge whether a manual
+    // override was reasonable, without re-running the computation against
+    // possibly-since-changed attendance data. amountInPaisa above is
+    // always the ACTUAL amount paid (which a manager can freely edit from
+    // the computed suggestion) — these three columns are read-only record
+    // of what the system proposed.
+    computedAmountInPaisa: integer("computed_amount_in_paisa"),
+    attendanceMinutesSnapshot: integer("attendance_minutes_snapshot"),
+    attendanceDaysSnapshot: integer("attendance_days_snapshot"),
     // Same "reverse via a new ledger entry, never mutate/delete the
     // original" pattern as expenses.isVoided — see reversePayrollLedgerEntry
     // in ledger.ts.

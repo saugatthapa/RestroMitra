@@ -7,6 +7,7 @@ import { computeDurationMinutes, formatDuration } from "@/lib/attendance";
 import { useDateSystem } from "@/lib/date-system";
 import { formatDate } from "@/lib/nepali-date";
 import { formatNPR } from "@/lib/money";
+import { localDateIso } from "@/lib/local-date";
 import { SALARY_TYPES, SALARY_TYPE_LABELS, type SalaryType } from "@/lib/finance/salary-type";
 import { PAYOUT_METHODS, PAYOUT_METHOD_LABELS, type PayoutMethod } from "@/lib/finance/payout-methods";
 
@@ -44,6 +45,14 @@ type SalaryConfig = {
   note: string | null;
 };
 
+type PayrollComputation = {
+  salaryType: SalaryType;
+  standingAmountInPaisa: number;
+  attendanceMinutes: number;
+  attendanceDays: number;
+  owedAmountInPaisa: number;
+};
+
 type PayrollStaffMember = {
   userRoleId: string;
   userId: string;
@@ -52,6 +61,10 @@ type PayrollStaffMember = {
   role: string;
   salary: SalaryConfig | null;
   lastPaidAt: string | null;
+  // Commercial Launch Phase B.2 — present only when the Payroll tab's period
+  // picker sent ?periodStart=&periodEnd= and this staff member has a salary
+  // config; null otherwise (see payroll/staff route.ts's doc comment).
+  computation: PayrollComputation | null;
 };
 
 type PayrollPayment = {
@@ -689,18 +702,34 @@ function AttendanceTab({ slug }: { slug: string }) {
 // Payroll tab (Phase 22)
 // ---------------------------------------------------------------------------
 
+function firstOfMonthIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
 function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll: boolean }) {
   const [staff, setStaff] = useState<PayrollStaffMember[]>([]);
   const [payments, setPayments] = useState<PayrollPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payingFor, setPayingFor] = useState<PayrollStaffMember | null>(null);
+  // Commercial Launch Phase B.2 — defaults to the current calendar month so
+  // the roster shows "here's what everyone is owed this month" on first
+  // load, same "This month" default reports.ts/ReportsBoard.tsx use.
+  const [periodStart, setPeriodStart] = useState(firstOfMonthIso());
+  const [periodEnd, setPeriodEnd] = useState(localDateIso());
   const dateSystem = useDateSystem();
 
   async function load() {
     try {
+      const params = new URLSearchParams();
+      if (periodStart && periodEnd) {
+        params.set("periodStart", periodStart);
+        params.set("periodEnd", periodEnd);
+      }
+      const qs = params.toString();
       const [staffRes, paymentsRes] = await Promise.all([
-        apiGet<{ staff: PayrollStaffMember[] }>(`${base(slug)}/payroll/staff`),
+        apiGet<{ staff: PayrollStaffMember[] }>(`${base(slug)}/payroll/staff${qs ? `?${qs}` : ""}`),
         apiGet<{ payments: PayrollPayment[] }>(`${base(slug)}/payroll/payments`),
       ]);
       setStaff(staffRes.staff);
@@ -716,7 +745,7 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug]);
+  }, [slug, periodStart, periodEnd]);
 
   async function voidPayment(payment: PayrollPayment) {
     if (!confirm(`Void the ${formatNPR(payment.amountInPaisa)} payment to ${payment.staffNameSnapshot}? This does not claw back the money — it only corrects the record.`)) {
@@ -736,6 +765,32 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
     <div className="space-y-4">
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm">
+        <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+          Owed this period
+        </span>
+        <label className="flex items-center gap-1.5 text-sm text-neutral-600">
+          From
+          <input
+            type="date"
+            value={periodStart}
+            max={periodEnd}
+            onChange={(e) => setPeriodStart(e.target.value)}
+            className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+          />
+        </label>
+        <label className="flex items-center gap-1.5 text-sm text-neutral-600">
+          To
+          <input
+            type="date"
+            value={periodEnd}
+            min={periodStart}
+            onChange={(e) => setPeriodEnd(e.target.value)}
+            className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+          />
+        </label>
+      </div>
+
       <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
@@ -743,6 +798,7 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
               <th className="px-3 py-2">Name</th>
               <th className="px-3 py-2">Role</th>
               <th className="px-3 py-2">Salary</th>
+              <th className="px-3 py-2">Owed (period)</th>
               <th className="px-3 py-2">Last paid</th>
               <th className="px-3 py-2"></th>
             </tr>
@@ -762,6 +818,22 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
                     <span className="text-neutral-400">Not set</span>
                   )}
                 </td>
+                <td className="px-3 py-2 text-neutral-600">
+                  {s.computation ? (
+                    <>
+                      {formatNPR(s.computation.owedAmountInPaisa)}
+                      {s.computation.salaryType !== "monthly" && (
+                        <span className="ml-1 text-xs text-neutral-400">
+                          ({s.computation.salaryType === "hourly"
+                            ? formatDuration(s.computation.attendanceMinutes)
+                            : `${s.computation.attendanceDays} day${s.computation.attendanceDays === 1 ? "" : "s"}`})
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-neutral-400">—</span>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-neutral-500">
                   {s.lastPaidAt ? formatDate(s.lastPaidAt, dateSystem) : "Never"}
                 </td>
@@ -779,7 +851,7 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
             ))}
             {staff.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
+                <td colSpan={6} className="px-3 py-6 text-center text-neutral-400">
                   No active staff yet.
                 </td>
               </tr>
@@ -792,6 +864,8 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
         <PaySalaryModal
           slug={slug}
           staff={payingFor}
+          periodStart={periodStart}
+          periodEnd={periodEnd}
           onClose={() => setPayingFor(null)}
           onPaid={() => {
             setPayingFor(null);
@@ -852,16 +926,28 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
 function PaySalaryModal({
   slug,
   staff,
+  periodStart,
+  periodEnd,
   onClose,
   onPaid,
 }: {
   slug: string;
   staff: PayrollStaffMember;
+  periodStart: string;
+  periodEnd: string;
   onClose: () => void;
   onPaid: () => void;
 }) {
+  // Commercial Launch Phase B.2 — pre-fill from the computed owed amount
+  // (attendance × rate) when one's available for this period, falling back
+  // to the raw standing salary otherwise; either way it's just a starting
+  // point the person confirming the payment can still change.
   const [amount, setAmount] = useState(
-    staff.salary ? String(staff.salary.amountInPaisa / 100) : "",
+    staff.computation
+      ? String(staff.computation.owedAmountInPaisa / 100)
+      : staff.salary
+        ? String(staff.salary.amountInPaisa / 100)
+        : "",
   );
   const [method, setMethod] = useState<PayoutMethod>(staff.salary?.paymentMethod ?? "cash");
   const [payPeriodLabel, setPayPeriodLabel] = useState("");
@@ -879,6 +965,8 @@ function PaySalaryModal({
         amount: Number(amount),
         paymentMethod: method,
         payPeriodLabel: payPeriodLabel || undefined,
+        periodStart,
+        periodEnd,
         note: note || undefined,
       });
       onPaid();
@@ -901,6 +989,16 @@ function PaySalaryModal({
             ? `Usual salary: ${formatNPR(staff.salary.amountInPaisa)} / ${SALARY_TYPE_LABELS[staff.salary.salaryType].toLowerCase()}`
             : "No standing salary set — enter the amount to pay below."}
         </p>
+        {staff.computation && (
+          <p className="mb-3 rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
+            For {periodStart} to {periodEnd}: {staff.computation.salaryType === "hourly"
+              ? formatDuration(staff.computation.attendanceMinutes)
+              : staff.computation.salaryType === "daily"
+                ? `${staff.computation.attendanceDays} day${staff.computation.attendanceDays === 1 ? "" : "s"} worked`
+                : "monthly salary, not prorated by attendance"} — computed{" "}
+            {formatNPR(staff.computation.owedAmountInPaisa)}.
+          </p>
+        )}
         {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
         <div className="space-y-3">

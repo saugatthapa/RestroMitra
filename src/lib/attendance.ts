@@ -38,3 +38,24 @@ export function formatDuration(minutes: number): string {
 export function totalMinutes(records: AttendanceRecord[], now: Date = new Date()): number {
   return records.reduce((sum, r) => sum + computeDurationMinutes(r, now), 0);
 }
+
+/**
+ * Commercial Launch Phase B.2 (Payroll Upgrades) — the attendance-side
+ * inputs a payroll computation needs: total minutes worked (for hourly
+ * pay) and distinct CALENDAR days with at least one shift (for daily pay).
+ * `localDate` buckets each record's clockInAt into a day — pass a
+ * restaurant-timezone-aware bucketer (e.g. `(d) => restaurantDate(tz, d)`
+ * from restaurant-date.ts) so "days present" matches the restaurant's own
+ * wall-clock day, same convention reports.ts uses throughout. Kept here
+ * (not in payroll.ts) since it's purely attendance-shape math with no DB
+ * dependency, same as totalMinutes above — payroll.ts calls this, not the
+ * other way around.
+ */
+export function summarizeAttendance(
+  records: AttendanceRecord[],
+  localDate: (d: Date) => string,
+  now: Date = new Date(),
+): { totalMinutes: number; daysPresent: number } {
+  const days = new Set(records.map((r) => localDate(new Date(r.clockInAt))));
+  return { totalMinutes: totalMinutes(records, now), daysPresent: days.size };
+}
