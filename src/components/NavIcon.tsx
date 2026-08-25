@@ -97,6 +97,16 @@ export const NavIcon = {
       <path d="M9 4v13" strokeDasharray="2 2" />
     </svg>
   ),
+  // Commercial Launch Phase B.8 — Combos. Three items bundled by a bracket,
+  // distinct from Coupons' ticket glyph and Menu's list glyph.
+  Combos: () => (
+    <svg {...iconProps}>
+      <rect x="3" y="4" width="6" height="6" rx="1.2" />
+      <rect x="9.5" y="14" width="6" height="6" rx="1.2" />
+      <rect x="15" y="4" width="6" height="6" rx="1.2" />
+      <path d="M6 10v2a2 2 0 0 0 2 2h1M18 10v2a2 2 0 0 1-2 2h-1" />
+    </svg>
+  ),
   Expenses: () => (
     <svg {...iconProps}>
       <path d="M4 7a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v2" />

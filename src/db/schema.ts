@@ -632,6 +632,73 @@ export const menuAddons = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Commercial Launch Phase B.8 — Combos. A staff-defined bundle ("Family
+// Meal — 2 Momo + 1 Coke") sold at ONE fixed price, cheaper than its parts
+// bought separately. Deliberately does NOT introduce a parallel
+// pricing/KDS/reports/recipe-deduction pipeline: a combo, once added to an
+// order, EXPLODES into ordinary orderItems rows (see the
+// comboGroupId/comboNameSnapshot columns added to orderItems below) with
+// the combo's fixed price allocated proportionally across its constituent
+// items (see computeComboPricing in src/lib/combos.ts). Every downstream
+// system — KDS, recipe stock deduction, reports, refunds — keeps operating
+// on plain order-item rows exactly as it always has, completely unaware a
+// combo was ever involved. This mirrors the "explode, don't parallel-track"
+// approach couponRedemptions/loyaltyTransactions use for their own concerns.
+// ---------------------------------------------------------------------------
+
+export const menuCombos = pgTable(
+  "menu_combos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 150 }).notNull(),
+    description: text("description"),
+    // The bundle's fixed all-in price — NOT a sum of its items' prices
+    // (that sum is only ever used, at order time, as an allocation WEIGHT;
+    // see computeComboPricing). Staff set this directly, same as a menu
+    // item's basePriceInPaisa.
+    priceInPaisa: integer("price_in_paisa").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("menu_combos_restaurant_id_idx").on(table.restaurantId),
+    check("menu_combos_price_positive", sql`${table.priceInPaisa} > 0`),
+  ],
+);
+
+export const menuComboItems = pgTable(
+  "menu_combo_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    comboId: uuid("combo_id")
+      .notNull()
+      .references(() => menuCombos.id, { onDelete: "cascade" }),
+    menuItemId: uuid("menu_item_id")
+      .notNull()
+      .references(() => menuItems.id, { onDelete: "cascade" }),
+    // Optional — if the constituent item requires a variant (see
+    // menuItems' own comment on variant-required items), the combo pins
+    // WHICH variant it includes (e.g. always the "Regular" size Coke, not
+    // staff's choice at order time). Validated at combo create/edit time to
+    // actually belong to menuItemId — see validation/combos.ts.
+    variantId: uuid("variant_id").references(() => menuVariants.id, { onDelete: "cascade" }),
+    // How many of this item ONE bundle includes (e.g. "2 Momo" -> 2).
+    // Multiplied by the combo cart line's own quantity at explosion time —
+    // see computeComboPricing.
+    quantity: integer("quantity").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("menu_combo_items_combo_id_idx").on(table.comboId),
+    check("menu_combo_items_quantity_positive", sql`${table.quantity} > 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Phase 3 — Tables + QR ordering.
 //
 // A table belongs to exactly one branch and carries a high-entropy,
@@ -994,6 +1061,18 @@ export const orderItems = pgTable(
     // this snapshot when present and fall back to a live recipe join only
     // for pre-migration rows that predate this column.
     recipeCostInPaisa: integer("recipe_cost_in_paisa"),
+    // Commercial Launch Phase B.8 — Combos. Set (both together, or neither)
+    // when this row exists because a combo was exploded into it — see
+    // menuCombos' own doc comment above. comboGroupId is a plain random id
+    // shared by every orderItems row that came from ONE combo cart line
+    // (not a FK to any table — there's no "combo instance" row anywhere,
+    // it exists purely to let receipts/reports/KDS visually group "these 3
+    // items are one Family Meal combo" if they choose to). comboNameSnapshot
+    // is the combo's name at order time, same snapshot-not-live-reference
+    // reasoning as menuItemNameSnapshot. NULL on every ordinary (non-combo)
+    // order item.
+    comboGroupId: uuid("combo_group_id"),
+    comboNameSnapshot: varchar("combo_name_snapshot", { length: 150 }),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1001,6 +1080,7 @@ export const orderItems = pgTable(
   },
   (table) => [
     index("order_items_order_id_idx").on(table.orderId),
+    index("order_items_combo_group_id_idx").on(table.comboGroupId),
     // RC audit — app-layer already rejects quantity outside [1, 50]
     // (createStaffOrderSchema et al.); this is the DB-level backstop.
     check("order_items_quantity_positive", sql`${table.quantity} > 0`),
@@ -3244,6 +3324,29 @@ export const menuAddonsRelations = relations(menuAddons, ({ one }) => ({
   menuItem: one(menuItems, {
     fields: [menuAddons.menuItemId],
     references: [menuItems.id],
+  }),
+}));
+
+export const menuCombosRelations = relations(menuCombos, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [menuCombos.restaurantId],
+    references: [restaurants.id],
+  }),
+  items: many(menuComboItems),
+}));
+
+export const menuComboItemsRelations = relations(menuComboItems, ({ one }) => ({
+  combo: one(menuCombos, {
+    fields: [menuComboItems.comboId],
+    references: [menuCombos.id],
+  }),
+  menuItem: one(menuItems, {
+    fields: [menuComboItems.menuItemId],
+    references: [menuItems.id],
+  }),
+  variant: one(menuVariants, {
+    fields: [menuComboItems.variantId],
+    references: [menuVariants.id],
   }),
 }));
 

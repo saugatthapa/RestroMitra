@@ -52,6 +52,11 @@ export const createStaffOrderSchema = z.object({
   // given, its own branch always wins (see the route). Optional/nullable
   // for the same "resolve, don't trust" reasons as every other id here.
   branchId: z.string().uuid().nullable().optional(),
+  // Commercial Launch Phase B.8 — Combos allow an order made up ENTIRELY of
+  // combo lines (e.g. "2x Family Meal" and nothing else), so `items` alone
+  // can no longer require at least one entry — the combined
+  // items+combos.refine below is what actually enforces "the cart isn't
+  // empty".
   items: z
     .array(
       z.object({
@@ -62,8 +67,20 @@ export const createStaffOrderSchema = z.object({
         notes: z.string().trim().max(300).optional(),
       }),
     )
-    .min(1, "Add at least one item.")
-    .max(40),
+    .max(40)
+    .default([]),
+  // Commercial Launch Phase B.8 — Combos. Each entry names a menuCombos row
+  // and how many bundles to add; see computeComboPricing in
+  // src/lib/combos.ts for how it explodes into order items.
+  combos: z
+    .array(
+      z.object({
+        comboId: z.string().uuid(),
+        quantity: z.number().int().min(1).max(50),
+      }),
+    )
+    .max(10)
+    .default([]),
   customerName: z.string().trim().max(150).optional().or(z.literal("")),
   customerPhone: z.string().trim().max(20).optional().or(z.literal("")),
   // Optional link to a Phase 8 CRM customer record — see the orders.customerId
@@ -99,7 +116,13 @@ export const createStaffOrderSchema = z.object({
       points: z.number().int().min(1),
     })
     .optional(),
-});
+})
+  // Commercial Launch Phase B.8 — the cart-emptiness check moved here from
+  // `items`'s own .min(1) once combos made an all-combo order valid.
+  .refine((d) => d.items.length > 0 || d.combos.length > 0, {
+    message: "Add at least one item.",
+    path: ["items"],
+  });
 
 // Commercial Launch Phase A.8 — Financial Reconciliation.
 // from/to accept either a bare date ("2026-08-01") or a full ISO timestamp

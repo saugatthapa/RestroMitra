@@ -40,6 +40,13 @@ export type ComputedOrderItem = {
   lineTotalInPaisa: number;
   notes: string | null;
   addons: ComputedOrderItemAddon[];
+  // Commercial Launch Phase B.8 — Combos. Null for every item computed by
+  // computeOrderPricing itself (a combo's exploded component rows are
+  // produced by computeComboPricing in src/lib/combos.ts instead, sharing
+  // this same type so both can be inserted through one identical code path
+  // in the order-creation route — see that route's own comment).
+  comboGroupId: string | null;
+  comboNameSnapshot: string | null;
 };
 
 export type ComputedOrderPricing = {
@@ -186,6 +193,8 @@ export async function computeOrderPricing(
       lineTotalInPaisa,
       notes: cartLine.notes?.trim() || null,
       addons: computedAddons,
+      comboGroupId: null,
+      comboNameSnapshot: null,
     });
 
     subtotalInPaisa += lineTotalInPaisa;

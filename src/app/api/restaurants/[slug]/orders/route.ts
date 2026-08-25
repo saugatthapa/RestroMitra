@@ -12,6 +12,7 @@ import { ORDER_STATUSES, type OrderStatus } from "@/lib/order-status";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { createStaffOrderSchema } from "@/lib/validation/payments";
 import { computeOrderPricing, generateOrderNumber } from "@/lib/orders";
+import { computeComboPricing } from "@/lib/combos";
 import { getMainBranch } from "@/lib/restaurant";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
@@ -204,16 +205,33 @@ export async function POST(
       }
     }
 
-    const pricing = await computeOrderPricing(
-      restaurantId,
-      body.items.map((item) => ({
-        menuItemId: item.menuItemId,
-        variantId: item.variantId ?? null,
-        quantity: item.quantity,
-        addons: item.addonIds.map((addonId) => ({ addonId })),
-        notes: item.notes,
-      })),
-    );
+    // Commercial Launch Phase B.8 — Combos. A combo cart line never goes
+    // through computeOrderPricing itself (it has no menuItemId of its
+    // own) — computeComboPricing explodes it into the SAME ComputedOrderItem
+    // shape separately, and the two results are merged below. Guarding on
+    // body.items.length here (rather than always calling
+    // computeOrderPricing) matters because that function still rejects an
+    // empty cart on its own — see its own doc comment — which would wrongly
+    // reject a combo-only order.
+    const itemPricing =
+      body.items.length > 0
+        ? await computeOrderPricing(
+            restaurantId,
+            body.items.map((item) => ({
+              menuItemId: item.menuItemId,
+              variantId: item.variantId ?? null,
+              quantity: item.quantity,
+              addons: item.addonIds.map((addonId) => ({ addonId })),
+              notes: item.notes,
+            })),
+          )
+        : { items: [], subtotalInPaisa: 0, taxInPaisa: 0 };
+    const comboPricing = await computeComboPricing(restaurantId, body.combos);
+    const pricing = {
+      items: [...itemPricing.items, ...comboPricing.items],
+      subtotalInPaisa: itemPricing.subtotalInPaisa + comboPricing.subtotalInPaisa,
+      taxInPaisa: itemPricing.taxInPaisa + comboPricing.taxInPaisa,
+    };
 
     // Phase 13 — discount/service charge at creation time is opt-in and
     // gated behind APPLY_DISCOUNT, checked here (not just relying on the
@@ -392,6 +410,8 @@ export async function POST(
             addonsTotalInPaisa: item.addonsTotalInPaisa,
             lineTotalInPaisa: item.lineTotalInPaisa,
             notes: item.notes,
+            comboGroupId: item.comboGroupId,
+            comboNameSnapshot: item.comboNameSnapshot,
           }));
           await tx.insert(orderItems).values(itemRows);
 

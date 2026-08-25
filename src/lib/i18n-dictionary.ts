@@ -30,6 +30,7 @@ const DICTIONARY = {
   "nav.tablesQr": { en: "Tables & QR", ne: "टेबल र क्युआर" },
   "nav.reservations": { en: "Reservations", ne: "आरक्षणहरू" },
   "nav.menu": { en: "Menu", ne: "मेनु" },
+  "nav.combos": { en: "Combos", ne: "कम्बोहरू" },
   "nav.inventory": { en: "Inventory", ne: "सामान सूची" },
   "nav.staff": { en: "Staff", ne: "कर्मचारी" },
   "nav.customers": { en: "Customers", ne: "ग्राहकहरू" },

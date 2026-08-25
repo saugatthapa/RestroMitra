@@ -34,6 +34,16 @@ type MenuItem = {
 type Category = { id: string; name: string };
 type Table = { id: string; name: string; isActive: boolean };
 type LoyaltyCustomer = { id: string; fullName: string; phone: string; loyaltyPointsBalance: number };
+// Phase B.8 (Combos) — staff POS only, see combos.ts's own doc comment for
+// why this never touches the public QR ordering flow. A combo is added to
+// the cart as a single flat line (no variant/addon customization — its
+// contents are fixed at combo-build time), kept in a SEPARATE state array
+// from `cart` (CartLine[]) rather than folded into it, so the existing,
+// already-tested cart/checkout logic below never has to know combos exist —
+// they're merged into the submission payload's own `combos` field only at
+// the very end, in handleSubmit.
+type Combo = { id: string; name: string; description: string | null; priceInPaisa: number; isActive: boolean };
+type ComboCartLine = { key: string; comboId: string; comboName: string; priceInPaisa: number; quantity: number };
 
 type CartLine = {
   key: string;
@@ -116,9 +126,14 @@ export function POSOrderBuilder({
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
+  const [combos, setCombos] = useState<Combo[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  // Sentinel selectedCategoryId value for the "Combos" pseudo-tab, alongside
+  // the real category tabs — see the Combo/ComboCartLine type comment above.
+  const COMBOS_TAB_ID = "__combos__";
 
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [comboCart, setComboCart] = useState<ComboCartLine[]>([]);
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
 
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway">("takeaway");
@@ -199,10 +214,16 @@ export function POSOrderBuilder({
     let cancelled = false;
     async function load() {
       try {
-        const [categoriesRes, itemsRes, tablesRes] = await Promise.all([
+        const [categoriesRes, itemsRes, tablesRes, combosRes] = await Promise.all([
           apiGet<{ categories: Category[] }>(`${base(slug)}/categories`),
           apiGet<{ menuItems: MenuItem[] }>(`${base(slug)}/menu-items`),
           apiGet<{ tables: Table[] }>(`${base(slug)}/tables`),
+          // Combos are a nice-to-have on this screen, not core order-taking
+          // — if the fetch fails for any reason, fall back to an empty
+          // list (no Combos tab rendered) rather than failing the whole
+          // POS load over it, same posture as the cached-snapshot fallback
+          // below for the rest of the menu.
+          apiGet<{ combos: Combo[] }>(`${base(slug)}/combos`).catch(() => ({ combos: [] })),
         ]);
         if (cancelled) return;
         const activeItems = itemsRes.menuItems.filter((i) => i.isActive && i.isAvailable);
@@ -210,6 +231,7 @@ export function POSOrderBuilder({
         setCategories(categoriesRes.categories);
         setMenuItems(activeItems);
         setTables(activeTables);
+        setCombos(combosRes.combos.filter((c) => c.isActive));
         setSelectedCategoryId(categoriesRes.categories[0]?.id ?? null);
         setUsingCachedMenu(false);
         if (preselectedTableId && activeTables.some((t) => t.id === preselectedTableId)) {
@@ -289,8 +311,16 @@ export function POSOrderBuilder({
     () => menuItems.filter((i) => i.categoryId === selectedCategoryId),
     [menuItems, selectedCategoryId],
   );
-  const cartTotal = useMemo(() => cart.reduce((sum, l) => sum + cartLineTotal(l), 0), [cart]);
-  const cartCount = useMemo(() => cart.reduce((sum, l) => sum + l.quantity, 0), [cart]);
+  const cartTotal = useMemo(
+    () =>
+      cart.reduce((sum, l) => sum + cartLineTotal(l), 0) +
+      comboCart.reduce((sum, l) => sum + l.priceInPaisa * l.quantity, 0),
+    [cart, comboCart],
+  );
+  const cartCount = useMemo(
+    () => cart.reduce((sum, l) => sum + l.quantity, 0) + comboCart.reduce((sum, l) => sum + l.quantity, 0),
+    [cart, comboCart],
+  );
 
   // cartTotal above is computed the exact same way computeOrderPricing()
   // derives subtotalInPaisa server-side (unit price + addons, × quantity,
@@ -372,8 +402,38 @@ export function POSOrderBuilder({
     );
   }
 
+  // A combo has no customization (variants/addons are fixed at combo-build
+  // time — see menuCombos' doc comment in schema.ts), so tapping a combo
+  // card either adds a fresh line or bumps an existing one's quantity,
+  // unlike menu items which always open CustomizeModal first.
+  function addComboToCart(combo: Combo) {
+    setComboCart((prev) => {
+      const existing = prev.find((l) => l.comboId === combo.id);
+      if (existing) {
+        return prev.map((l) => (l.comboId === combo.id ? { ...l, quantity: l.quantity + 1 } : l));
+      }
+      return [
+        ...prev,
+        { key: crypto.randomUUID(), comboId: combo.id, comboName: combo.name, priceInPaisa: combo.priceInPaisa, quantity: 1 },
+      ];
+    });
+  }
+
+  function removeComboLine(key: string) {
+    setComboCart((prev) => prev.filter((l) => l.key !== key));
+  }
+
+  function changeComboQuantity(key: string, delta: number) {
+    setComboCart((prev) =>
+      prev
+        .map((l) => (l.key === key ? { ...l, quantity: l.quantity + delta } : l))
+        .filter((l) => l.quantity > 0),
+    );
+  }
+
   function resetOrder() {
     setCart([]);
+    setComboCart([]);
     setCustomerName("");
     setCustomerPhone("");
     setNotes("");
@@ -393,7 +453,7 @@ export function POSOrderBuilder({
   }
 
   async function handleSubmit() {
-    if (cart.length === 0) return;
+    if (cart.length === 0 && comboCart.length === 0) return;
     if (orderType === "dine_in" && !tableId) {
       setSubmitError("Choose a table for a dine-in order.");
       return;
@@ -416,6 +476,7 @@ export function POSOrderBuilder({
         addonIds: l.addonIds,
         notes: l.notes || undefined,
       })),
+      combos: comboCart.map((l) => ({ comboId: l.comboId, quantity: l.quantity })),
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
       notes: notes.trim(),
@@ -575,9 +636,37 @@ export function POSOrderBuilder({
                 {c.name}
               </button>
             ))}
+            {combos.length > 0 && (
+              <button
+                onClick={() => setSelectedCategoryId(COMBOS_TAB_ID)}
+                className={`shrink-0 rounded-full border px-3 py-1.5 text-sm ${
+                  selectedCategoryId === COMBOS_TAB_ID
+                    ? "border-orange-600 bg-orange-50 font-medium text-orange-700"
+                    : "border-neutral-200 text-neutral-600"
+                }`}
+              >
+                Combos
+              </button>
+            )}
           </div>
 
-          {itemsInCategory.length === 0 ? (
+          {selectedCategoryId === COMBOS_TAB_ID ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+              {combos.map((combo) => (
+                <button
+                  key={combo.id}
+                  onClick={() => addComboToCart(combo)}
+                  className="overflow-hidden rounded-xl border border-neutral-200 bg-white p-3 text-left shadow-sm transition hover:border-orange-300 hover:shadow-md"
+                >
+                  <p className="line-clamp-1 text-sm font-semibold text-neutral-900">{combo.name}</p>
+                  {combo.description && (
+                    <p className="mt-0.5 line-clamp-2 text-xs text-neutral-500">{combo.description}</p>
+                  )}
+                  <p className="mt-1 text-xs font-medium text-orange-700">{formatNPR(combo.priceInPaisa)}</p>
+                </button>
+              ))}
+            </div>
+          ) : itemsInCategory.length === 0 ? (
             <p className="text-sm text-neutral-400">No items in this category.</p>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
@@ -649,10 +738,43 @@ export function POSOrderBuilder({
               </select>
             )}
 
-            {cart.length === 0 ? (
+            {cart.length === 0 && comboCart.length === 0 ? (
               <p className="text-sm text-neutral-400">No items added yet.</p>
             ) : (
               <div className="mb-3 max-h-80 space-y-2 overflow-y-auto">
+                {comboCart.map((line) => (
+                  <div key={line.key} className="rounded-lg border border-orange-200 bg-orange-50/40 p-2 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-medium text-neutral-900">{line.comboName} (Combo)</p>
+                      <button
+                        onClick={() => removeComboLine(line.key)}
+                        className="shrink-0 text-neutral-400 hover:text-red-600"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="h-6 w-6 rounded-full border border-neutral-300"
+                          onClick={() => changeComboQuantity(line.key, -1)}
+                        >
+                          −
+                        </button>
+                        <span className="w-4 text-center">{line.quantity}</span>
+                        <button
+                          className="h-6 w-6 rounded-full border border-neutral-300"
+                          onClick={() => changeComboQuantity(line.key, 1)}
+                        >
+                          +
+                        </button>
+                      </div>
+                      <span className="font-semibold text-neutral-900">
+                        {formatNPR(line.priceInPaisa * line.quantity)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
                 {cart.map((line) => (
                   <div key={line.key} className="rounded-lg border border-neutral-200 p-2 text-xs">
                     <div className="flex items-start justify-between gap-2">
@@ -950,7 +1072,7 @@ export function POSOrderBuilder({
 
             <button
               onClick={handleSubmit}
-              disabled={submitting || cart.length === 0}
+              disabled={submitting || (cart.length === 0 && comboCart.length === 0)}
               className="btn-primary w-full"
             >
               {submitting

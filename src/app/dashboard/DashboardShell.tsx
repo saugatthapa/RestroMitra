@@ -571,6 +571,17 @@ function DashboardShellContent({
           permission: PERMISSIONS.EDIT_MENU,
         },
         {
+          // Commercial Launch Phase B.8 — Combos. Same trust tier as menu
+          // items (EDIT_MENU) — a combo is a menu-builder concept, not a
+          // checkout-time discretion (that's Coupons/manual discounts under
+          // APPLY_DISCOUNT).
+          label: t("nav.combos"),
+          href: "/dashboard/combos",
+          enabled: true,
+          icon: <NavIcon.Combos />,
+          permission: PERMISSIONS.EDIT_MENU,
+        },
+        {
           label: t("nav.inventory"),
           href: "/dashboard/inventory",
           enabled: true,
