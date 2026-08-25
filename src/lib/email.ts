@@ -28,9 +28,40 @@ function isConfigured(): boolean {
   const configured = Boolean(process.env.RESEND_API_KEY);
   if (!configured && !notConfiguredLogged) {
     notConfiguredLogged = true;
-    console.warn("sendFallbackAlertEmail: RESEND_API_KEY not set, skipping email fallback.");
+    console.warn("email.ts: RESEND_API_KEY not set — email sending (push-fallback alerts, password reset links) is disabled.");
   }
   return configured;
+}
+
+/**
+ * The one place that actually calls Resend's HTTP API — both
+ * sendFallbackAlertEmail (below) and sendTransactionalEmail (Commercial
+ * Launch Phase B.3) funnel through this, so there's exactly one
+ * fetch-and-error-handling implementation to get right rather than two
+ * copies drifting apart. Returns whether the send actually succeeded;
+ * every caller in this file treats that as best-effort/fire-and-forget —
+ * never something a request should fail over.
+ */
+async function postToResend(to: string, subject: string, text: string): Promise<boolean> {
+  if (!isConfigured()) return false;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ from: FROM_ADDRESS, to, subject, text }),
+    });
+    if (!res.ok) {
+      console.error("email.ts: Resend API returned", res.status, await res.text().catch(() => ""));
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("email.ts: send failed", err);
+    return false;
+  }
 }
 
 /** The restaurant's owner — the one person always accountable for the
@@ -78,27 +109,29 @@ export async function sendFallbackAlertEmail(
   });
   if (!cooldown.allowed) return;
 
-  try {
-    const to = await getOwnerEmail(restaurantId);
-    if (!to) return;
+  const to = await getOwnerEmail(restaurantId);
+  if (!to) return;
 
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: FROM_ADDRESS,
-        to,
-        subject,
-        text: `${body}\n\n— RestroMitra couldn't reach any device via push notification for this alert, so it's emailing you instead. Turn on notifications on a staff device to stop relying on this fallback.`,
-      }),
-    });
-    if (!res.ok) {
-      console.error("sendFallbackAlertEmail: Resend API returned", res.status, await res.text().catch(() => ""));
-    }
-  } catch (err) {
-    console.error("sendFallbackAlertEmail failed", err);
-  }
+  await postToResend(
+    to,
+    subject,
+    `${body}\n\n— RestroMitra couldn't reach any device via push notification for this alert, so it's emailing you instead. Turn on notifications on a staff device to stop relying on this fallback.`,
+  );
+}
+
+/**
+ * Commercial Launch Phase B.3 (Forgot Password) — a plain "send this text
+ * email to this address" helper, generalized out of the Resend fetch call
+ * above rather than duplicating it. Unlike sendFallbackAlertEmail this has
+ * no restaurant/owner lookup or built-in rate limit baked in — the
+ * forgot-password route does its own IP+phone rate limiting (mirroring
+ * login's), which is the right place to bound *reset request* volume; this
+ * helper's only job is the actual send. Same degrade-to-no-op-if-
+ * unconfigured contract as every other email path in this file. The
+ * returned boolean is for logging only — a caller must never let it leak
+ * into a user-facing response, since that would reveal whether a given
+ * address is on file (see the route's own comment on generic responses).
+ */
+export async function sendTransactionalEmail(to: string, subject: string, text: string): Promise<boolean> {
+  return postToResend(to, subject, text);
 }

@@ -10,11 +10,15 @@ import { SESSION_COOKIE_NAME } from "./session-cookie";
 export { SESSION_COOKIE_NAME };
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-function hashToken(token: string): string {
+// Exported (not just used internally) so password-reset.ts can generate/
+// hash its own single-use tokens with the exact same primitives — a plain
+// 256-bit random token, only ever persisted as its sha256 hash — instead
+// of a second, independently-written copy of the same crypto.
+export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-function generateToken(): string {
+export function generateToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
@@ -169,6 +173,23 @@ export async function destroyOtherSessions(
   const deleted = await db
     .delete(sessions)
     .where(and(eq(sessions.userId, userId), ne(sessions.id, keepSessionId)))
+    .returning({ id: sessions.id });
+  return deleted.length;
+}
+
+/**
+ * Commercial Launch Phase B.3 (Forgot Password) — deletes EVERY session for
+ * this user, no "keep the caller's own" exception, because a completed
+ * password reset has no caller session to keep: the whole point of the
+ * flow is that the person doing it is currently logged out everywhere.
+ * Same reasoning as destroyOtherSessions (a password change/reset is
+ * exactly when a possibly-compromised existing session should stop being
+ * trusted), just without a session to exempt.
+ */
+export async function destroyAllSessions(userId: string): Promise<number> {
+  const deleted = await db
+    .delete(sessions)
+    .where(eq(sessions.userId, userId))
     .returning({ id: sessions.id });
   return deleted.length;
 }

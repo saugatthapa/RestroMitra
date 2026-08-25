@@ -50,3 +50,14 @@ export const updateStaffSchema = z
     (data) => data.role !== undefined || data.isActive !== undefined || data.branchId !== undefined,
     { message: "Provide a role change, an active-status change, a branch change, or a combination." },
   );
+
+// Commercial Launch Phase B.3 — an owner/manager directly setting a new
+// password for an EXISTING staff member's account (as opposed to the
+// password field on addStaffSchema, which only applies at account
+// creation). Closes the gap forgot-password's copy points to: a staff
+// member with no email on file, or whose reset email never arrives, has
+// no self-service path — an admin who already holds MANAGE_STAFF can set
+// a fresh password directly instead.
+export const resetStaffPasswordSchema = z.object({
+  newPassword: z.string().min(8, "Password must be at least 8 characters."),
+});

@@ -36,6 +36,23 @@ export const changePasswordSchema = z.object({
   newPassword: z.string().min(8, "New password must be at least 8 characters."),
 });
 
+// Commercial Launch Phase B.3 — Forgot Password. Identified by phone, same
+// as login, since phone (not email) is this app's actual login identifier
+// and every account has one (email is optional at registration).
+export const forgotPasswordSchema = z.object({
+  phone: z
+    .string()
+    .trim()
+    .regex(nepalPhoneRegex, "Enter a valid 10-digit Nepal mobile number."),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Missing or invalid reset link."),
+  newPassword: z.string().min(8, "New password must be at least 8 characters."),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

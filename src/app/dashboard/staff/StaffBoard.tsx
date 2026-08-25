@@ -251,6 +251,7 @@ function StaffRow({
   onChanged: () => void;
 }) {
   const [saving, setSaving] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
   const editable = member.role !== "owner" && member.role !== "platform_admin";
 
   async function changeRole(role: AssignableStaffRole) {
@@ -341,16 +342,116 @@ function StaffRow({
       </td>
       <td className="px-3 py-2 text-right">
         {editable && (
-          <button
-            disabled={saving}
-            onClick={toggleActive}
-            className="text-xs font-medium text-orange-700 hover:underline"
-          >
-            {member.isActive ? "Deactivate" : "Reactivate"}
-          </button>
+          <div className="flex justify-end gap-3">
+            <button
+              disabled={saving}
+              onClick={() => setResettingPassword(true)}
+              className="text-xs font-medium text-neutral-500 hover:text-neutral-800 hover:underline"
+            >
+              Reset password
+            </button>
+            <button
+              disabled={saving}
+              onClick={toggleActive}
+              className="text-xs font-medium text-orange-700 hover:underline"
+            >
+              {member.isActive ? "Deactivate" : "Reactivate"}
+            </button>
+          </div>
         )}
       </td>
+      {resettingPassword && (
+        <ResetStaffPasswordModal
+          slug={slug}
+          member={member}
+          onClose={() => setResettingPassword(false)}
+          onDone={() => setResettingPassword(false)}
+        />
+      )}
     </tr>
+  );
+}
+
+function ResetStaffPasswordModal({
+  slug,
+  member,
+  onClose,
+  onDone,
+}: {
+  slug: string;
+  member: StaffMember;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [newPassword, setNewPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/staff/${member.id}/reset-password`, { newPassword });
+      setDone(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not reset this password.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-5 shadow-lg">
+        {done ? (
+          <>
+            <p className="mb-1 text-sm font-semibold text-neutral-900">Password reset</p>
+            <p className="mb-4 text-sm text-neutral-600">
+              {member.fullName}&apos;s password has been changed. Share the new password with them
+              directly — they&apos;ve been logged out everywhere and will need it to log back in.
+            </p>
+            <div className="flex justify-end">
+              <button onClick={onDone} className="btn-primary">
+                Done
+              </button>
+            </div>
+          </>
+        ) : (
+          <form onSubmit={submit}>
+            <p className="mb-1 text-sm font-semibold text-neutral-900">Reset {member.fullName}&apos;s password</p>
+            <p className="mb-3 text-xs text-neutral-500">
+              Use this when a staff member is locked out and can&apos;t reset it themselves (no
+              email on file, or the reset link never arrives). This immediately logs them out
+              everywhere.
+            </p>
+            {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+            <label className="block text-sm">
+              <span className="mb-1 block text-neutral-600">New password</span>
+              <input
+                required
+                type="text"
+                minLength={8}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="input"
+                placeholder="At least 8 characters"
+                autoFocus
+              />
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={onClose} className="btn-secondary" disabled={saving}>
+                Cancel
+              </button>
+              <button disabled={saving} className="btn-primary">
+                {saving ? "Resetting…" : "Reset password"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -212,6 +212,38 @@ export const sessions = pgTable(
   ],
 );
 
+// Commercial Launch Phase B.3 — Forgot Password. Single-use, short-lived
+// tokens for self-service password reset, deliberately modeled on
+// sessions above: only the sha256 hash of the raw token is ever stored
+// (the raw token exists only in the emailed link and briefly in memory),
+// so a database leak alone can never be replayed into a working reset
+// link. `usedAt` (rather than deleting the row on redemption) keeps a
+// record for audit/abuse investigation and lets the redemption itself be
+// a single CAS UPDATE (`WHERE used_at IS NULL AND expires_at > now()`),
+// the same "claim it exactly once" pattern markPaymentReconciled uses.
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    requestIp: varchar("request_ip", { length: 64 }),
+    // Short-lived on purpose — 30 minutes, far shorter than a session's 30
+    // days, since this token is a bearer credential mailed in plain text.
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("password_reset_tokens_token_hash_unique").on(table.tokenHash),
+    index("password_reset_tokens_user_id_idx").on(table.userId),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // Tenant root: restaurants + branches
 // ---------------------------------------------------------------------------
@@ -2781,6 +2813,11 @@ export const auditLogs = pgTable(
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   roles: many(userRoles),
+  passwordResetTokens: many(passwordResetTokens),
+}));
+
+export const passwordResetTokensRelations = relations(passwordResetTokens, ({ one }) => ({
+  user: one(users, { fields: [passwordResetTokens.userId], references: [users.id] }),
 }));
 
 export const restaurantsRelations = relations(restaurants, ({ many }) => ({

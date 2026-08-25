@@ -64,12 +64,19 @@ function LoginForm() {
             />
           </AuthField>
 
-          <PasswordField
-            label="Password"
-            value={password}
-            onChange={setPassword}
-            autoComplete="current-password"
-          />
+          <div>
+            <PasswordField
+              label="Password"
+              value={password}
+              onChange={setPassword}
+              autoComplete="current-password"
+            />
+            <div className="mt-1.5 text-right">
+              <Link href="/forgot-password" className="text-xs font-medium text-orange-600 hover:text-orange-700">
+                Forgot password?
+              </Link>
+            </div>
+          </div>
 
           {error && (
             <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
