@@ -170,6 +170,26 @@ export const users = pgTable(
     phone: varchar("phone", { length: 20 }).notNull(),
     email: varchar("email", { length: 255 }),
     passwordHash: text("password_hash").notNull(),
+    // Commercial Launch Phase B.4 — TOTP multi-factor auth. mfaSecret is
+    // set as soon as enrollment STARTS (see mfa.ts) but mfaEnabled only
+    // flips to true once the user proves they can actually generate a
+    // valid code with it — an unconfirmed secret never gates login.
+    // Base32, not encrypted at rest: this codebase has no column-level
+    // encryption precedent (passwordHash/tokenHash are all one-way
+    // hashes; this is the one secret that must be readable server-side to
+    // verify a live 6-digit code against it), same trust boundary as
+    // "anyone with DB access already has everything" the rest of this
+    // schema assumes.
+    mfaEnabled: boolean("mfa_enabled").notNull().default(false),
+    mfaSecret: text("mfa_secret"),
+    mfaEnabledAt: timestamp("mfa_enabled_at", { withTimezone: true }),
+    // Anti-replay: the RFC 6238 time-step of the last code this user
+    // successfully verified. Passed as otplib's `afterTimeStep` on every
+    // subsequent verify — without it, a single valid 6-digit code stays
+    // usable for its whole ~30s window and could be replayed (e.g.
+    // shoulder-surfed, or the two verify calls tests can rapid-fire) more
+    // than once.
+    mfaLastUsedTimeStep: integer("mfa_last_used_time_step"),
     isActive: boolean("is_active").notNull().default(true),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -241,6 +261,70 @@ export const passwordResetTokens = pgTable(
   (table) => [
     uniqueIndex("password_reset_tokens_token_hash_unique").on(table.tokenHash),
     index("password_reset_tokens_user_id_idx").on(table.userId),
+  ],
+);
+
+// Commercial Launch Phase B.4 — MFA. A login that reaches here has already
+// verified the password; this token represents "this browser proved it
+// knows the password, still needs to prove the second factor" and is
+// deliberately NOT a session (see session.ts's own comment: session
+// creation is the one and only place a real, RBAC-trusted cookie gets
+// issued — gating MFA before that call, rather than adding an MFA check
+// to every downstream request, keeps requireAuth()/requirePermission()
+// completely unaware this feature exists). Short-lived (10 min) and
+// single-use, same hash-only-at-rest shape as every other token table
+// here — but unlike passwordResetTokens, the raw token here is never a
+// cookie or an emailed link: the login route returns it directly in the
+// response body and the client holds it in memory only long enough to
+// submit it once more with the 6-digit code, avoiding a second cookie
+// (and the middleware complexity of a distinct "MFA-pending" auth state)
+// for what's normally a single-page, no-navigation step.
+export const mfaChallenges = pgTable(
+  "mfa_challenges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    userAgent: text("user_agent"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("mfa_challenges_token_hash_unique").on(table.tokenHash),
+    index("mfa_challenges_user_id_idx").on(table.userId),
+  ],
+);
+
+// Commercial Launch Phase B.4 — MFA backup codes, issued 10-at-a-time the
+// moment enrollment is confirmed (see mfa.ts). One row per code, only its
+// sha256 hash ever stored (same pattern as every other token table on
+// this page) — the raw codes are shown to the user exactly once, in the
+// enroll-confirm response, and never retrievable again after that.
+// usedAt makes each one single-use; regenerating (mfa/backup-codes/
+// regenerate) or disabling MFA deletes every row for that user and
+// issues/expects a fresh batch.
+export const mfaBackupCodes = pgTable(
+  "mfa_backup_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("mfa_backup_codes_code_hash_unique").on(table.codeHash),
+    index("mfa_backup_codes_user_id_idx").on(table.userId),
   ],
 );
 
@@ -2814,10 +2898,20 @@ export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   roles: many(userRoles),
   passwordResetTokens: many(passwordResetTokens),
+  mfaChallenges: many(mfaChallenges),
+  mfaBackupCodes: many(mfaBackupCodes),
 }));
 
 export const passwordResetTokensRelations = relations(passwordResetTokens, ({ one }) => ({
   user: one(users, { fields: [passwordResetTokens.userId], references: [users.id] }),
+}));
+
+export const mfaChallengesRelations = relations(mfaChallenges, ({ one }) => ({
+  user: one(users, { fields: [mfaChallenges.userId], references: [users.id] }),
+}));
+
+export const mfaBackupCodesRelations = relations(mfaBackupCodes, ({ one }) => ({
+  user: one(users, { fields: [mfaBackupCodes.userId], references: [users.id] }),
 }));
 
 export const restaurantsRelations = relations(restaurants, ({ many }) => ({

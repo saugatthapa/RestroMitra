@@ -35,3 +35,20 @@ export async function renderQrPng(url: string): Promise<Buffer> {
     width: 512,
   });
 }
+
+/**
+ * Commercial Launch Phase B.4 — renders a QR code as an inline `data:`
+ * URL rather than a PNG buffer, for content that's embedded directly in a
+ * JSON API response and drawn straight into a React component (MFA
+ * enrollment's otpauth:// URI) instead of served as its own downloadable
+ * image file the way table/website QR codes are. Same `qrcode` library
+ * and error-correction choice as renderQrPng above — no second QR
+ * dependency for this.
+ */
+export async function renderQrDataUrl(data: string): Promise<string> {
+  return QRCode.toDataURL(data, {
+    errorCorrectionLevel: "M",
+    margin: 2,
+    width: 320,
+  });
+}

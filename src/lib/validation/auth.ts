@@ -51,8 +51,41 @@ export const resetPasswordSchema = z.object({
   newPassword: z.string().min(8, "New password must be at least 8 characters."),
 });
 
+// Commercial Launch Phase B.4 — MFA login-time verification. Exactly one
+// of `code` (a live 6-digit TOTP code) or `backupCode` (one of the
+// one-time recovery codes issued at enrollment) must be present — never
+// both, never neither.
+export const mfaVerifySchema = z
+  .object({
+    challengeToken: z.string().min(1, "Missing or invalid login session."),
+    code: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app.")
+      .optional(),
+    backupCode: z.string().trim().min(1).optional(),
+  })
+  .refine((data) => Boolean(data.code) !== Boolean(data.backupCode), {
+    message: "Provide either a 6-digit code or a backup code, not both.",
+  });
+
+export const mfaEnrollConfirmSchema = z.object({
+  secret: z.string().min(1, "Missing enrollment secret."),
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app."),
+});
+
+export const mfaDisableSchema = z.object({
+  currentPassword: z.string().min(1, "Enter your current password."),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type MfaVerifyInput = z.infer<typeof mfaVerifySchema>;
+export type MfaEnrollConfirmInput = z.infer<typeof mfaEnrollConfirmSchema>;
+export type MfaDisableInput = z.infer<typeof mfaDisableSchema>;

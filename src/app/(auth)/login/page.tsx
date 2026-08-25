@@ -18,6 +18,8 @@ export default function LoginPage() {
   );
 }
 
+type LoginResponse = { ok: true } | { mfaRequired: true; challengeToken: string };
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -26,12 +28,26 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Commercial Launch Phase B.4 — MFA. A successful password check on an
+  // account with MFA enabled comes back as { mfaRequired: true,
+  // challengeToken } rather than logging in outright (see
+  // api/auth/login/route.ts's own comment) — this form just switches to a
+  // second step in place, holding the challenge token in memory only,
+  // rather than navigating to a separate page.
+  const [challengeToken, setChallengeToken] = useState<string | null>(null);
+  const [useBackupCode, setUseBackupCode] = useState(false);
+  const [mfaCode, setMfaCode] = useState("");
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      await apiPost("/api/auth/login", { phone, password });
+      const res = await apiPost<LoginResponse>("/api/auth/login", { phone, password });
+      if ("mfaRequired" in res && res.mfaRequired) {
+        setChallengeToken(res.challengeToken);
+        return;
+      }
       const next = safeInternalRedirect(searchParams.get("next"));
       router.push(next);
       router.refresh();
@@ -40,6 +56,98 @@ function LoginForm() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function onSubmitMfa(e: FormEvent) {
+    e.preventDefault();
+    if (!challengeToken) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiPost("/api/auth/mfa/verify", {
+        challengeToken,
+        ...(useBackupCode ? { backupCode: mfaCode } : { code: mfaCode }),
+      });
+      const next = safeInternalRedirect(searchParams.get("next"));
+      router.push(next);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not verify that code.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (challengeToken) {
+    return (
+      <div>
+        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+          <h1 className="text-lg font-semibold text-neutral-900">Two-factor verification</h1>
+          <p className="mt-1 text-sm text-neutral-500">
+            {useBackupCode
+              ? "Enter one of your backup codes."
+              : "Enter the 6-digit code from your authenticator app."}
+          </p>
+
+          <form onSubmit={onSubmitMfa} className="mt-6 space-y-4">
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-neutral-700">
+                {useBackupCode ? "Backup code" : "6-digit code"}
+              </span>
+              <input
+                required
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+                className="input"
+                inputMode={useBackupCode ? "text" : "numeric"}
+                maxLength={useBackupCode ? 12 : 6}
+                autoFocus
+              />
+            </label>
+
+            {error && (
+              <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
+                  <AuthIcon.ShieldCheck />
+                </span>
+                {error}
+              </p>
+            )}
+
+            <button type="submit" disabled={submitting} className="btn-primary w-full">
+              {submitting ? "Verifying…" : "Verify"}
+            </button>
+          </form>
+
+          <p className="mt-6 text-center text-sm text-neutral-500">
+            <button
+              type="button"
+              onClick={() => {
+                setUseBackupCode((v) => !v);
+                setMfaCode("");
+                setError(null);
+              }}
+              className="font-medium text-orange-600 hover:text-orange-700"
+            >
+              {useBackupCode ? "Use my authenticator app instead" : "Use a backup code instead"}
+            </button>
+          </p>
+          <p className="mt-2 text-center text-sm text-neutral-500">
+            <button
+              type="button"
+              onClick={() => {
+                setChallengeToken(null);
+                setMfaCode("");
+                setError(null);
+              }}
+              className="text-neutral-400 hover:text-neutral-600"
+            >
+              ← Back to sign in
+            </button>
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (

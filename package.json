@@ -25,6 +25,7 @@
     "jose": "^6.2.8",
     "nepali-date-converter": "^3.4.0",
     "next": "15.5.23",
+    "otplib": "^13.5.0",
     "postgres": "^3.4.9",
     "qrcode": "^1.5.4",
     "react": "19.2.8",

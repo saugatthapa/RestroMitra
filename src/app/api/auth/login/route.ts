@@ -5,6 +5,7 @@ import { users } from "@/db/schema";
 import { loginSchema } from "@/lib/validation/auth";
 import { verifyPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
+import { createMfaChallenge } from "@/lib/auth/mfa";
 import { recordAuditLog } from "@/lib/audit";
 import { rateLimit } from "@/lib/rate-limit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
       id: users.id,
       passwordHash: users.passwordHash,
       isActive: users.isActive,
+      mfaEnabled: users.mfaEnabled,
     })
     .from(users)
     .where(eq(users.phone, phone))
@@ -77,6 +79,28 @@ export async function POST(request: Request) {
       ipAddress: ip,
     });
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
+  }
+
+  // Commercial Launch Phase B.4 — MFA. Password alone is verified, but a
+  // session is deliberately NOT created yet for an account with MFA
+  // enabled: createSession() is the one place a real, RBAC-trusted cookie
+  // gets issued (see session.ts's own comment), so gating it here — rather
+  // than issuing a session and checking MFA state everywhere downstream —
+  // keeps every other route in this app completely unaware this feature
+  // exists. Instead, a short-lived challenge is issued and returned in the
+  // response body; the client holds it in memory and submits it once more
+  // with a 6-digit code to /api/auth/mfa/verify, which is the only place
+  // createSession() gets called for this account this time around.
+  if (user.mfaEnabled) {
+    const challengeToken = await createMfaChallenge(user.id, ip, request.headers.get("user-agent"));
+    await recordAuditLog({
+      userId: user.id,
+      action: "auth.mfa_challenge_issued",
+      resourceType: "user",
+      resourceId: user.id,
+      ipAddress: ip,
+    });
+    return NextResponse.json({ mfaRequired: true, challengeToken });
   }
 
   await createSession({

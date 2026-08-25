@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { apiPost, ApiError } from "@/lib/api-client";
+import { useEffect, useState } from "react";
+import { apiGet, apiPost, ApiError } from "@/lib/api-client";
 
 export function AccountSettingsBoard() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -149,6 +149,296 @@ export function AccountSettingsBoard() {
           {loggingOut ? "Logging out…" : "Log out other devices"}
         </button>
       </div>
+
+      <TwoFactorCard />
+    </div>
+  );
+}
+
+type MfaStatus = { enabled: boolean; enabledAt: string | null; backupCodesRemaining: number };
+type EnrollmentData = { secret: string; otpauthUri: string; qrDataUrl: string };
+
+/**
+ * Commercial Launch Phase B.4 — self-service TOTP enrollment/disable, the
+ * natural third card alongside change-password and active-sessions (same
+ * card styling, same apiPost/ApiError pattern). Three sub-states: off
+ * (show "Enable"), mid-enrollment (QR + code entry, then a one-time
+ * backup-codes reveal), and on (status + disable/regenerate, both gated
+ * behind re-entering the current password).
+ */
+function TwoFactorCard() {
+  const [status, setStatus] = useState<MfaStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  const [enrollment, setEnrollment] = useState<EnrollmentData | null>(null);
+  const [enrollCode, setEnrollCode] = useState("");
+  const [enrolling, setEnrolling] = useState(false);
+  const [enrollError, setEnrollError] = useState<string | null>(null);
+  const [revealedCodes, setRevealedCodes] = useState<string[] | null>(null);
+
+  const [showDisable, setShowDisable] = useState(false);
+  const [disablePassword, setDisablePassword] = useState("");
+  const [disabling, setDisabling] = useState(false);
+  const [disableError, setDisableError] = useState<string | null>(null);
+
+  const [showRegen, setShowRegen] = useState(false);
+  const [regenPassword, setRegenPassword] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenError, setRegenError] = useState<string | null>(null);
+
+  async function loadStatus() {
+    try {
+      const res = await apiGet<MfaStatus>("/api/auth/mfa");
+      setStatus(res);
+      setStatusError(null);
+    } catch (err) {
+      setStatusError(err instanceof ApiError ? err.message : "Could not load two-factor status.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadStatus();
+  }, []);
+
+  async function startEnroll() {
+    setEnrollError(null);
+    try {
+      const res = await apiPost<EnrollmentData>("/api/auth/mfa/enroll", {});
+      setEnrollment(res);
+      setEnrollCode("");
+    } catch (err) {
+      setEnrollError(err instanceof ApiError ? err.message : "Could not start enrollment.");
+    }
+  }
+
+  async function confirmEnroll(e: React.FormEvent) {
+    e.preventDefault();
+    if (!enrollment) return;
+    setEnrolling(true);
+    setEnrollError(null);
+    try {
+      const res = await apiPost<{ ok: true; backupCodes: string[] }>("/api/auth/mfa/enroll/confirm", {
+        secret: enrollment.secret,
+        code: enrollCode,
+      });
+      setRevealedCodes(res.backupCodes);
+      setEnrollment(null);
+    } catch (err) {
+      setEnrollError(err instanceof ApiError ? err.message : "Could not confirm that code.");
+    } finally {
+      setEnrolling(false);
+    }
+  }
+
+  function finishEnrollReveal() {
+    setRevealedCodes(null);
+    loadStatus();
+  }
+
+  async function handleDisable(e: React.FormEvent) {
+    e.preventDefault();
+    setDisabling(true);
+    setDisableError(null);
+    try {
+      await apiPost("/api/auth/mfa/disable", { currentPassword: disablePassword });
+      setShowDisable(false);
+      setDisablePassword("");
+      await loadStatus();
+    } catch (err) {
+      setDisableError(err instanceof ApiError ? err.message : "Could not disable two-factor authentication.");
+    } finally {
+      setDisabling(false);
+    }
+  }
+
+  async function handleRegenerate(e: React.FormEvent) {
+    e.preventDefault();
+    setRegenerating(true);
+    setRegenError(null);
+    try {
+      const res = await apiPost<{ ok: true; backupCodes: string[] }>("/api/auth/mfa/backup-codes/regenerate", {
+        currentPassword: regenPassword,
+      });
+      setShowRegen(false);
+      setRegenPassword("");
+      setRevealedCodes(res.backupCodes);
+    } catch (err) {
+      setRegenError(err instanceof ApiError ? err.message : "Could not regenerate backup codes.");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white p-5">
+      <h2 className="text-sm font-semibold text-neutral-900">Two-factor authentication</h2>
+      <p className="mt-1 text-xs text-neutral-500">
+        Require a code from an authenticator app (Google Authenticator, Authy, etc.) in addition
+        to your password when signing in.
+      </p>
+
+      {statusError && <p className="mt-3 text-sm text-red-600">{statusError}</p>}
+
+      {revealedCodes ? (
+        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-900">Save these backup codes now</p>
+          <p className="mt-1 text-xs text-amber-800">
+            Each code works once, if you ever lose access to your authenticator app. They won&apos;t
+            be shown again — store them somewhere safe.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2 font-mono text-sm text-neutral-800 sm:grid-cols-3">
+            {revealedCodes.map((code) => (
+              <div key={code} className="rounded border border-amber-200 bg-white px-2 py-1 text-center">
+                {code}
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={finishEnrollReveal}
+            className="mt-4 rounded-md bg-orange-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-orange-700"
+          >
+            I&apos;ve saved these codes
+          </button>
+        </div>
+      ) : loading ? (
+        <p className="mt-3 text-sm text-neutral-500">Loading…</p>
+      ) : enrollment ? (
+        <form onSubmit={confirmEnroll} className="mt-4 space-y-3">
+          <p className="text-sm text-neutral-700">
+            Scan this QR code with your authenticator app, then enter the 6-digit code it shows.
+          </p>
+          {/* eslint-disable-next-line @next/next/no-img-element -- a data: URL, not an optimizable remote image */}
+          <img
+            src={enrollment.qrDataUrl}
+            alt="Scan with your authenticator app"
+            width={200}
+            height={200}
+            className="rounded-md border border-neutral-200"
+          />
+          <p className="text-xs text-neutral-500">
+            Can&apos;t scan? Enter this key manually:{" "}
+            <span className="font-mono text-neutral-700">{enrollment.secret}</span>
+          </p>
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-700">6-digit code</span>
+            <input
+              value={enrollCode}
+              onChange={(e) => setEnrollCode(e.target.value)}
+              required
+              inputMode="numeric"
+              maxLength={6}
+              className="w-full max-w-[10rem] rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+              autoFocus
+            />
+          </label>
+          {enrollError && <p className="text-sm text-red-600">{enrollError}</p>}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setEnrollment(null)}
+              disabled={enrolling}
+              className="rounded-md border border-neutral-300 px-4 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={enrolling}
+              className="rounded-md bg-orange-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {enrolling ? "Confirming…" : "Confirm and enable"}
+            </button>
+          </div>
+        </form>
+      ) : status?.enabled ? (
+        <div className="mt-4 space-y-3">
+          <p className="flex items-center gap-1.5 text-sm text-emerald-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" /> Two-factor authentication
+            is on
+          </p>
+          <p className="text-xs text-neutral-500">
+            {status.backupCodesRemaining} backup code{status.backupCodesRemaining === 1 ? "" : "s"}{" "}
+            remaining.
+          </p>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowRegen((v) => !v)}
+              className="rounded-md border border-neutral-300 px-4 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            >
+              Regenerate backup codes
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDisable((v) => !v)}
+              className="rounded-md border border-neutral-300 px-4 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+            >
+              Disable
+            </button>
+          </div>
+
+          {showRegen && (
+            <form onSubmit={handleRegenerate} className="rounded-md border border-neutral-200 bg-neutral-50 p-3">
+              <p className="text-xs text-neutral-600">
+                This invalidates your current backup codes. Confirm your password to continue.
+              </p>
+              <input
+                type="password"
+                value={regenPassword}
+                onChange={(e) => setRegenPassword(e.target.value)}
+                required
+                placeholder="Current password"
+                className="mt-2 w-full max-w-xs rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+              />
+              {regenError && <p className="mt-2 text-sm text-red-600">{regenError}</p>}
+              <button
+                disabled={regenerating}
+                className="mt-2 rounded-md bg-orange-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {regenerating ? "Regenerating…" : "Regenerate"}
+              </button>
+            </form>
+          )}
+
+          {showDisable && (
+            <form onSubmit={handleDisable} className="rounded-md border border-neutral-200 bg-neutral-50 p-3">
+              <p className="text-xs text-neutral-600">
+                Confirm your password to turn off two-factor authentication.
+              </p>
+              <input
+                type="password"
+                value={disablePassword}
+                onChange={(e) => setDisablePassword(e.target.value)}
+                required
+                placeholder="Current password"
+                className="mt-2 w-full max-w-xs rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+              />
+              {disableError && <p className="mt-2 text-sm text-red-600">{disableError}</p>}
+              <button
+                disabled={disabling}
+                className="mt-2 rounded-md bg-red-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {disabling ? "Disabling…" : "Disable two-factor authentication"}
+              </button>
+            </form>
+          )}
+        </div>
+      ) : (
+        <div className="mt-4">
+          {enrollError && <p className="mb-2 text-sm text-red-600">{enrollError}</p>}
+          <button
+            type="button"
+            onClick={startEnroll}
+            className="rounded-md bg-orange-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-orange-700"
+          >
+            Enable two-factor authentication
+          </button>
+        </div>
+      )}
     </div>
   );
 }
