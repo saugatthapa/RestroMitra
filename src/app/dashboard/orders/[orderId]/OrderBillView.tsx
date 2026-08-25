@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { apiGet, apiPatch, apiPost, apiDelete, ApiError } from "@/lib/api-client";
+import { apiGet, apiPatch, apiPost, apiPut, apiDelete, ApiError } from "@/lib/api-client";
 import { openKotTicket } from "@/lib/kot-print-client";
 import { formatNPR, rupeesToPaisa, paisaToRupees, basisPointsToPercent } from "@/lib/money";
 import { useDateSystem } from "@/lib/date-system";
@@ -44,6 +44,10 @@ type Payment = {
   refundOfPaymentId: string | null;
   note: string | null;
   createdAt: string;
+  // Commercial Launch Phase B.9 — Split Bill. Which share (if any) this
+  // payment was tagged as covering — see the payments.splitId column
+  // comment in schema.ts.
+  splitId: string | null;
 };
 /** Commercial Launch Phase B.1 — one row per real status transition; see order-status-history.ts's own doc comment for why this is separate from the payment/audit trail above. */
 type StatusHistoryEntry = {
@@ -90,6 +94,23 @@ type Billing = {
   tipTotalInPaisa: number;
   paymentStatus: PaymentStatus;
 };
+// Commercial Launch Phase B.9 — Split Bill. Mirrors bill-splits.ts's own
+// types — see that file's doc comment for how these numbers are derived
+// (always computed fresh on read, never stored).
+type BillSplit = { id: string; label: string; items: { orderItemId: string; quantity: number }[] };
+type SplitShareSummary = {
+  splitId: string;
+  label: string;
+  itemCount: number;
+  subtotalInPaisa: number;
+  paidInPaisa: number;
+  remainingDueInPaisa: number;
+};
+type BillSplitSummary = {
+  splits: SplitShareSummary[];
+  unassigned: { itemCount: number; subtotalInPaisa: number };
+  totalInPaisa: number;
+};
 
 function base(slug: string) {
   return `/api/restaurants/${slug}`;
@@ -129,6 +150,8 @@ export function OrderBillView({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [splits, setSplits] = useState<BillSplit[]>([]);
+  const [splitSummary, setSplitSummary] = useState<BillSplitSummary | null>(null);
   // Replaces a native window.confirm() for the "complete with money still
   // due" case — a small OS-styled popup is easy for a non-technical user to
   // dismiss without reading; this dialog stays on-page and its two choices
@@ -153,8 +176,28 @@ export function OrderBillView({
     }
   }
 
+  // Split Bill is an optional add-on to the core bill view — fetched
+  // separately so a failure here (or the order simply having no splits
+  // defined yet) never blocks the rest of the page from rendering.
+  async function loadSplits() {
+    try {
+      const res = await apiGet<{ splits: BillSplit[]; summary: BillSplitSummary }>(
+        `${base(slug)}/orders/${orderId}/splits`,
+      );
+      setSplits(res.splits);
+      setSplitSummary(res.summary);
+    } catch {
+      // no-op — see comment above
+    }
+  }
+
+  async function refreshAll() {
+    await Promise.all([load(), loadSplits()]);
+  }
+
   useEffect(() => {
     load();
+    loadSplits();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, orderId]);
 
@@ -385,8 +428,21 @@ export function OrderBillView({
 
       {canApplyDiscount && order.status !== "cancelled" && (
         <div className="mt-4 flex flex-wrap gap-2 print:hidden">
-          <AdjustmentsPanel slug={slug} orderId={orderId} order={order} onSaved={load} />
-          <CouponPanel slug={slug} orderId={orderId} order={order} onSaved={load} />
+          <AdjustmentsPanel slug={slug} orderId={orderId} order={order} onSaved={refreshAll} />
+          <CouponPanel slug={slug} orderId={orderId} order={order} onSaved={refreshAll} />
+        </div>
+      )}
+
+      {canEdit && order.status !== "cancelled" && order.items.length > 0 && (
+        <div className="mt-4 print:hidden">
+          <SplitBillPanel
+            slug={slug}
+            orderId={orderId}
+            items={order.items}
+            splits={splits}
+            summary={splitSummary}
+            onSaved={refreshAll}
+          />
         </div>
       )}
 
@@ -405,6 +461,7 @@ export function OrderBillView({
                     </p>
                     <p className="text-xs text-neutral-400">
                       {formatDate(p.createdAt, dateSystem, { withTime: true })}
+                      {p.splitId ? ` · ${splits.find((s) => s.id === p.splitId)?.label ?? "a share"}` : ""}
                       {p.note ? ` · ${p.note}` : ""}
                       {p.tipInPaisa > 0 ? ` · tip ${formatNPR(p.tipInPaisa)}` : ""}
                     </p>
@@ -427,7 +484,8 @@ export function OrderBillView({
               slug={slug}
               orderId={orderId}
               remainingDueInPaisa={billing.remainingDueInPaisa}
-              onRecorded={load}
+              splits={splitSummary?.splits ?? []}
+              onRecorded={refreshAll}
             />
           )}
           {canRefund && billing.netPaidInPaisa > 0 && (
@@ -436,7 +494,7 @@ export function OrderBillView({
               orderId={orderId}
               netPaidInPaisa={billing.netPaidInPaisa}
               payments={order.payments.filter((p) => p.amountInPaisa > 0)}
-              onRecorded={load}
+              onRecorded={refreshAll}
             />
           )}
         </div>
@@ -485,11 +543,17 @@ function RecordPaymentForm({
   slug,
   orderId,
   remainingDueInPaisa,
+  splits,
   onRecorded,
 }: {
   slug: string;
   orderId: string;
   remainingDueInPaisa: number;
+  // Commercial Launch Phase B.9 — Split Bill. Only rendered as a selector
+  // when the order actually HAS shares defined — recording a payment
+  // never requires tagging one (see recordPaymentSchema's own comment on
+  // splitId).
+  splits: SplitShareSummary[];
   onRecorded: () => void;
 }) {
   const [amount, setAmount] = useState(() => (remainingDueInPaisa / 100).toFixed(2));
@@ -497,6 +561,7 @@ function RecordPaymentForm({
   const [receivedAmount, setReceivedAmount] = useState("");
   const [tip, setTip] = useState("");
   const [note, setNote] = useState("");
+  const [splitId, setSplitId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -504,6 +569,16 @@ function RecordPaymentForm({
   const receivedInPaisa = receivedAmount ? rupeesToPaisa(Number(receivedAmount) || 0) : null;
   const changeDue =
     method === "cash" && receivedInPaisa !== null ? receivedInPaisa - amountInPaisa : null;
+
+  // Picking a share pre-fills the amount with THAT share's own remaining
+  // due (not the whole order's) — the common case is paying exactly one
+  // person's part, so this saves staff from having to do that subtraction
+  // by hand. Still just a suggestion: the amount field stays editable.
+  function selectSplit(id: string) {
+    setSplitId(id);
+    const share = splits.find((s) => s.splitId === id);
+    if (share) setAmount((share.remainingDueInPaisa / 100).toFixed(2));
+  }
 
   async function handleSubmit() {
     setSubmitting(true);
@@ -516,10 +591,12 @@ function RecordPaymentForm({
           method === "cash" && receivedAmount ? Number(receivedAmount) : undefined,
         tip: tip ? Number(tip) : undefined,
         note: note.trim() || undefined,
+        splitId: splitId || undefined,
       });
       setNote("");
       setReceivedAmount("");
       setTip("");
+      setSplitId("");
       onRecorded();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not record payment.");
@@ -532,6 +609,16 @@ function RecordPaymentForm({
     <div className="rounded-2xl border border-neutral-200 bg-white p-5">
       <p className="mb-3 text-sm font-semibold text-neutral-900">Record a payment</p>
       <div className="space-y-2">
+        {splits.length > 0 && (
+          <select className="input" value={splitId} onChange={(e) => selectSplit(e.target.value)}>
+            <option value="">No specific share</option>
+            {splits.map((s) => (
+              <option key={s.splitId} value={s.splitId}>
+                {s.label} — {formatNPR(s.remainingDueInPaisa)} due
+              </option>
+            ))}
+          </select>
+        )}
         <div className="flex gap-2">
           <input
             className="input"
@@ -696,6 +783,255 @@ function RecordRefundForm({
         >
           {submitting ? "Recording…" : `Refund ${formatNPR(rupeesToPaisa(Number(amount) || 0))}`}
         </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Commercial Launch Phase B.9 — Split Bill. Read-only summary of the
+ * order's current shares (each with subtotal/paid/remaining, computed
+ * server-side — see computeBillSplitSummary in bill-splits.ts) plus a
+ * builder that whole-state-replaces the entire set via PUT
+ * .../orders/[orderId]/splits (see that route's own doc comment for why
+ * it's the complete set every time, not a patch).
+ *
+ * A share has no customization beyond a label and which order-item UNITS
+ * it claims — quantities, not whole lines, so "2 of these 3 momos" is
+ * expressible. Whatever's left unclaimed shows as its own "Unassigned"
+ * line so staff can see at a glance whether the split accounts for the
+ * whole bill.
+ */
+function SplitBillPanel({
+  slug,
+  orderId,
+  items,
+  splits,
+  summary,
+  onSaved,
+}: {
+  slug: string;
+  orderId: string;
+  items: OrderItem[];
+  splits: BillSplit[];
+  summary: BillSplitSummary | null;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draftShares, setDraftShares] = useState<
+    { key: string; label: string; quantities: Record<string, string> }[]
+  >([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function startEditing() {
+    setDraftShares(
+      splits.length > 0
+        ? splits.map((s) => ({
+            key: s.id,
+            label: s.label,
+            quantities: Object.fromEntries(s.items.map((i) => [i.orderItemId, String(i.quantity)])),
+          }))
+        : [{ key: crypto.randomUUID(), label: "", quantities: {} }],
+    );
+    setError(null);
+    setEditing(true);
+  }
+
+  function addShare() {
+    setDraftShares((prev) => [...prev, { key: crypto.randomUUID(), label: "", quantities: {} }]);
+  }
+
+  function removeShare(key: string) {
+    setDraftShares((prev) => prev.filter((s) => s.key !== key));
+  }
+
+  function setLabel(key: string, label: string) {
+    setDraftShares((prev) => prev.map((s) => (s.key === key ? { ...s, label } : s)));
+  }
+
+  function setQuantity(key: string, orderItemId: string, value: string) {
+    setDraftShares((prev) =>
+      prev.map((s) => (s.key === key ? { ...s, quantities: { ...s.quantities, [orderItemId]: value } } : s)),
+    );
+  }
+
+  // How many units of each item the draft currently has assigned, across
+  // every share — purely a live guide for staff (shown next to each item
+  // row); the server is the actual authority on over-assignment.
+  const assignedByItem: Record<string, number> = {};
+  for (const share of draftShares) {
+    for (const [orderItemId, value] of Object.entries(share.quantities)) {
+      assignedByItem[orderItemId] = (assignedByItem[orderItemId] ?? 0) + (Number(value) || 0);
+    }
+  }
+
+  const canSubmit = draftShares.every((s) => s.label.trim().length > 0);
+
+  async function handleSubmit() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiPut(`${base(slug)}/orders/${orderId}/splits`, {
+        splits: draftShares.map((s) => ({
+          label: s.label.trim(),
+          items: Object.entries(s.quantities)
+            .filter(([, v]) => Number(v) > 0)
+            .map(([orderItemId, v]) => ({ orderItemId, quantity: Math.floor(Number(v)) })),
+        })),
+      });
+      setEditing(false);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save the split.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function clearSplit() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiPut(`${base(slug)}/orders/${orderId}/splits`, { splits: [] });
+      setEditing(false);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not clear the split.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div className="rounded-2xl border border-neutral-200 bg-white p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-semibold text-neutral-900">Split bill</p>
+          <button onClick={startEditing} className="btn-secondary text-xs">
+            {splits.length > 0 ? "Edit split" : "Split this bill"}
+          </button>
+        </div>
+        {splits.length === 0 || !summary ? (
+          <p className="text-sm text-neutral-400">
+            Not split — the whole bill is one due amount. Split it to track who owes what.
+          </p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {summary.splits.map((s) => (
+              <li key={s.splitId} className="flex items-center justify-between border-b border-neutral-100 pb-2">
+                <div>
+                  <p className="font-medium text-neutral-900">{s.label}</p>
+                  <p className="text-xs text-neutral-400">
+                    {s.itemCount} item{s.itemCount === 1 ? "" : "s"} · {formatNPR(s.subtotalInPaisa)}
+                    {s.paidInPaisa > 0 ? ` · paid ${formatNPR(s.paidInPaisa)}` : ""}
+                  </p>
+                </div>
+                <span className={s.remainingDueInPaisa > 0 ? "font-semibold text-amber-700" : "font-semibold text-green-700"}>
+                  {s.remainingDueInPaisa > 0 ? formatNPR(s.remainingDueInPaisa) : "Paid"}
+                </span>
+              </li>
+            ))}
+            {summary.unassigned.subtotalInPaisa > 0 && (
+              <li className="flex items-center justify-between pt-1 text-neutral-500">
+                <span>
+                  Unassigned · {summary.unassigned.itemCount} item{summary.unassigned.itemCount === 1 ? "" : "s"}
+                </span>
+                <span>{formatNPR(summary.unassigned.subtotalInPaisa)}</span>
+              </li>
+            )}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-5">
+      <p className="mb-3 text-sm font-semibold text-neutral-900">Split bill</p>
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+
+      <div className="mb-3 space-y-2">
+        {draftShares.map((share) => (
+          <div key={share.key} className="rounded-lg border border-neutral-200 p-2.5">
+            <div className="mb-2 flex items-center gap-2">
+              <input
+                className="input"
+                placeholder="Share name (e.g. Alice)"
+                value={share.label}
+                onChange={(e) => setLabel(share.key, e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => removeShare(share.key)}
+                className="shrink-0 text-neutral-400 hover:text-red-600"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-1">
+              {items.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="text-neutral-600">
+                    {item.menuItemNameSnapshot}
+                    {item.variantNameSnapshot ? ` — ${item.variantNameSnapshot}` : ""}
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={item.quantity}
+                    step={1}
+                    value={share.quantities[item.id] ?? ""}
+                    onChange={(e) => setQuantity(share.key, item.id, e.target.value)}
+                    placeholder="0"
+                    className="input w-16 text-right"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mb-3 space-y-1 rounded-lg bg-neutral-50 p-2.5 text-xs text-neutral-500">
+        {items.map((item) => {
+          const assigned = assignedByItem[item.id] ?? 0;
+          return (
+            <div key={item.id} className="flex justify-between">
+              <span>
+                {item.menuItemNameSnapshot}
+                {item.variantNameSnapshot ? ` — ${item.variantNameSnapshot}` : ""}
+              </span>
+              <span className={assigned > item.quantity ? "font-medium text-red-600" : ""}>
+                {assigned} / {item.quantity} assigned
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={addShare} className="btn-secondary text-xs">
+          + Add share
+        </button>
+        <div className="ml-auto flex gap-2">
+          {splits.length > 0 && (
+            <button type="button" onClick={clearSplit} disabled={submitting} className="btn-secondary text-xs">
+              Clear split
+            </button>
+          )}
+          <button type="button" onClick={() => setEditing(false)} disabled={submitting} className="btn-secondary text-xs">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting || !canSubmit || draftShares.length === 0}
+            className="btn-primary text-xs"
+          >
+            {submitting ? "Saving…" : "Save split"}
+          </button>
+        </div>
       </div>
     </div>
   );

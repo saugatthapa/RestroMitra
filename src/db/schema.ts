@@ -1160,6 +1160,18 @@ export const payments = pgTable(
     // traceability. Optional: a refund can also just be a general credit
     // against the order without pointing at one specific prior payment.
     refundOfPaymentId: uuid("refund_of_payment_id"),
+    // Commercial Launch Phase B.9 — Split Bill. Tags this payment as
+    // belonging to one payer's share of the order (see orderBillSplits
+    // below) — purely a label for the payment-history UI ("Alice paid Rs
+    // 300 of her Rs 300 share"), never consulted by the overpayment check
+    // above (that still compares against the ORDER's total remaining due,
+    // not the split's — a payer can always pay more or less than their own
+    // computed share; splits are for clarity, not enforcement). "set null"
+    // (not cascade): redefining an order's splits (whole-state-replace,
+    // see orderBillSplits' own comment) deletes and recreates split rows,
+    // which would otherwise cascade-delete payment history along with it —
+    // the payment itself must survive, just losing its per-payer tag.
+    splitId: uuid("split_id").references(() => orderBillSplits.id, { onDelete: "set null" }),
     // RC audit — a client-generated retry key, same purpose and pattern as
     // orders.clientRequestId (see that column's comment). The payments
     // route already takes a `FOR UPDATE` lock on the order row, which
@@ -1199,6 +1211,7 @@ export const payments = pgTable(
   (table) => [
     index("payments_restaurant_id_idx").on(table.restaurantId),
     index("payments_order_id_idx").on(table.orderId),
+    index("payments_split_id_idx").on(table.splitId),
     // Partial, scoped to (order, clientRequestId) — most payments never set
     // clientRequestId, and a UUID collision across two different orders
     // isn't a real concern, so this only constrains retries of the same
@@ -1211,6 +1224,84 @@ export const payments = pgTable(
       sql`(${table.reconciledAt} IS NULL AND ${table.reconciledByUserId} IS NULL)
           OR (${table.reconciledAt} IS NOT NULL AND ${table.reconciledByUserId} IS NOT NULL)`,
     ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Commercial Launch Phase B.9 — Split Bill (item-level).
+//
+// An order's bill is split into named shares ("Alice", "Seat 2", "The
+// Sharma family"), each assigned specific ORDER ITEMS (by quantity, not
+// whole lines — three momos can be split 1/2 between two shares) rather
+// than just an arbitrary amount. Amount-only splitting already existed
+// (see the payments table's own doc comment: record N payment rows
+// summing to the total) — this is the ADDITIONAL, opt-in layer for
+// "figure out who owes what" before those payments are recorded, not a
+// replacement for it. A payment can optionally tag which share it's for
+// (payments.splitId) once a split is defined, but recording a payment
+// never requires one.
+//
+// Deliberately NOT storing computed amounts anywhere — a share's
+// subtotal/discount/tax/total is always DERIVED on read from the order's
+// current items + adjustments (see src/lib/bill-splits.ts), the same
+// "never store what you can recompute correctly" posture as
+// computeBillingSummary itself. This also means a share's total updates
+// automatically if the order's discount/service charge changes later,
+// with no split-table write needed.
+//
+// `items` (orderBillSplitItems) is whole-state-replaced together with its
+// parent split on every edit — see the PUT .../splits route: staff
+// redefine the ENTIRE set of shares for an order in one call, never a
+// single share in isolation, since shares only make sense relative to
+// each other (the same order item can't knowingly be double-assigned).
+// ---------------------------------------------------------------------------
+
+export const orderBillSplits = pgTable(
+  "order_bill_splits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    // Free-text, staff-chosen — "Alice", "Seat 2", "Table share". Not
+    // unique (nothing stops two shares named the same thing; the UI keys
+    // off the row id, not the label).
+    label: varchar("label", { length: 100 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("order_bill_splits_order_id_idx").on(table.orderId),
+    index("order_bill_splits_restaurant_id_idx").on(table.restaurantId),
+  ],
+);
+
+export const orderBillSplitItems = pgTable(
+  "order_bill_split_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    splitId: uuid("split_id")
+      .notNull()
+      .references(() => orderBillSplits.id, { onDelete: "cascade" }),
+    orderItemId: uuid("order_item_id")
+      .notNull()
+      .references(() => orderItems.id, { onDelete: "cascade" }),
+    // How many units of that order item row this share claims — never more
+    // than the row's own `quantity`, and the sum across every split
+    // claiming the same orderItemId can never exceed it either (enforced
+    // transactionally in the PUT route, not expressible as a single-row DB
+    // check). Whatever's left unclaimed shows as "unassigned" — see
+    // computeBillSplitSummary.
+    quantity: integer("quantity").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("order_bill_split_items_split_id_idx").on(table.splitId),
+    index("order_bill_split_items_order_item_id_idx").on(table.orderItemId),
+    check("order_bill_split_items_quantity_positive", sql`${table.quantity} > 0`),
   ],
 );
 
@@ -3382,6 +3473,7 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   items: many(orderItems),
   payments: many(payments),
   statusHistory: many(orderStatusHistory),
+  billSplits: many(orderBillSplits),
 }));
 
 export const orderStatusHistoryRelations = relations(orderStatusHistory, ({ one }) => ({
@@ -3436,6 +3528,31 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   reconciledBy: one(users, {
     fields: [payments.reconciledByUserId],
     references: [users.id],
+  }),
+  split: one(orderBillSplits, {
+    fields: [payments.splitId],
+    references: [orderBillSplits.id],
+  }),
+}));
+
+export const orderBillSplitsRelations = relations(orderBillSplits, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [orderBillSplits.restaurantId],
+    references: [restaurants.id],
+  }),
+  order: one(orders, { fields: [orderBillSplits.orderId], references: [orders.id] }),
+  items: many(orderBillSplitItems),
+  payments: many(payments),
+}));
+
+export const orderBillSplitItemsRelations = relations(orderBillSplitItems, ({ one }) => ({
+  split: one(orderBillSplits, {
+    fields: [orderBillSplitItems.splitId],
+    references: [orderBillSplits.id],
+  }),
+  orderItem: one(orderItems, {
+    fields: [orderBillSplitItems.orderItemId],
+    references: [orderItems.id],
   }),
 }));
 

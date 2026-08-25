@@ -31,6 +31,12 @@ export const recordPaymentSchema = z.object({
     .max(1_000_000, "Tip is unreasonably large.")
     .optional(),
   note: z.string().trim().max(300).optional().or(z.literal("")),
+  // Commercial Launch Phase B.9 — Split Bill. Optional: tags this payment
+  // as covering one payer's share (see orderBillSplits in schema.ts).
+  // Validated to belong to THIS order in the route (resolve, don't
+  // trust) — never consulted for the overpayment check, which still
+  // compares against the order's own remaining due, not the split's.
+  splitId: z.string().uuid().optional(),
   // RC audit — a client-generated retry key identifying this exact
   // submission attempt, not the payment itself. Mirrors
   // createStaffOrderSchema's clientRequestId (see its comment): a retry of

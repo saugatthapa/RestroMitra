@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { orders, payments } from "@/db/schema";
+import { assertSplitBelongsToOrder } from "@/lib/bill-splits";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import {
   resolveRestaurantContext,
@@ -131,6 +132,19 @@ export async function POST(
         } as const;
       }
 
+      // Commercial Launch Phase B.9 — Split Bill. `splitId` is optional
+      // (most payments tag no share at all) but when given must actually
+      // be one of THIS order's own shares — see assertSplitBelongsToOrder's
+      // own comment. Never affects the amount check above — see
+      // recordPaymentSchema's own comment on splitId. Throws (rather than
+      // returning the {error,status} shape the rest of this transaction
+      // uses) — that's fine, it propagates out of db.transaction() to the
+      // route's own outer try/catch -> toErrorResponse, which handles an
+      // HttpError subclass identically either way.
+      if (body.splitId) {
+        await assertSplitBelongsToOrder(tx, { orderId, splitId: body.splitId });
+      }
+
       const [payment] = await tx
         .insert(payments)
         .values({
@@ -141,6 +155,7 @@ export async function POST(
           receivedInPaisa: body.receivedAmount ?? null,
           tipInPaisa: body.tip ? rupeesToPaisa(body.tip) : 0,
           note: body.note || null,
+          splitId: body.splitId || null,
           clientRequestId: body.clientRequestId || null,
           recordedByUserId: session.user.id,
         })
