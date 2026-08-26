@@ -17,6 +17,7 @@ import { requireBranchAccess } from "@/lib/rbac/guard";
 import { rupeesToPaisa } from "@/lib/money";
 import { restaurantDate } from "@/lib/restaurant-date";
 import { assertBusinessDayWritable } from "@/lib/daily-closing";
+import { assertRegisterOpenForCashPayment } from "@/lib/cash-register";
 
 /**
  * Records a payment against an order — the primary write path for cash-out
@@ -136,6 +137,15 @@ export async function POST(
           );
           return { payment: fullExisting, order, billing, idempotentReplay: true } as const;
         }
+      }
+
+      // QA hardening pass (Phase 6 / master prompt section 9) — connects
+      // cash payments to the cash register: see
+      // assertRegisterOpenForCashPayment's own doc comment in
+      // cash-register.ts for the full rationale. Non-cash methods (card,
+      // mobile wallet, ...) never touch the till, so they're unaffected.
+      if (body.method === "cash") {
+        await assertRegisterOpenForCashPayment(tx, { restaurantId, branchId: order.branchId });
       }
 
       const before = computeBillingSummary(

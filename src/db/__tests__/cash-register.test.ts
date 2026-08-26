@@ -600,4 +600,48 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
       expect(closed.status).toBe("closed");
     });
   });
+
+  describe("QA hardening (Phase 6 / connect cash payments to the cash register)", () => {
+    it("assertRegisterOpenForCashPayment rejects when no register shift is open at the branch, and passes once one is", async () => {
+      // branchBId never has a shift opened on it anywhere else in this
+      // file (every open/close pair above uses `branchId`), so it's a
+      // clean "definitely no open shift" fixture.
+      await expect(
+        db.transaction((tx) =>
+          cashRegister.assertRegisterOpenForCashPayment(tx, { restaurantId, branchId: branchBId }),
+        ),
+      ).rejects.toMatchObject({ status: 400 });
+
+      const shift = await db.transaction((tx) =>
+        cashRegister.openRegisterShift(tx, {
+          restaurantId,
+          branchId: branchBId,
+          registerName: "TEST Register Cash-Gate",
+          openedByUserId: cashierAId,
+          openingCashInPaisa: 1_000,
+        }),
+      );
+
+      await expect(
+        db.transaction((tx) =>
+          cashRegister.assertRegisterOpenForCashPayment(tx, { restaurantId, branchId: branchBId }),
+        ),
+      ).resolves.toBeUndefined();
+
+      // Once closed again, the gate re-engages.
+      await db.transaction((tx) =>
+        cashRegister.closeRegisterShift(tx, {
+          shiftId: shift.id,
+          actualCashInPaisa: 1_000,
+          closedByUserId: cashierAId,
+          timezone: "UTC",
+        }),
+      );
+      await expect(
+        db.transaction((tx) =>
+          cashRegister.assertRegisterOpenForCashPayment(tx, { restaurantId, branchId: branchBId }),
+        ),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+  });
 });

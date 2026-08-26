@@ -114,6 +114,56 @@ export async function computeExpectedCashInPaisa(
 }
 
 /**
+ * QA hardening pass (Phase 6 — connect cash payments to the cash
+ * register, master hardening prompt section 9). A cash payment used to
+ * have zero connection to whether a register till was even open at this
+ * branch: computeExpectedCashInPaisa above attributes cash payments to a
+ * shift purely by branch + time window (`payments` has no shiftId column
+ * — see its own comment), so a cash payment recorded with no register
+ * open would either vanish from every shift's expected-cash total, or
+ * land in whichever shift happens to be open the next time someone runs a
+ * reconciliation — neither is a coherent till.
+ *
+ * Policy (the master prompt's own stated preference): throws unless at
+ * least one register shift is open at this branch. Deliberately checks
+ * "at least one shift open at this branch," not one specific register —
+ * this schema allows more than one concurrently-open till per branch
+ * (register_shifts_one_open_per_branch_register is keyed on
+ * branchId+registerName, not branchId alone — see schema.ts) and payments
+ * has no way to say which one a given cash payment belongs to; resolving
+ * that multi-register attribution ambiguity would need a schema change
+ * (a payments.shiftId column) this fix deliberately doesn't make — it
+ * only closes the "no till open at all" gap, which is what was asked for.
+ *
+ * A plain function rather than folded into the payments route inline so
+ * it's independently testable at the DB level (this module's own
+ * established convention — see cash-register.test.ts) and reusable by any
+ * other cash-accepting mutation that wants the same guarantee.
+ */
+export async function assertRegisterOpenForCashPayment(
+  tx: Transaction,
+  params: { restaurantId: string; branchId: string },
+): Promise<void> {
+  const [openShift] = await tx
+    .select({ id: registerShifts.id })
+    .from(registerShifts)
+    .where(
+      and(
+        eq(registerShifts.restaurantId, params.restaurantId),
+        eq(registerShifts.branchId, params.branchId),
+        eq(registerShifts.status, "open"),
+      ),
+    )
+    .limit(1);
+  if (!openShift) {
+    throw new CashRegisterError(
+      "No register shift is open at this branch. Open a register before recording a cash payment.",
+      400,
+    );
+  }
+}
+
+/**
  * Opens a new register shift. Relies on two partial unique indexes to
  * enforce concurrency safety at the database level rather than a
  * check-then-insert race in application code (same reasoning as every
