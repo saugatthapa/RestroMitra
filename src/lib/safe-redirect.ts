@@ -25,6 +25,21 @@ export function safeInternalRedirect(
   fallback = "/dashboard",
 ): string {
   if (!value) return fallback;
+  // QA hardening pass — reject any embedded ASCII control character
+  // (tab/newline/CR chief among them) BEFORE the slash/scheme checks
+  // below. Per the WHATWG URL spec (implemented identically by every
+  // browser and by Node's own URL parser), these bytes are stripped
+  // during parsing — so a value like "/\t/evil.com" sails past every
+  // check below (it starts with a single "/", not "//" or "/\", and has
+  // no colon), but Next's client router's own `new URL(value, location.href)`
+  // call strips the tab and re-parses it as "//evil.com" — a genuine
+  // scheme-relative, off-origin URL, triggering a real top-level
+  // navigation off-site right after a successful login/MFA. Stripping
+  // isn't enough (the resulting collapsed value could still resolve
+  // off-origin); rejecting outright is what actually closes this.
+  if (/[\u0000-\u001f]/.test(value)) {
+    return fallback;
+  }
   // Must start with a single "/" — reject "//host/path", "/\host/path"
   // (some browsers normalize backslashes to forward slashes), and anything
   // that isn't even path-like ("https://...", "javascript:...").
