@@ -50,6 +50,16 @@ export const recordRefundSchema = z.object({
   method: z.enum(PAYMENT_METHODS),
   reason: z.string().trim().max(300).optional().or(z.literal("")),
   refundOfPaymentId: z.string().uuid().optional(),
+  // QA hardening pass (financial-atomicity audit) — mirrors
+  // recordPaymentSchema's own clientRequestId field/comment above: a
+  // client-generated retry key identifying this exact submission attempt,
+  // not the refund itself. A retry of the same submission (dropped
+  // response, double-click, offline-queue replay) must return the
+  // original refund rather than double-refund the order. Shares the same
+  // (orderId, clientRequestId) unique index as regular payments, since
+  // refunds are stored as negative-amount rows in the same `payments`
+  // table — see the refunds route.
+  clientRequestId: z.string().trim().min(1).max(100).optional(),
 });
 
 export const createStaffOrderSchema = z.object({

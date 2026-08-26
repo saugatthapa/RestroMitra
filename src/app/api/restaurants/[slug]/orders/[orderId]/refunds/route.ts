@@ -32,6 +32,16 @@ import { isBusinessDateClosed } from "@/lib/daily-closing";
  * refund requests can both read the same net-paid total, both pass the
  * over-refund check against it, and jointly refund more than was ever
  * actually paid.
+ *
+ * QA hardening pass (financial-atomicity audit) — that same lock is also
+ * what makes the optional `clientRequestId` idempotency check below
+ * race-safe with no retry loop needed, exactly as documented on the
+ * sibling payments route: two requests carrying the same clientRequestId
+ * for the same order are already serialized by the lock, so the second
+ * one's post-lock lookup is guaranteed to see the first's committed
+ * insert. The (orderId, clientRequestId) unique index on `payments` is
+ * shared with regular payments (refunds are just negative-amount rows in
+ * the same table) and is still there as a DB-level backstop.
  */
 export async function POST(
   request: Request,
@@ -89,10 +99,28 @@ export async function POST(
       }
 
       const existingPayments = await tx
-        .select({ id: payments.id, amountInPaisa: payments.amountInPaisa })
+        .select({
+          id: payments.id,
+          amountInPaisa: payments.amountInPaisa,
+          clientRequestId: payments.clientRequestId,
+        })
         .from(payments)
         .where(eq(payments.orderId, orderId))
         .orderBy(asc(payments.createdAt));
+
+      // Idempotent replay — see the module doc comment above for why the
+      // FOR UPDATE lock already makes this race-safe with no retry loop.
+      if (body.clientRequestId) {
+        const existing = existingPayments.find((p) => p.clientRequestId === body.clientRequestId);
+        if (existing) {
+          const [fullExisting] = await tx.select().from(payments).where(eq(payments.id, existing.id));
+          const billing = computeBillingSummary(
+            order.totalInPaisa,
+            existingPayments.map((p) => p.amountInPaisa),
+          );
+          return { refund: fullExisting, order, billing, idempotentReplay: true } as const;
+        }
+      }
 
       const netPaidSoFar = computeNetPaid(existingPayments.map((p) => p.amountInPaisa));
       if (body.amount > netPaidSoFar) {
@@ -118,6 +146,7 @@ export async function POST(
           method: body.method,
           refundOfPaymentId: body.refundOfPaymentId ?? null,
           note: body.reason || null,
+          clientRequestId: body.clientRequestId || null,
           recordedByUserId: session.user.id,
         })
         .returning();
@@ -133,11 +162,22 @@ export async function POST(
         .where(and(eq(orders.id, orderId), eq(orders.restaurantId, restaurantId)))
         .returning();
 
-      return { refund, order: updatedOrder, billing: after } as const;
+      return { refund, order: updatedOrder, billing: after, idempotentReplay: false } as const;
     });
 
     if ("error" in result) {
       return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+
+    // A replayed request already recorded its audit-log entry the first
+    // time it landed — logging again here would make it look like the
+    // refund happened twice in the activity trail, even though only one
+    // refund row exists.
+    if (result.idempotentReplay) {
+      return NextResponse.json(
+        { refund: result.refund, order: result.order, billing: result.billing, idempotentReplay: true },
+        { status: 200 },
+      );
     }
 
     await recordAuditLog({
