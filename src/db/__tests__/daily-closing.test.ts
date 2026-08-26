@@ -345,6 +345,69 @@ describe.skipIf(!hasDb)("Daily closing (integration)", () => {
     expect(await dailyClosing.isBusinessDateClosed(restaurantId, branchId, tomorrow)).toBe(false);
   });
 
+  it("QA hardening (Phase 5 / centralized daily-close lock) — assertBusinessDayWritable is a no-op while the day is open, and once closed requires MANAGE_DAILY_CLOSING regardless of the caller's own permission", async () => {
+    // BUSINESS_DATE is still open in THIS describe block's own timeline at
+    // this point (it's only closed by the "closeDailyBusiness freezes a
+    // snapshot" test above, which — per vitest's default sequential
+    // execution within a file — has already run by now). Use a fresh,
+    // never-closed date instead so this test is self-contained and doesn't
+    // depend on suite ordering.
+    const OPEN_DATE = "2024-02-09";
+    expect(await dailyClosing.isBusinessDateClosed(restaurantId, branchId, OPEN_DATE)).toBe(false);
+
+    // Open day: passes even for a role with NO MANAGE_DAILY_CLOSING grant
+    // at all (e.g. "waiter") and even without a role/userId that resolves
+    // to anything real — the function must short-circuit on `!closed`
+    // before ever touching permissions.
+    await expect(
+      dailyClosing.assertBusinessDayWritable({
+        userId,
+        restaurantId,
+        branchId,
+        businessDate: OPEN_DATE,
+        role: "waiter",
+      }),
+    ).resolves.toBeUndefined();
+
+    // Close BUSINESS_DATE was already exercised earlier; close this new
+    // date too so we can test the "closed" branch of the policy.
+    await db.transaction((tx) =>
+      dailyClosing.closeDailyBusiness(tx, {
+        restaurantId,
+        branchId,
+        businessDate: OPEN_DATE,
+        timezone: TZ,
+        closedByUserId: userId,
+      }),
+    );
+    expect(await dailyClosing.isBusinessDateClosed(restaurantId, branchId, OPEN_DATE)).toBe(true);
+
+    // Closed day, ordinary role (waiter has no MANAGE_DAILY_CLOSING per
+    // DEFAULT_ROLE_PERMISSIONS) -> rejected with a 403.
+    await expect(
+      dailyClosing.assertBusinessDayWritable({
+        userId,
+        restaurantId,
+        branchId,
+        businessDate: OPEN_DATE,
+        role: "waiter",
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+
+    // Closed day, a role that DOES hold MANAGE_DAILY_CLOSING (manager) ->
+    // allowed through — same "raises the trust bar, doesn't block" policy
+    // the refunds route already established.
+    await expect(
+      dailyClosing.assertBusinessDayWritable({
+        userId,
+        restaurantId,
+        branchId,
+        businessDate: OPEN_DATE,
+        role: "manager",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it("isBusinessDateClosed is branch-scoped — closing one branch's day doesn't lock a different branch's same day", async () => {
     const [otherBranch] = await db
       .insert(schema.branches)

@@ -12,9 +12,9 @@ import { recordRefundSchema } from "@/lib/validation/payments";
 import { computeBillingSummary, computeNetPaid } from "@/lib/payments";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
-import { requireBranchAccess, requirePermission } from "@/lib/rbac/guard";
+import { requireBranchAccess } from "@/lib/rbac/guard";
 import { restaurantDate } from "@/lib/restaurant-date";
-import { isBusinessDateClosed } from "@/lib/daily-closing";
+import { assertBusinessDayWritable } from "@/lib/daily-closing";
 
 /**
  * Records a refund against an order, stored as a negative-amount row in the
@@ -88,15 +88,24 @@ export async function POST(
       // mechanism itself (still a new, audited, additive payments row —
       // the original transaction is never rewritten), only requires the
       // higher trust level once the period is locked.
+      //
+      // QA hardening pass — this was the ONLY mutation route with this
+      // check inline; every other financial mutation had none at all. Now
+      // routed through the centralized assertBusinessDayWritable (see its
+      // own doc comment in daily-closing.ts), passing `tx` so the lock
+      // check participates in the same transaction as this refund's write
+      // rather than a separate connection.
       const orderBusinessDate = restaurantDate(timezone, order.placedAt);
-      if (await isBusinessDateClosed(restaurantId, order.branchId, orderBusinessDate)) {
-        await requirePermission(
-          session.user.id,
+      await assertBusinessDayWritable(
+        {
+          userId: session.user.id,
           restaurantId,
-          PERMISSIONS.MANAGE_DAILY_CLOSING,
+          branchId: order.branchId,
+          businessDate: orderBusinessDate,
           role,
-        );
-      }
+        },
+        tx,
+      );
 
       const existingPayments = await tx
         .select({

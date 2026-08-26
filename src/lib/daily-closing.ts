@@ -13,6 +13,8 @@ import {
 import { restaurantDate, restaurantStartOfDay } from "@/lib/restaurant-date";
 import { getReportSummary, type ReportDateRange } from "@/lib/reports";
 import { HttpError } from "@/lib/http-error";
+import { requirePermission } from "@/lib/rbac/guard";
+import { PERMISSIONS } from "@/lib/rbac/permissions";
 
 export class DailyClosingError extends HttpError {
   constructor(message: string, status = 400) {
@@ -297,6 +299,75 @@ export async function isBusinessDateClosed(
     )
     .limit(1);
   return rows.length > 0;
+}
+
+/**
+ * QA hardening pass (Phase 5 / master prompt section 7) — the centralized
+ * daily-close lock. Before this, `isBusinessDateClosed` existed but had
+ * only ever been wired into ONE mutation route (refunds) — every other
+ * financial mutation (payments, expenses, purchases, inventory
+ * adjustments, wastage, stock counts, payroll payments, cash register
+ * shifts/movements, ...) could freely write against a business day that
+ * had already been closed and frozen into a `daily_closes` snapshot,
+ * silently making that snapshot wrong from the moment of the write —
+ * exactly the gap this helper closes by becoming the ONE place every such
+ * mutation route calls, instead of leaving it to each route author to
+ * remember to duplicate the refunds route's own inline check.
+ *
+ * Policy — same as the refunds route already established (Commercial
+ * Launch Phase A.2, spec section 10), now applied uniformly: closing a
+ * business day does NOT freeze the underlying ledger shut. It raises the
+ * trust bar. While the day is open, whatever permission a mutation route
+ * already requires (EDIT_ORDER, MANAGE_EXPENSES, MANAGE_INVENTORY, ...) is
+ * sufficient. Once the day is closed, the caller must ALSO hold
+ * MANAGE_DAILY_CLOSING (manager/accountant/owner in the default role
+ * matrix) — an ordinary waiter/cashier/kitchen-staff grant is no longer
+ * enough. This is deliberate, not a compromise: a hard block would mean a
+ * genuine late correction (a missed expense entered the next morning, a
+ * supplier payment posted a day late) has no path forward at all short of
+ * reopening the close, which this app doesn't support. Every late write is
+ * still fully audited by its own route (recordAuditLog) exactly as before;
+ * only the frozen `daily_closes.snapshotJson` itself is immutable (see
+ * closeDailyBusiness above) — Reports/Account Books will simply disagree
+ * with that frozen snapshot from the moment of a late write onward, which
+ * is the same accepted, already-shipped tradeoff the refunds route lived
+ * with alone until now.
+ *
+ * Deliberately takes a single options object rather than a long run of
+ * same-typed string positional params (userId/restaurantId/branchId/
+ * businessDate would be trivial to pass in the wrong order at a call
+ * site) — every other guard in rbac/guard.ts got away with 2-3 positional
+ * ids; this one has four, so the object form is worth the extra verbosity
+ * for safety at ~10 call sites.
+ *
+ * `dbOrTx` — pass the caller's own open transaction so the lock check
+ * participates in the same snapshot as the write it's guarding, same
+ * convention as every other function in this module.
+ */
+export async function assertBusinessDayWritable(
+  params: {
+    userId: string;
+    restaurantId: string;
+    branchId: string;
+    businessDate: string;
+    /** Pass the caller's already-resolved role (from resolveRestaurantContext) to skip re-deriving it — see requirePermission's own doc comment for the same perf rationale. */
+    role?: string;
+  },
+  dbOrTx: Database | Transaction = db,
+): Promise<void> {
+  const closed = await isBusinessDateClosed(
+    params.restaurantId,
+    params.branchId,
+    params.businessDate,
+    dbOrTx,
+  );
+  if (!closed) return;
+  await requirePermission(
+    params.userId,
+    params.restaurantId,
+    PERMISSIONS.MANAGE_DAILY_CLOSING,
+    params.role,
+  );
 }
 
 /**
