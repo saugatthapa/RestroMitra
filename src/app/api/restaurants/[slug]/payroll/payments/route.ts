@@ -12,6 +12,7 @@ import { restaurantDate } from "@/lib/restaurant-date";
 import { getPayrollComputation } from "@/lib/payroll";
 import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
 import { isUniqueViolation } from "@/lib/db-error";
+import { assertBusinessDayWritable } from "@/lib/daily-closing";
 
 const PAYROLL_LIST_LIMIT = 500;
 
@@ -141,6 +142,26 @@ export async function POST(
     let payment;
     try {
       payment = await db.transaction(async (tx) => {
+        // QA hardening pass (Phase 5 / centralized daily-close lock) — a
+        // payroll payment is a real cash-out with its own Account Books
+        // debit (recordPayrollLedgerEntry below), keyed to `paymentDate`
+        // (today). Skipped for a restaurant-wide staff member (branchId
+        // null) — same documented per-branch limitation as expenses: Daily
+        // Closing has no single branch to check for staff not scoped to
+        // one.
+        if (staff.branchId) {
+          await assertBusinessDayWritable(
+            {
+              userId: session.user.id,
+              restaurantId,
+              branchId: staff.branchId,
+              businessDate: paymentDate,
+              role,
+            },
+            tx,
+          );
+        }
+
         const [row] = await tx
           .insert(payrollPayments)
           .values({

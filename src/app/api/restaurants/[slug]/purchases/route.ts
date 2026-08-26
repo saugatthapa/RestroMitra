@@ -10,6 +10,8 @@ import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { recordPurchaseLedgerEntry } from "@/lib/ledger";
 import { requireBranchAccess } from "@/lib/rbac/guard";
+import { restaurantDate } from "@/lib/restaurant-date";
+import { assertBusinessDayWritable } from "@/lib/daily-closing";
 
 export async function GET(
   _request: Request,
@@ -158,6 +160,22 @@ export async function POST(
     const totalInPaisa = lineTotals.reduce((sum, l) => sum + l.lineTotalInPaisa, 0);
 
     const result = await db.transaction(async (tx) => {
+      // QA hardening pass (Phase 5 / centralized daily-close lock) —
+      // purchases has no backdated "purchase date" field (only
+      // createdAt/updatedAt — see getPurchasesSummary's own comment in
+      // daily-closing.ts), so the business day this counts toward is
+      // always "now", at the moment of the write.
+      await assertBusinessDayWritable(
+        {
+          userId: session.user.id,
+          restaurantId,
+          branchId: data.branchId,
+          businessDate: restaurantDate(timezone),
+          role,
+        },
+        tx,
+      );
+
       const [purchase] = await tx
         .insert(purchases)
         .values({

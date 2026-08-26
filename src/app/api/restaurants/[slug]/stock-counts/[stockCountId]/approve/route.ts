@@ -30,6 +30,7 @@ export async function POST(
       session,
       restaurantId,
       role,
+      timezone,
       branchId: grantedBranchId,
     } = await resolveRestaurantContext(slug, PERMISSIONS.APPROVE_STOCK_COUNT);
 
@@ -47,7 +48,13 @@ export async function POST(
     });
 
     const result = await db.transaction((tx) =>
-      approveStockCount(tx, { restaurantId, stockCountId, approvedByUserId: session.user.id }),
+      approveStockCount(tx, {
+        restaurantId,
+        stockCountId,
+        approvedByUserId: session.user.id,
+        timezone,
+        role,
+      }),
     );
 
     await recordAuditLog({

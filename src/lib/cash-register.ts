@@ -10,6 +10,9 @@ import {
   expenses,
 } from "@/db/schema";
 import { HttpError } from "@/lib/http-error";
+import { isUniqueViolation } from "@/lib/db-error";
+import { restaurantDate } from "@/lib/restaurant-date";
+import { assertBusinessDayWritable } from "@/lib/daily-closing";
 
 export class CashRegisterError extends HttpError {
   constructor(message: string, status = 400) {
@@ -172,6 +175,8 @@ export async function recordCashMovement(
     amountInPaisa: number;
     reason?: string | null;
     recordedByUserId: string;
+    timezone: string;
+    role?: string;
   },
 ) {
   if (!Number.isInteger(params.amountInPaisa) || params.amountInPaisa <= 0) {
@@ -182,7 +187,7 @@ export async function recordCashMovement(
   // movement either commits before close reads it, or close's own FOR
   // UPDATE blocks until this transaction finishes.
   const [shift] = await tx
-    .select({ status: registerShifts.status })
+    .select()
     .from(registerShifts)
     .where(eq(registerShifts.id, params.shiftId))
     .for("update");
@@ -193,6 +198,22 @@ export async function recordCashMovement(
   if (shift.status !== "open") {
     throw new CashRegisterError("This register shift is already closed.", 409);
   }
+
+  // QA hardening pass (Phase 5 / centralized daily-close lock) — a cash
+  // drop/addition/payout changes what closeRegisterShift will later
+  // compute as expectedCashInPaisa for whatever day it lands on; same lock
+  // as every other financial mutation. Always "now" — a movement is
+  // recorded at the moment it happens, mid-shift.
+  await assertBusinessDayWritable(
+    {
+      userId: params.recordedByUserId,
+      restaurantId: shift.restaurantId,
+      branchId: shift.branchId,
+      businessDate: restaurantDate(params.timezone),
+      role: params.role,
+    },
+    tx,
+  );
 
   const [movement] = await tx
     .insert(registerCashMovements)
@@ -221,6 +242,8 @@ export async function closeRegisterShift(
     actualCashInPaisa: number;
     closingNotes?: string | null;
     closedByUserId: string;
+    timezone: string;
+    role?: string;
   },
 ) {
   if (!Number.isInteger(params.actualCashInPaisa) || params.actualCashInPaisa < 0) {
@@ -239,6 +262,23 @@ export async function closeRegisterShift(
   if (shift.status !== "open") {
     throw new CashRegisterError("This register shift is already closed.", 409);
   }
+
+  // QA hardening pass (Phase 5 / centralized daily-close lock) — closing a
+  // shift is what FREEZES expectedCashInPaisa/varianceInPaisa, the exact
+  // numbers getRegisterSummaryForDay reads straight into the Daily Closing
+  // snapshot. Keyed off "now" (the close moment), matching
+  // getRegisterSummaryForDay's own bucketing of a shift by its closedAt
+  // timestamp — see daily-closing.ts.
+  await assertBusinessDayWritable(
+    {
+      userId: params.closedByUserId,
+      restaurantId: shift.restaurantId,
+      branchId: shift.branchId,
+      businessDate: restaurantDate(params.timezone),
+      role: params.role,
+    },
+    tx,
+  );
 
   const closedAt = new Date();
   const expectedCashInPaisa = await computeExpectedCashInPaisa(tx, {
@@ -348,12 +388,4 @@ export async function correctRegisterShift(
   }
 
   return { shift: updated, correction };
-}
-
-/** True if `err` is a Postgres unique_violation (23505), possibly wrapped by drizzle-orm. */
-function isUniqueViolation(err: unknown): boolean {
-  const code =
-    (err as { code?: string })?.code ??
-    (err as { cause?: { code?: string } })?.cause?.code;
-  return code === "23505";
 }

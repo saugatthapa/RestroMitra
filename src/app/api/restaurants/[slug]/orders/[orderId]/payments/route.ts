@@ -15,6 +15,8 @@ import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { requireBranchAccess } from "@/lib/rbac/guard";
 import { rupeesToPaisa } from "@/lib/money";
+import { restaurantDate } from "@/lib/restaurant-date";
+import { assertBusinessDayWritable } from "@/lib/daily-closing";
 
 /**
  * Records a payment against an order — the primary write path for cash-out
@@ -55,10 +57,8 @@ export async function POST(
   }
   try {
     const { slug, orderId } = await ctx.params;
-    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
-      slug,
-      PERMISSIONS.EDIT_ORDER,
-    );
+    const { session, restaurantId, role, timezone, branchId: grantedBranchId } =
+      await resolveRestaurantContext(slug, PERMISSIONS.EDIT_ORDER);
 
     const parsed = await parseJsonBody(request, recordPaymentSchema);
     if (!parsed.ok) return parsed.response;
@@ -89,6 +89,25 @@ export async function POST(
         role,
         branchId: grantedBranchId,
       });
+
+      // QA hardening pass (Phase 5 / centralized daily-close lock) —
+      // recording a payment is exactly as much a financial mutation as a
+      // refund is, but had no daily-close awareness at all: a cashier
+      // could still record payments against orders placed on an
+      // already-closed business day, silently invalidating that day's
+      // frozen daily_closes snapshot with no trace beyond the payment's
+      // own audit-log entry. Same policy as refunds — see
+      // assertBusinessDayWritable's own doc comment.
+      await assertBusinessDayWritable(
+        {
+          userId: session.user.id,
+          restaurantId,
+          branchId: order.branchId,
+          businessDate: restaurantDate(timezone, order.placedAt),
+          role,
+        },
+        tx,
+      );
 
       const existingPayments = await tx
         .select({

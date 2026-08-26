@@ -9,6 +9,8 @@ import { recordStockMovement } from "@/lib/inventory";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { requireBranchAccess } from "@/lib/rbac/guard";
+import { restaurantDate } from "@/lib/restaurant-date";
+import { assertBusinessDayWritable } from "@/lib/daily-closing";
 
 /**
  * GET returns the movement ledger for one item (newest first) — the
@@ -58,10 +60,8 @@ export async function POST(
   }
   try {
     const { slug, itemId } = await ctx.params;
-    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
-      slug,
-      PERMISSIONS.MANAGE_INVENTORY,
-    );
+    const { session, restaurantId, role, timezone, branchId: grantedBranchId } =
+      await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_INVENTORY);
 
     const itemRows = await db
       .select()
@@ -95,8 +95,27 @@ export async function POST(
 
     const signedDelta = data.direction === "add" ? data.quantity : -data.quantity;
 
-    const result = await db.transaction(async (tx) =>
-      recordStockMovement(tx, {
+    const result = await db.transaction(async (tx) => {
+      // QA hardening pass (Phase 5 / centralized daily-close lock) — a
+      // manual stock adjustment/waste entry directly moves
+      // stockAdjustmentNetValueChangeInPaisa / wastageCostInPaisa, both
+      // read straight into the Daily Closing snapshot (see
+      // getStockAdjustmentsSummary and reports.ts's getWastageSummary) —
+      // exactly the kind of write that should require MANAGE_DAILY_CLOSING
+      // once the day is closed. Always "now" (no backdated field on this
+      // form).
+      await assertBusinessDayWritable(
+        {
+          userId: session.user.id,
+          restaurantId,
+          branchId: data.branchId,
+          businessDate: restaurantDate(timezone),
+          role,
+        },
+        tx,
+      );
+
+      return recordStockMovement(tx, {
         restaurantId,
         branchId: data.branchId,
         inventoryItemId: itemId,
@@ -106,8 +125,8 @@ export async function POST(
         referenceType: "manual",
         note: data.reason,
         recordedByUserId: session.user.id,
-      }),
-    );
+      });
+    });
 
     await recordAuditLog({
       restaurantId,

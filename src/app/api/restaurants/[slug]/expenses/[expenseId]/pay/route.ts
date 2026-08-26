@@ -10,6 +10,7 @@ import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { recordExpenseLedgerEntry } from "@/lib/ledger";
 import { HttpError } from "@/lib/http-error";
+import { assertBusinessDayWritable } from "@/lib/daily-closing";
 
 /**
  * approved -> paid. This is the ONLY place a non-owner/accountant flow's
@@ -29,7 +30,7 @@ export async function POST(
   }
   try {
     const { slug, expenseId } = await ctx.params;
-    const { session, restaurantId, timezone } = await resolveRestaurantContext(
+    const { session, restaurantId, role, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.PAY_EXPENSE,
     );
@@ -52,6 +53,27 @@ export async function POST(
     });
 
     const updated = await db.transaction(async (tx) => {
+      // QA hardening pass (Phase 5 / centralized daily-close lock) — THIS
+      // is the moment an expense actually becomes a real cash-out (see the
+      // create route's own comment on why pending_approval/approved has no
+      // ledger effect yet) — so this is where the lock genuinely needs to
+      // apply, keyed off the expense's own expenseDate (the business day
+      // it counts toward in Daily Closing/Reports), not "now". Skipped for
+      // a restaurant-wide expense (branchId null) — same documented
+      // per-branch limitation as the create route.
+      if (existing.branchId) {
+        await assertBusinessDayWritable(
+          {
+            userId: session.user.id,
+            restaurantId,
+            branchId: existing.branchId,
+            businessDate: existing.expenseDate,
+            role,
+          },
+          tx,
+        );
+      }
+
       const [row] = await tx
         .update(expenses)
         .set({

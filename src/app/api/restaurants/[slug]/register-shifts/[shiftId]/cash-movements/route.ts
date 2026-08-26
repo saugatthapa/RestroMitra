@@ -25,10 +25,8 @@ export async function POST(
   }
   try {
     const { slug, shiftId } = await ctx.params;
-    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
-      slug,
-      PERMISSIONS.MANAGE_CASH_REGISTER,
-    );
+    const { session, restaurantId, role, timezone, branchId: grantedBranchId } =
+      await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_CASH_REGISTER);
 
     const [existing] = await db
       .select({ id: registerShifts.id, branchId: registerShifts.branchId })
@@ -54,6 +52,8 @@ export async function POST(
         amountInPaisa: data.amountInPaisa,
         reason: data.reason ?? null,
         recordedByUserId: session.user.id,
+        timezone,
+        role,
       }),
     );
 

@@ -139,7 +139,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
         cashRegister.closeRegisterShift(tx, {
           shiftId: shift.id,
           actualCashInPaisa: 5_000,
-          closedByUserId: cashierAId,
+          closedByUserId: cashierAId, timezone: "Asia/Kathmandu",
         }),
       );
     });
@@ -173,7 +173,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
         cashRegister.closeRegisterShift(tx, {
           shiftId: first.id,
           actualCashInPaisa: 1_000,
-          closedByUserId: cashierAId,
+          closedByUserId: cashierAId, timezone: "Asia/Kathmandu",
         }),
       );
     });
@@ -215,10 +215,10 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
       expect(second.status).toBe("open");
 
       await db.transaction((tx) =>
-        cashRegister.closeRegisterShift(tx, { shiftId: first.id, actualCashInPaisa: 2_000, closedByUserId: cashierAId }),
+        cashRegister.closeRegisterShift(tx, { shiftId: first.id, actualCashInPaisa: 2_000, closedByUserId: cashierAId, timezone: "Asia/Kathmandu", }),
       );
       await db.transaction((tx) =>
-        cashRegister.closeRegisterShift(tx, { shiftId: second.id, actualCashInPaisa: 2_000, closedByUserId: cashierBId }),
+        cashRegister.closeRegisterShift(tx, { shiftId: second.id, actualCashInPaisa: 2_000, closedByUserId: cashierBId, timezone: "Asia/Kathmandu", }),
       );
     });
 
@@ -271,7 +271,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
           shiftId: shift.id,
           type: "addition",
           amountInPaisa: 2_000,
-          recordedByUserId: cashierAId,
+          recordedByUserId: cashierAId, timezone: "Asia/Kathmandu",
         }),
       );
       await db.transaction((tx) =>
@@ -279,7 +279,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
           shiftId: shift.id,
           type: "drop",
           amountInPaisa: 1_000,
-          recordedByUserId: cashierAId,
+          recordedByUserId: cashierAId, timezone: "Asia/Kathmandu",
         }),
       );
       await db.transaction((tx) =>
@@ -287,7 +287,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
           shiftId: shift.id,
           type: "payout",
           amountInPaisa: 500,
-          recordedByUserId: cashierAId,
+          recordedByUserId: cashierAId, timezone: "Asia/Kathmandu",
         }),
       );
 
@@ -312,7 +312,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
         cashRegister.closeRegisterShift(tx, {
           shiftId: shift.id,
           actualCashInPaisa: 22_000,
-          closedByUserId: cashierAId,
+          closedByUserId: cashierAId, timezone: "Asia/Kathmandu",
         }),
       );
       expect(closed.expectedCashInPaisa).toBe(22_500);
@@ -333,10 +333,10 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
 
       const results = await Promise.allSettled([
         db.transaction((tx) =>
-          cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 1_000, closedByUserId: cashierAId }),
+          cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 1_000, closedByUserId: cashierAId, timezone: "Asia/Kathmandu", }),
         ),
         db.transaction((tx) =>
-          cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 999, closedByUserId: cashierAId }),
+          cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 999, closedByUserId: cashierAId, timezone: "Asia/Kathmandu", }),
         ),
       ]);
 
@@ -358,7 +358,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
         }),
       );
       await db.transaction((tx) =>
-        cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 1_000, closedByUserId: cashierAId }),
+        cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 1_000, closedByUserId: cashierAId, timezone: "Asia/Kathmandu", }),
       );
 
       await expect(
@@ -367,7 +367,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
             shiftId: shift.id,
             type: "addition",
             amountInPaisa: 500,
-            recordedByUserId: cashierAId,
+            recordedByUserId: cashierAId, timezone: "Asia/Kathmandu",
           }),
         ),
       ).rejects.toBeInstanceOf(cashRegister.CashRegisterError);
@@ -386,7 +386,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
         }),
       );
       const closed = await db.transaction((tx) =>
-        cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 4_000, closedByUserId: cashierAId }),
+        cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 4_000, closedByUserId: cashierAId, timezone: "Asia/Kathmandu", }),
       );
       expect(closed.expectedCashInPaisa).toBe(4_000);
       expect(closed.varianceInPaisa).toBe(0);
@@ -439,7 +439,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
       ).rejects.toBeInstanceOf(cashRegister.CashRegisterError);
 
       await db.transaction((tx) =>
-        cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 1_000, closedByUserId: cashierAId }),
+        cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 1_000, closedByUserId: cashierAId, timezone: "Asia/Kathmandu", }),
       );
     });
 
@@ -454,7 +454,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
         }),
       );
       await db.transaction((tx) =>
-        cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 1_000, closedByUserId: cashierAId }),
+        cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 1_000, closedByUserId: cashierAId, timezone: "Asia/Kathmandu", }),
       );
 
       await expect(
@@ -512,7 +512,92 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
     expect(expected).toBe(0);
 
     await db.transaction((tx) =>
-      cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 0, closedByUserId: cashierAId }),
+      cashRegister.closeRegisterShift(tx, { shiftId: shift.id, actualCashInPaisa: 0, closedByUserId: cashierAId, timezone: "Asia/Kathmandu", }),
     );
+  });
+
+  describe("QA hardening (Phase 5 / centralized daily-close lock)", () => {
+    it("closeRegisterShift and recordCashMovement require MANAGE_DAILY_CLOSING once today's business day is closed for this branch, and allow it through for a role that holds it", async () => {
+      const TZ = "UTC";
+      const dailyClosing = await import("@/lib/daily-closing");
+      const { restaurantDate } = await import("@/lib/restaurant-date");
+      const today = restaurantDate(TZ);
+
+      const shift = await db.transaction((tx) =>
+        cashRegister.openRegisterShift(tx, {
+          restaurantId,
+          branchId,
+          registerName: "TEST Register Daily Close Lock",
+          openedByUserId: cashierAId,
+          openingCashInPaisa: 1_000,
+        }),
+      );
+
+      // Close TODAY's business day for this branch.
+      await db.transaction((tx) =>
+        dailyClosing.closeDailyBusiness(tx, {
+          restaurantId,
+          branchId,
+          businessDate: today,
+          timezone: TZ,
+          closedByUserId: cashierAId,
+        }),
+      );
+
+      // recordCashMovement — an ordinary role ("waiter" has no
+      // MANAGE_DAILY_CLOSING per DEFAULT_ROLE_PERMISSIONS) is rejected.
+      await expect(
+        db.transaction((tx) =>
+          cashRegister.recordCashMovement(tx, {
+            shiftId: shift.id,
+            type: "addition",
+            amountInPaisa: 500,
+            recordedByUserId: cashierAId,
+            timezone: TZ,
+            role: "waiter",
+          }),
+        ),
+      ).rejects.toMatchObject({ status: 403 });
+
+      // A role that DOES hold it ("owner" bypasses the permission matrix
+      // entirely, same as requirePermission's own short-circuit) is let
+      // through — the day being closed raises the trust bar, it doesn't
+      // hard-block the mutation.
+      const movement = await db.transaction((tx) =>
+        cashRegister.recordCashMovement(tx, {
+          shiftId: shift.id,
+          type: "addition",
+          amountInPaisa: 500,
+          recordedByUserId: cashierAId,
+          timezone: TZ,
+          role: "owner",
+        }),
+      );
+      expect(movement.amountInPaisa).toBe(500);
+
+      // closeRegisterShift — same policy, same two branches.
+      await expect(
+        db.transaction((tx) =>
+          cashRegister.closeRegisterShift(tx, {
+            shiftId: shift.id,
+            actualCashInPaisa: 1_500,
+            closedByUserId: cashierAId,
+            timezone: TZ,
+            role: "waiter",
+          }),
+        ),
+      ).rejects.toMatchObject({ status: 403 });
+
+      const closed = await db.transaction((tx) =>
+        cashRegister.closeRegisterShift(tx, {
+          shiftId: shift.id,
+          actualCashInPaisa: 1_500,
+          closedByUserId: cashierAId,
+          timezone: TZ,
+          role: "owner",
+        }),
+      );
+      expect(closed.status).toBe("closed");
+    });
   });
 });

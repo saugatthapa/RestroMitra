@@ -14,6 +14,7 @@ import { recordExpenseLedgerEntry } from "@/lib/ledger";
 import { HttpError } from "@/lib/http-error";
 import { restaurantDate } from "@/lib/restaurant-date";
 import { isUniqueViolation } from "@/lib/db-error";
+import { assertBusinessDayWritable } from "@/lib/daily-closing";
 
 const EXPENSE_LIST_LIMIT = 500;
 
@@ -198,6 +199,33 @@ export async function POST(
     let expense;
     try {
       expense = await db.transaction(async (tx) => {
+        // QA hardening pass (Phase 5 / centralized daily-close lock) — an
+        // expense only actually affects a business day's numbers once it's
+        // PAID (getTotalExpensesInPaisa/Daily Closing both filter on
+        // status="paid" — see reports.ts); a pending_approval/approved
+        // expense created here has no ledger effect yet, so the lock only
+        // applies on the "paid" path (the OTHER path, the separate
+        // pay/route.ts action, gets its own check for exactly the same
+        // reason). Skipped for a restaurant-wide expense (branchId null,
+        // shared overhead not tied to one branch/day) — Daily Closing is
+        // inherently per-BRANCH (see the dailyCloses unique index), so
+        // there is no single branch's close status to check against; a
+        // documented limitation, not an oversight (same category as the
+        // ledgerEntries branchless case noted in the final hardening
+        // report).
+        if (status === "paid" && branchId) {
+          await assertBusinessDayWritable(
+            {
+              userId: session.user.id,
+              restaurantId,
+              branchId,
+              businessDate: expenseDate,
+              role,
+            },
+            tx,
+          );
+        }
+
         const [row] = await tx
           .insert(expenses)
           .values({

@@ -29,6 +29,7 @@ export async function POST(
       session,
       restaurantId,
       role,
+      timezone,
       branchId: grantedBranchId,
     } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_INVENTORY);
 
@@ -46,7 +47,13 @@ export async function POST(
     });
 
     const result = await db.transaction((tx) =>
-      submitStockCount(tx, { restaurantId, stockCountId, submittedByUserId: session.user.id }),
+      submitStockCount(tx, {
+        restaurantId,
+        stockCountId,
+        submittedByUserId: session.user.id,
+        timezone,
+        role,
+      }),
     );
 
     await recordAuditLog({

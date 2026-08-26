@@ -181,7 +181,7 @@ describe.skipIf(!hasDb)("Physical stock count (integration)", () => {
     expect(item.systemQuantityMilliunits).toBe(10_000);
     expect(item.unitCostInPaisaSnapshot).toBe(10_000);
 
-    const result = await db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId }));
+    const result = await db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId, timezone: "Asia/Kathmandu" }));
     expect(result.stockCount.status).toBe("applied");
     expect(result.stockCount.hasLargeVariance).toBe(false);
     expect(result.appliedMovementCount).toBe(1);
@@ -214,7 +214,7 @@ describe.skipIf(!hasDb)("Physical stock count (integration)", () => {
       }),
     );
 
-    const submitResult = await db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId }));
+    const submitResult = await db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId, timezone: "Asia/Kathmandu" }));
     expect(submitResult.stockCount.status).toBe("pending_approval");
     expect(submitResult.stockCount.hasLargeVariance).toBe(true);
     expect(submitResult.appliedMovementCount).toBe(0);
@@ -222,7 +222,7 @@ describe.skipIf(!hasDb)("Physical stock count (integration)", () => {
     const noMovementYet = await db.select().from(schema.stockMovements).where(eq(schema.stockMovements.referenceId, count.id));
     expect(noMovementYet).toHaveLength(0);
 
-    const approveResult = await db.transaction((tx) => sc.approveStockCount(tx, { restaurantId, stockCountId: count.id, approvedByUserId: userId }));
+    const approveResult = await db.transaction((tx) => sc.approveStockCount(tx, { restaurantId, stockCountId: count.id, approvedByUserId: userId, timezone: "Asia/Kathmandu" }));
     expect(approveResult.stockCount.status).toBe("applied");
     expect(approveResult.stockCount.approvedByUserId).toBe(userId);
     expect(approveResult.appliedMovementCount).toBe(1);
@@ -239,7 +239,7 @@ describe.skipIf(!hasDb)("Physical stock count (integration)", () => {
     await db.transaction((tx) =>
       sc.addStockCountItem(tx, { restaurantId, stockCountId: count.id, inventoryItemId: freshItemId, physicalQuantityMilliunits: 20_000 }),
     );
-    await db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId }));
+    await db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId, timezone: "Asia/Kathmandu" }));
 
     const rejected = await db.transaction((tx) =>
       sc.rejectStockCount(tx, { restaurantId, stockCountId: count.id, rejectedByUserId: userId, reason: "TEST recount needed" }),
@@ -269,7 +269,7 @@ describe.skipIf(!hasDb)("Physical stock count (integration)", () => {
       db.transaction((tx) => sc.addStockCountItem(tx, { restaurantId, stockCountId: otherCount.id, inventoryItemId: itemId })),
     ).rejects.toMatchObject({ status: 404 });
     await expect(
-      db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: otherCount.id, submittedByUserId: userId })),
+      db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: otherCount.id, submittedByUserId: userId, timezone: "Asia/Kathmandu" })),
     ).rejects.toMatchObject({ status: 404 });
 
     const ownReport = await sc.getStockCountDetail(otherRestaurantId, otherCount.id);
@@ -292,7 +292,7 @@ describe.skipIf(!hasDb)("Physical stock count (integration)", () => {
   it("validation failure: submitting an empty count, or a count with an uncounted item, is rejected", async () => {
     const emptyCount = await sc.createStockCount({ restaurantId, branchId, countedByUserId: userId });
     await expect(
-      db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: emptyCount.id, submittedByUserId: userId })),
+      db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: emptyCount.id, submittedByUserId: userId, timezone: "Asia/Kathmandu" })),
     ).rejects.toMatchObject({ status: 400 });
 
     const partialCount = await sc.createStockCount({ restaurantId, branchId, countedByUserId: userId });
@@ -300,7 +300,7 @@ describe.skipIf(!hasDb)("Physical stock count (integration)", () => {
       sc.addStockCountItem(tx, { restaurantId, stockCountId: partialCount.id, inventoryItemId: itemId }), // no physicalQuantityMilliunits
     );
     await expect(
-      db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: partialCount.id, submittedByUserId: userId })),
+      db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: partialCount.id, submittedByUserId: userId, timezone: "Asia/Kathmandu" })),
     ).rejects.toMatchObject({ status: 400 });
   });
 
@@ -319,11 +319,11 @@ describe.skipIf(!hasDb)("Physical stock count (integration)", () => {
     await db.transaction((tx) =>
       sc.addStockCountItem(tx, { restaurantId, stockCountId: count.id, inventoryItemId: freshItemId, physicalQuantityMilliunits: 5_000 }),
     );
-    const first = await db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId }));
+    const first = await db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId, timezone: "Asia/Kathmandu" }));
     expect(first.stockCount.status).toBe("applied");
 
     await expect(
-      db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId })),
+      db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId, timezone: "Asia/Kathmandu" })),
     ).rejects.toMatchObject({ status: 409 });
     await expect(
       db.transaction((tx) => sc.addStockCountItem(tx, { restaurantId, stockCountId: count.id, inventoryItemId: itemId })),
@@ -333,7 +333,7 @@ describe.skipIf(!hasDb)("Physical stock count (integration)", () => {
   it("approve/reject reject a count that isn't pending_approval (e.g. still open, or already applied)", async () => {
     const openCount = await sc.createStockCount({ restaurantId, branchId, countedByUserId: userId });
     await expect(
-      db.transaction((tx) => sc.approveStockCount(tx, { restaurantId, stockCountId: openCount.id, approvedByUserId: userId })),
+      db.transaction((tx) => sc.approveStockCount(tx, { restaurantId, stockCountId: openCount.id, approvedByUserId: userId, timezone: "Asia/Kathmandu" })),
     ).rejects.toMatchObject({ status: 409 });
     await expect(
       db.transaction((tx) => sc.rejectStockCount(tx, { restaurantId, stockCountId: openCount.id, rejectedByUserId: userId, reason: "TEST" })),
@@ -367,7 +367,7 @@ describe.skipIf(!hasDb)("Physical stock count (integration)", () => {
 
     const attempt = () =>
       db
-        .transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId }))
+        .transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId, timezone: "Asia/Kathmandu" }))
         .then((r) => ({ ok: true as const, r }))
         .catch((err) => ({ ok: false as const, err }));
 
@@ -403,7 +403,7 @@ describe.skipIf(!hasDb)("Physical stock count (integration)", () => {
     await db.transaction((tx) =>
       sc.addStockCountItem(tx, { restaurantId, stockCountId: count.id, inventoryItemId: freshItemId, physicalQuantityMilliunits: 4_000 }),
     );
-    const result = await db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId }));
+    const result = await db.transaction((tx) => sc.submitStockCount(tx, { restaurantId, stockCountId: count.id, submittedByUserId: userId, timezone: "Asia/Kathmandu" }));
     expect(result.stockCount.status).toBe("applied");
     expect(result.appliedMovementCount).toBe(0);
 

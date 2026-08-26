@@ -10,6 +10,8 @@ import {
 } from "@/db/schema";
 import { HttpError } from "@/lib/http-error";
 import { recordStockMovement } from "@/lib/inventory";
+import { restaurantDate } from "@/lib/restaurant-date";
+import { assertBusinessDayWritable } from "@/lib/daily-closing";
 
 export class StockCountError extends HttpError {
   constructor(message: string, status = 400) {
@@ -242,8 +244,35 @@ export async function setStockCountItemPhysicalQuantity(
 
 async function applyVariances(
   tx: Transaction,
-  params: { restaurantId: string; branchId: string; stockCountId: string; recordedByUserId: string },
+  params: {
+    restaurantId: string;
+    branchId: string;
+    stockCountId: string;
+    recordedByUserId: string;
+    timezone: string;
+    role?: string;
+  },
 ) {
+  // QA hardening pass (Phase 5 / centralized daily-close lock) — a stock
+  // count's variances land in stockAdjustmentNetValueChangeInPaisa, read
+  // straight into the Daily Closing snapshot exactly like a manual
+  // adjustment does (see getStockAdjustmentsSummary) — same lock, applied
+  // once here since this is the ONE place either submitStockCount's
+  // auto-apply path or approveStockCount's approval path actually writes a
+  // stock movement, rather than duplicating the check in both routes.
+  // Always "now" — a count is finalized at the moment it's submitted or
+  // approved, not backdated.
+  await assertBusinessDayWritable(
+    {
+      userId: params.recordedByUserId,
+      restaurantId: params.restaurantId,
+      branchId: params.branchId,
+      businessDate: restaurantDate(params.timezone),
+      role: params.role,
+    },
+    tx,
+  );
+
   const items = await tx.select().from(stockCountItems).where(eq(stockCountItems.stockCountId, params.stockCountId));
   let appliedCount = 0;
   for (const item of items) {
@@ -286,7 +315,13 @@ async function applyVariances(
  */
 export async function submitStockCount(
   tx: Transaction,
-  params: { restaurantId: string; stockCountId: string; submittedByUserId: string },
+  params: {
+    restaurantId: string;
+    stockCountId: string;
+    submittedByUserId: string;
+    timezone: string;
+    role?: string;
+  },
 ) {
   const [count] = await tx
     .select()
@@ -340,6 +375,8 @@ export async function submitStockCount(
     branchId: count.branchId,
     stockCountId: params.stockCountId,
     recordedByUserId: params.submittedByUserId,
+    timezone: params.timezone,
+    role: params.role,
   });
 
   const [updated] = await tx
@@ -356,7 +393,13 @@ export async function submitStockCount(
 /** Approves a pending-approval count: writes every line's variance to the stock ledger and marks the count applied. */
 export async function approveStockCount(
   tx: Transaction,
-  params: { restaurantId: string; stockCountId: string; approvedByUserId: string },
+  params: {
+    restaurantId: string;
+    stockCountId: string;
+    approvedByUserId: string;
+    timezone: string;
+    role?: string;
+  },
 ) {
   const [count] = await tx
     .select()
@@ -376,6 +419,8 @@ export async function approveStockCount(
     branchId: count.branchId,
     stockCountId: params.stockCountId,
     recordedByUserId: params.approvedByUserId,
+    timezone: params.timezone,
+    role: params.role,
   });
 
   const now = new Date();
