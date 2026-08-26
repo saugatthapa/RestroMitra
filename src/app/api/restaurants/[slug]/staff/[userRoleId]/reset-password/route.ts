@@ -9,6 +9,7 @@ import { hashPassword, validatePasswordStrength } from "@/lib/auth/password";
 import { destroyAllSessions } from "@/lib/auth/session";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
 
 async function getOwnedGrant(restaurantId: string, userRoleId: string) {
   const rows = await db
@@ -51,7 +52,7 @@ export async function POST(
   }
   try {
     const { slug, userRoleId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_STAFF,
     );
@@ -60,6 +61,14 @@ export async function POST(
     if (!existing) {
       return NextResponse.json({ error: "Staff member not found." }, { status: 404 });
     }
+    // QA hardening pass — a branch-scoped manager holding MANAGE_STAFF must
+    // not be able to reset a DIFFERENT branch's (or a restaurant-wide)
+    // staff member's password. See requireBranchAccessForNullableTarget's
+    // own doc comment for why a null target branchId needs special handling.
+    await requireBranchAccessForNullableTarget(session.user.id, restaurantId, existing.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
     if (existing.role === "owner" || existing.role === "platform_admin") {
       return NextResponse.json(
         { error: "The restaurant owner's password can't be reset here." },

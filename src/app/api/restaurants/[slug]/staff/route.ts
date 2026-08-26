@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, count, eq, ne } from "drizzle-orm";
+import { and, count, eq, isNull, ne, or } from "drizzle-orm";
 import { db } from "@/db";
 import { users, userRoles, restaurants, branches, staffSalaryConfigs } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
@@ -15,6 +15,13 @@ import { maxStaffForRestaurant } from "@/lib/plans";
  * Lists everyone with an active role at this restaurant — owner included
  * (for visibility on the roster), though the owner row can't be edited or
  * deactivated through the staff PATCH route (see [userRoleId]/route.ts).
+ *
+ * QA hardening pass — a branch-scoped manager (grantedBranchId !== null)
+ * only sees staff who are either scoped to their own branch or unrestricted
+ * (branchId IS NULL — e.g. the owner, who should stay visible on every
+ * branch's roster). Restaurant-wide staff at OTHER branches are excluded,
+ * same invariant requireBranchAccessForNullableTarget enforces for the
+ * single-staff-member routes.
  */
 export async function GET(
   _request: Request,
@@ -22,7 +29,10 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_STAFF);
+    const { restaurantId, branchId: grantedBranchId } = await resolveRestaurantContext(
+      slug,
+      PERMISSIONS.MANAGE_STAFF,
+    );
 
     const rows = await db
       .select({
@@ -39,7 +49,14 @@ export async function GET(
       .from(userRoles)
       .innerJoin(users, eq(userRoles.userId, users.id))
       .leftJoin(branches, eq(userRoles.branchId, branches.id))
-      .where(eq(userRoles.restaurantId, restaurantId));
+      .where(
+        grantedBranchId === null
+          ? eq(userRoles.restaurantId, restaurantId)
+          : and(
+              eq(userRoles.restaurantId, restaurantId),
+              or(isNull(userRoles.branchId), eq(userRoles.branchId, grantedBranchId)),
+            ),
+      );
 
     return NextResponse.json({ staff: rows });
   } catch (err) {

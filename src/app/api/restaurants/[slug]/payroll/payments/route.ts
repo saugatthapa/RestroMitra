@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import { payrollPayments, userRoles, users } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
@@ -10,17 +10,27 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { recordPayrollLedgerEntry } from "@/lib/ledger";
 import { restaurantDate } from "@/lib/restaurant-date";
 import { getPayrollComputation } from "@/lib/payroll";
+import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
 
 const PAYROLL_LIST_LIMIT = 500;
 
-/** `?userRoleId=` narrows to one staff member's payout history. */
+/**
+ * `?userRoleId=` narrows to one staff member's payout history.
+ *
+ * QA hardening pass — a branch-scoped accountant/manager only sees payout
+ * history for staff scoped to their own branch (or unrestricted staff),
+ * joining to userRoles since payrollPayments itself has no branchId column.
+ */
 export async function GET(
   request: Request,
   ctx: { params: Promise<{ slug: string }> },
 ) {
   try {
     const { slug } = await ctx.params;
-    const { restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.VIEW_PAYROLL);
+    const { restaurantId, branchId: grantedBranchId } = await resolveRestaurantContext(
+      slug,
+      PERMISSIONS.VIEW_PAYROLL,
+    );
 
     const url = new URL(request.url);
     const userRoleId = url.searchParams.get("userRoleId");
@@ -28,10 +38,14 @@ export async function GET(
     const rows = await db
       .select({ payment: payrollPayments })
       .from(payrollPayments)
+      .innerJoin(userRoles, eq(payrollPayments.userRoleId, userRoles.id))
       .where(
         and(
           eq(payrollPayments.restaurantId, restaurantId),
           userRoleId ? eq(payrollPayments.userRoleId, userRoleId) : undefined,
+          grantedBranchId === null
+            ? undefined
+            : or(isNull(userRoles.branchId), eq(userRoles.branchId, grantedBranchId)),
         ),
       )
       .orderBy(desc(payrollPayments.paidAt))
@@ -60,7 +74,7 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, timezone } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_PAYROLL,
     );
@@ -70,7 +84,7 @@ export async function POST(
     const data = parsed.data;
 
     const staffRow = await db
-      .select({ userRoleId: userRoles.id, fullName: users.fullName })
+      .select({ userRoleId: userRoles.id, fullName: users.fullName, branchId: userRoles.branchId })
       .from(userRoles)
       .innerJoin(users, eq(userRoles.userId, users.id))
       .where(and(eq(userRoles.id, data.userRoleId), eq(userRoles.restaurantId, restaurantId)))
@@ -79,6 +93,13 @@ export async function POST(
       return NextResponse.json({ error: "Staff member not found." }, { status: 404 });
     }
     const staff = staffRow[0];
+    // QA hardening pass — a branch-scoped manager holding MANAGE_PAYROLL
+    // must not be able to pay a different branch's (or a restaurant-wide)
+    // staff member.
+    await requireBranchAccessForNullableTarget(session.user.id, restaurantId, staff.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
 
     const paymentDate = restaurantDate(timezone);
 

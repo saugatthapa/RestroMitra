@@ -7,6 +7,7 @@ import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/
 import { updateStaffSchema } from "@/lib/validation/staff";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
 
 async function getOwnedGrant(restaurantId: string, userRoleId: string) {
   const rows = await db
@@ -36,7 +37,7 @@ export async function PATCH(
   }
   try {
     const { slug, userRoleId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_STAFF,
     );
@@ -45,6 +46,13 @@ export async function PATCH(
     if (!existing) {
       return NextResponse.json({ error: "Staff member not found." }, { status: 404 });
     }
+    // QA hardening pass — a branch-scoped manager must not be able to
+    // change the role/status/branch of staff outside their own branch (or
+    // of a restaurant-wide grant, which isn't "theirs" to manage either).
+    await requireBranchAccessForNullableTarget(session.user.id, restaurantId, existing.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
     if (existing.role === "owner" || existing.role === "platform_admin") {
       return NextResponse.json(
         { error: "The restaurant owner's access can't be changed here." },

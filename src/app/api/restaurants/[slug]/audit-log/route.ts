@@ -3,6 +3,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
 import { listAuditLogs } from "@/lib/audit";
 import { restaurantStartOfDay } from "@/lib/restaurant-date";
+import { AuthError } from "@/lib/rbac/guard";
 
 /**
  * RC audit P1 fix — recordAuditLog() (src/lib/audit.ts) has been writing to
@@ -31,10 +32,25 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { restaurantId, timezone } = await resolveRestaurantContext(
+    const { restaurantId, timezone, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_STAFF,
     );
+
+    // QA hardening pass (branch-isolation audit) — audit_logs has no
+    // branchId column (many entries, e.g. settings/subscription changes,
+    // aren't branch-scoped at all), so there's no way to filter this list
+    // down to "just my branch." Rather than let a branch-scoped manager
+    // with MANAGE_STAFF see the FULL restaurant-wide audit trail (other
+    // branches' staff changes, salary edits, refunds, etc.), this fails
+    // closed: only an unrestricted grant (owner/manager/platform_admin
+    // with branchId: null) can read the audit log at all.
+    if (grantedBranchId !== null) {
+      throw new AuthError(
+        "Audit log access requires unrestricted (all-branch) access.",
+        403,
+      );
+    }
 
     const url = new URL(request.url);
     const from = url.searchParams.get("from");

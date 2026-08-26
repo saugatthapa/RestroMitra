@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { payrollPayments } from "@/db/schema";
+import { payrollPayments, userRoles } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { reversePayrollLedgerEntry } from "@/lib/ledger";
 import { HttpError } from "@/lib/http-error";
+import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
 
 /**
  * Voids a payroll payment — recorded to the wrong person, wrong amount,
@@ -25,7 +26,7 @@ export async function PATCH(
   }
   try {
     const { slug, paymentId } = await ctx.params;
-    const { session, restaurantId, timezone } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_PAYROLL,
     );
@@ -36,6 +37,19 @@ export async function PATCH(
     if (!existing) {
       return NextResponse.json({ error: "Payroll payment not found." }, { status: 404 });
     }
+    // QA hardening pass — a branch-scoped manager must not be able to void
+    // a different branch's (or a restaurant-wide) staff member's payment.
+    const [targetStaff] = await db
+      .select({ branchId: userRoles.branchId })
+      .from(userRoles)
+      .where(eq(userRoles.id, existing.userRoleId))
+      .limit(1);
+    await requireBranchAccessForNullableTarget(
+      session.user.id,
+      restaurantId,
+      targetStaff?.branchId ?? null,
+      { role, branchId: grantedBranchId },
+    );
     if (existing.isVoided) {
       throw new HttpError("This payment is already voided.");
     }

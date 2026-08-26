@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, max } from "drizzle-orm";
+import { and, eq, isNull, max, or } from "drizzle-orm";
 import { db } from "@/db";
 import { userRoles, users, staffSalaryConfigs, payrollPayments } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
@@ -29,7 +29,10 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { restaurantId, timezone } = await resolveRestaurantContext(slug, PERMISSIONS.VIEW_PAYROLL);
+    const { restaurantId, timezone, branchId: grantedBranchId } = await resolveRestaurantContext(
+      slug,
+      PERMISSIONS.VIEW_PAYROLL,
+    );
 
     const url = new URL(request.url);
     const periodStart = url.searchParams.get("periodStart");
@@ -37,6 +40,9 @@ export async function GET(
     const hasValidPeriod =
       !!periodStart && !!periodEnd && ISO_DATE.test(periodStart) && ISO_DATE.test(periodEnd) && periodStart <= periodEnd;
 
+    // QA hardening pass — a branch-scoped accountant/manager only sees the
+    // payroll roster for their own branch (plus unrestricted/restaurant-wide
+    // staff, same as the staff roster route), not every branch's payroll.
     const staffRows = await db
       .select({
         userRoleId: userRoles.id,
@@ -50,7 +56,15 @@ export async function GET(
       .from(userRoles)
       .innerJoin(users, eq(userRoles.userId, users.id))
       .leftJoin(staffSalaryConfigs, eq(staffSalaryConfigs.userRoleId, userRoles.id))
-      .where(and(eq(userRoles.restaurantId, restaurantId), eq(userRoles.isActive, true)));
+      .where(
+        grantedBranchId === null
+          ? and(eq(userRoles.restaurantId, restaurantId), eq(userRoles.isActive, true))
+          : and(
+              eq(userRoles.restaurantId, restaurantId),
+              eq(userRoles.isActive, true),
+              or(isNull(userRoles.branchId), eq(userRoles.branchId, grantedBranchId)),
+            ),
+      );
 
     const lastPaidRows = await db
       .select({

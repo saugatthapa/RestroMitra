@@ -368,3 +368,38 @@ export async function requireEitherBranchAccess(
   }
   throw new AuthError("You do not have access to either branch for this transfer.", 403);
 }
+
+/**
+ * QA hardening pass (branch-isolation audit) — like requireBranchAccess, but
+ * for a resource whose OWN branchId can itself be NULL: a staff/payroll
+ * grant with `branchId: null` means "unrestricted, all branches" (see
+ * ASSIGNABLE_STAFF_ROLES in validation/staff.ts — any assignable role, not
+ * just owner/manager, can be granted this). requireBranchAccess can't be
+ * called directly for that case (it requires a concrete branchId to check
+ * against), and skipping the check entirely would let a branch-scoped
+ * manager holding MANAGE_STAFF/MANAGE_PAYROLL reach into another branch's
+ * staff, or into a restaurant-wide grant that isn't "theirs" at all.
+ *
+ * Rule: a target scoped to a real branch is checked exactly like
+ * requireBranchAccess (unrestricted callers pass, branch-scoped callers
+ * need an exact match). A target that is itself unrestricted (branchId:
+ * null) may only be acted on by an unrestricted caller — a branch-scoped
+ * caller has no legitimate branch to claim it under, so this fails closed
+ * rather than silently allowing it.
+ */
+export async function requireBranchAccessForNullableTarget(
+  userId: string,
+  restaurantId: string,
+  targetBranchId: string | null,
+  knownGrant?: { role: string; branchId: string | null },
+): Promise<void> {
+  if (targetBranchId !== null) {
+    await requireBranchAccess(userId, restaurantId, targetBranchId, knownGrant);
+    return;
+  }
+  const { branchId: grantedBranchId } =
+    knownGrant ?? (await requireRestaurantAccess(userId, restaurantId));
+  if (grantedBranchId !== null) {
+    throw new AuthError("You do not have access to this branch.", 403);
+  }
+}

@@ -7,6 +7,7 @@ import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/
 import { updateStaffSalarySchema } from "@/lib/validation/staff-salary";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
 
 async function getOwnedGrant(restaurantId: string, userRoleId: string) {
   const rows = await db
@@ -24,12 +25,21 @@ export async function GET(
 ) {
   try {
     const { slug, userRoleId } = await ctx.params;
-    const { restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.VIEW_PAYROLL);
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
+      slug,
+      PERMISSIONS.VIEW_PAYROLL,
+    );
 
     const existing = await getOwnedGrant(restaurantId, userRoleId);
     if (!existing) {
       return NextResponse.json({ error: "Staff member not found." }, { status: 404 });
     }
+    // QA hardening pass — a branch-scoped accountant/manager holding
+    // VIEW_PAYROLL must not be able to see another branch's salary data.
+    await requireBranchAccessForNullableTarget(session.user.id, restaurantId, existing.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
 
     const config = await db.query.staffSalaryConfigs.findFirst({
       where: eq(staffSalaryConfigs.userRoleId, userRoleId),
@@ -51,7 +61,7 @@ export async function PUT(
   }
   try {
     const { slug, userRoleId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_PAYROLL,
     );
@@ -60,6 +70,11 @@ export async function PUT(
     if (!existing) {
       return NextResponse.json({ error: "Staff member not found." }, { status: 404 });
     }
+    // QA hardening pass — same branch check as GET above.
+    await requireBranchAccessForNullableTarget(session.user.id, restaurantId, existing.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
 
     const parsed = await parseJsonBody(request, updateStaffSalarySchema);
     if (!parsed.ok) return parsed.response;
