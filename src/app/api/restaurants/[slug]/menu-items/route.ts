@@ -7,6 +7,7 @@ import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/
 import { createMenuItemSchema } from "@/lib/validation/menu";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function GET(
   _request: Request,
@@ -44,6 +45,21 @@ export async function POST(
       slug,
       PERMISSIONS.EDIT_MENU,
     );
+
+    // QA hardening (P2 backlog): menu writes had no rate-limit backstop at
+    // all — see reorder/route.ts's own comment for the full rationale.
+    // Shares the same `menu-write:user` bucket as every other menu
+    // mutation route, since they're all the same abuse surface.
+    const limit = rateLimit(`menu-write:user:${session.user.id}`, {
+      limit: 60,
+      windowMs: 5 * 60 * 1000,
+    });
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Too many menu changes in a short time. Please wait a few minutes and try again." },
+        { status: 429 },
+      );
+    }
 
     const parsed = await parseJsonBody(request, createMenuItemSchema);
     if (!parsed.ok) return parsed.response;

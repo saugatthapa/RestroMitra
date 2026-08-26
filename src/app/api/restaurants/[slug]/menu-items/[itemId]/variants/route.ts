@@ -9,6 +9,7 @@ import { getOwnedMenuItem } from "@/lib/menu";
 import { requirePermission } from "@/lib/rbac/guard";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(
   request: Request,
@@ -26,6 +27,20 @@ export async function POST(
       PERMISSIONS.EDIT_MENU,
     );
     await requirePermission(session.user.id, restaurantId, PERMISSIONS.EDIT_PRICE, role);
+
+    // QA hardening (P2 backlog): shared `menu-write:user` rate-limit
+    // bucket across every menu-item-scoped mutation route — see
+    // menu-items/reorder/route.ts's comment for the full rationale.
+    const limit = rateLimit(`menu-write:user:${session.user.id}`, {
+      limit: 60,
+      windowMs: 5 * 60 * 1000,
+    });
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Too many menu changes in a short time. Please wait a few minutes and try again." },
+        { status: 429 },
+      );
+    }
 
     const item = await getOwnedMenuItem(restaurantId, itemId);
     if (!item) {

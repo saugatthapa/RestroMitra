@@ -6,6 +6,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { reorderItemsSchema } from "@/lib/validation/menu";
 import { hasValidCsrfHeader } from "@/lib/request";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(
   request: Request,
@@ -16,7 +17,26 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.EDIT_MENU);
+    const { session, restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.EDIT_MENU);
+
+    // QA hardening (P2 backlog): menu writes were the one authenticated
+    // mutation surface in this codebase with no rate-limit backstop at
+    // all — every other write path (payments, gateway calls, the AI
+    // assistant) already has one. Being authenticated + EDIT_MENU-gated
+    // already rules out a random attacker; this only guards against a
+    // buggy client retry loop or a compromised staff session hammering
+    // writes. Generous on purpose — a busy admin reordering a whole menu
+    // in one sitting must never be blocked by this.
+    const limit = rateLimit(`menu-write:user:${session.user.id}`, {
+      limit: 60,
+      windowMs: 5 * 60 * 1000,
+    });
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Too many menu changes in a short time. Please wait a few minutes and try again." },
+        { status: 429 },
+      );
+    }
 
     const parsed = await parseJsonBody(request, reorderItemsSchema);
     if (!parsed.ok) return parsed.response;

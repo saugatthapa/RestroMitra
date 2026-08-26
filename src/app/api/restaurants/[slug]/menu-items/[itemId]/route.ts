@@ -12,6 +12,7 @@ import { updateMenuItemSchema } from "@/lib/validation/menu";
 import { requirePermission } from "@/lib/rbac/guard";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { rateLimit } from "@/lib/rate-limit";
 
 async function getOwnedItem(restaurantId: string, itemId: string) {
   const rows = await db
@@ -35,6 +36,20 @@ export async function PATCH(
       slug,
       PERMISSIONS.EDIT_MENU,
     );
+
+    // QA hardening (P2 backlog): shared `menu-write:user` rate-limit
+    // bucket across every menu mutation route — see
+    // menu-items/reorder/route.ts's comment for the full rationale.
+    const limit = rateLimit(`menu-write:user:${session.user.id}`, {
+      limit: 60,
+      windowMs: 5 * 60 * 1000,
+    });
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Too many menu changes in a short time. Please wait a few minutes and try again." },
+        { status: 429 },
+      );
+    }
 
     const existing = await getOwnedItem(restaurantId, itemId);
     if (!existing) {
@@ -113,6 +128,20 @@ export async function DELETE(
       slug,
       PERMISSIONS.EDIT_MENU,
     );
+
+    // QA hardening (P2 backlog): shared `menu-write:user` rate-limit
+    // bucket across every menu mutation route — see
+    // menu-items/reorder/route.ts's comment for the full rationale.
+    const limit = rateLimit(`menu-write:user:${session.user.id}`, {
+      limit: 60,
+      windowMs: 5 * 60 * 1000,
+    });
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Too many menu changes in a short time. Please wait a few minutes and try again." },
+        { status: 429 },
+      );
+    }
 
     const existing = await getOwnedItem(restaurantId, itemId);
     if (!existing) {
