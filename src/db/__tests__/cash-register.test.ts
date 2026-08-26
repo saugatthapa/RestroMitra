@@ -397,6 +397,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
           newActualCashInPaisa: 3_800,
           reason: "TEST recount found a miscounted note",
           correctedByUserId: cashierBId,
+          timezone: "Asia/Kathmandu",
         }),
       );
 
@@ -434,6 +435,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
             newActualCashInPaisa: 900,
             reason: "TEST should fail — still open",
             correctedByUserId: cashierBId,
+            timezone: "Asia/Kathmandu",
           }),
         ),
       ).rejects.toBeInstanceOf(cashRegister.CashRegisterError);
@@ -464,6 +466,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
             newActualCashInPaisa: 900,
             reason: "   ",
             correctedByUserId: cashierBId,
+            timezone: "Asia/Kathmandu",
           }),
         ),
       ).rejects.toBeInstanceOf(cashRegister.CashRegisterError);

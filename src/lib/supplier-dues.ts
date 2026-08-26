@@ -5,6 +5,7 @@ import { ledgerEntries, purchaseItems, purchases, suppliers } from "@/db/schema"
 import { HttpError } from "@/lib/http-error";
 import { recordStockMovement } from "@/lib/inventory";
 import { restaurantDate } from "@/lib/restaurant-date";
+import { assertBusinessDayWritable } from "@/lib/daily-closing";
 
 export class SupplierDuesError extends HttpError {
   constructor(message: string, status = 400) {
@@ -183,6 +184,8 @@ export async function voidPurchase(
     purchaseId: string;
     voidedByUserId: string;
     reason: string;
+    timezone: string;
+    role?: string;
   },
 ) {
   const [purchase] = await tx
@@ -197,6 +200,26 @@ export async function voidPurchase(
   if (purchase.isVoided) {
     throw new SupplierDuesError("This purchase has already been voided.", 409);
   }
+
+  // QA hardening pass (Phase 43 / adversarial self-audit — daily-close lock
+  // coverage gap). Voiding reverses stock quantity and the linked ledger
+  // due (see this function's own doc comment) — a genuine financial/
+  // inventory reversal, same class as every other mutation this hardening
+  // pass gated behind the daily-close lock, but this one was missed since
+  // it edits an existing purchase rather than creating one. Keyed off the
+  // purchase's own createdAt business date (purchases have no separate
+  // "purchase date" field — see schema.ts — so createdAt IS the day its
+  // stock/ledger entries were originally booked on).
+  await assertBusinessDayWritable(
+    {
+      userId: params.voidedByUserId,
+      restaurantId: params.restaurantId,
+      branchId: purchase.branchId,
+      businessDate: restaurantDate(params.timezone, purchase.createdAt),
+      role: params.role,
+    },
+    tx,
+  );
 
   const [ledgerEntry] = await tx
     .select()

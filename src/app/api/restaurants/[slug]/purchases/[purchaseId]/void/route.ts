@@ -27,7 +27,7 @@ export async function POST(
   }
   try {
     const { slug, purchaseId } = await ctx.params;
-    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_INVENTORY,
     );
@@ -57,6 +57,8 @@ export async function POST(
         purchaseId,
         voidedByUserId: session.user.id,
         reason: parsed.data.reason,
+        timezone,
+        role,
       }),
     );
 

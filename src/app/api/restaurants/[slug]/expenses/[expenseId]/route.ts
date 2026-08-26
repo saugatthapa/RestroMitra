@@ -10,6 +10,8 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { recordExpenseLedgerEntry, reverseExpenseLedgerEntry } from "@/lib/ledger";
 import { HttpError } from "@/lib/http-error";
 import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
+import { assertBusinessDayWritable } from "@/lib/daily-closing";
+import { resolveExpenseDailyCloseCheckDates } from "@/lib/expenses";
 
 async function getOwnedExpense(restaurantId: string, expenseId: string) {
   const rows = await db
@@ -95,6 +97,45 @@ export async function PATCH(
     }
 
     const updated = await db.transaction(async (tx) => {
+      // QA hardening pass (Phase 43 / adversarial self-audit — daily-close
+      // lock coverage gap). Every other financial-mutation route in this
+      // hardening pass got a daily-close check, but this one — which
+      // reverses a PAID expense's ledger entry via
+      // reverseExpenseLedgerEntry, and can even move a paid expense's own
+      // expenseDate — was missed, since it edits an existing row rather
+      // than creating/paying a new one. Two distinct risks, both checked
+      // before the update below:
+      //  - voiding a paid expense reverses its ledger entry on the day it
+      //    was originally booked (existing.expenseDate) — if that day is
+      //    already closed, this must raise the same trust bar as any other
+      //    reversal.
+      //  - retitling expenseDate on an already-paid expense moves its
+      //    value between two different days' totals
+      //    (getTotalExpensesInPaisa buckets purely by expenseDate) — both
+      //    the OLD and the NEW day are checked, since either could be an
+      //    already-closed day being silently disturbed.
+      // Gated on existing.branchId being non-null, matching every other
+      // daily-close check in this pass — a restaurant-wide (branchless)
+      // expense has no branch-scoped daily close to protect. Checked
+      // against `tx` (not the default `db` handle) so this can't race a
+      // concurrent daily-close commit the way a pre-transaction check
+      // could.
+      if (existing.branchId) {
+        const businessDatesToCheck = resolveExpenseDailyCloseCheckDates(existing, data);
+        for (const businessDate of businessDatesToCheck) {
+          await assertBusinessDayWritable(
+            {
+              userId: session.user.id,
+              restaurantId,
+              branchId: existing.branchId,
+              businessDate,
+              role,
+            },
+            tx,
+          );
+        }
+      }
+
       const [row] = await tx
         .update(expenses)
         .set({

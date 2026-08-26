@@ -9,6 +9,8 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { reversePayrollLedgerEntry } from "@/lib/ledger";
 import { HttpError } from "@/lib/http-error";
 import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
+import { restaurantDate } from "@/lib/restaurant-date";
+import { assertBusinessDayWritable } from "@/lib/daily-closing";
 
 /**
  * Voids a payroll payment — recorded to the wrong person, wrong amount,
@@ -55,6 +57,29 @@ export async function PATCH(
     }
 
     const updated = await db.transaction(async (tx) => {
+      // QA hardening pass (Phase 43 / adversarial self-audit — daily-close
+      // lock coverage gap). Voiding reverses this payment's ledger entry —
+      // a genuine financial reversal, same class as every other mutation
+      // this hardening pass gated behind the daily-close lock, but this
+      // one was missed since it edits an existing payment rather than
+      // creating one. Keyed off the payment's own paidAt business date
+      // (the day its ledger entry was originally booked on), gated on the
+      // staff member actually having a branch — same "restaurant-wide
+      // staff have no branch-scoped daily close to protect" rule the
+      // create/pay route itself already uses.
+      if (targetStaff?.branchId) {
+        await assertBusinessDayWritable(
+          {
+            userId: session.user.id,
+            restaurantId,
+            branchId: targetStaff.branchId,
+            businessDate: restaurantDate(timezone, existing.paidAt),
+            role,
+          },
+          tx,
+        );
+      }
+
       const [row] = await tx
         .update(payrollPayments)
         .set({ isVoided: true, updatedAt: new Date() })

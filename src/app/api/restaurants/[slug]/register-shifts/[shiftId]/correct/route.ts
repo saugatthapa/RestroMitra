@@ -28,7 +28,7 @@ export async function POST(
   }
   try {
     const { slug, shiftId } = await ctx.params;
-    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.CORRECT_CASH_REGISTER,
     );
@@ -56,6 +56,8 @@ export async function POST(
         newActualCashInPaisa: data.newActualCashInPaisa,
         reason: data.reason,
         correctedByUserId: session.user.id,
+        timezone,
+        role,
       }),
     );
 

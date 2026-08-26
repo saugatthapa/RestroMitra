@@ -349,6 +349,7 @@ describe.skipIf(!hasDb)("Supplier dues (integration)", () => {
         purchaseId: p.purchase.id,
         voidedByUserId: userId,
         reason: "TEST duplicate entry",
+        timezone: TZ,
       }),
     );
     expect(result.purchase.isVoided).toBe(true);
@@ -384,6 +385,7 @@ describe.skipIf(!hasDb)("Supplier dues (integration)", () => {
         purchaseId: p.purchase.id,
         voidedByUserId: userId,
         reason: "TEST first void",
+        timezone: TZ,
       }),
     );
 
@@ -394,6 +396,7 @@ describe.skipIf(!hasDb)("Supplier dues (integration)", () => {
           purchaseId: p.purchase.id,
           voidedByUserId: userId,
           reason: "TEST second void",
+          timezone: TZ,
         }),
       ),
     ).rejects.toMatchObject({ status: 409 });
@@ -429,6 +432,7 @@ describe.skipIf(!hasDb)("Supplier dues (integration)", () => {
           purchaseId: p.purchase.id,
           voidedByUserId: userId,
           reason: "TEST should be rejected",
+          timezone: TZ,
         }),
       ),
     ).rejects.toMatchObject({ status: 400 });
@@ -453,6 +457,7 @@ describe.skipIf(!hasDb)("Supplier dues (integration)", () => {
           purchaseId: "00000000-0000-0000-0000-000000000000",
           voidedByUserId: userId,
           reason: "TEST not found",
+          timezone: TZ,
         }),
       ),
     ).rejects.toMatchObject({ status: 404 });
@@ -475,6 +480,7 @@ describe.skipIf(!hasDb)("Supplier dues (integration)", () => {
             purchaseId: p.purchase.id,
             voidedByUserId: userId,
             reason: "TEST concurrent void",
+            timezone: TZ,
           }),
         )
         .then((r) => ({ ok: true as const, r }))
@@ -545,6 +551,7 @@ describe.skipIf(!hasDb)("Supplier dues (integration)", () => {
         purchaseId: purchase.id,
         voidedByUserId: userId,
         reason: "TEST void a cash purchase",
+        timezone: TZ,
       }),
     );
     expect(result.purchase.isVoided).toBe(true);

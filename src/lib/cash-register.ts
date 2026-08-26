@@ -381,6 +381,8 @@ export async function correctRegisterShift(
     newActualCashInPaisa: number;
     reason: string;
     correctedByUserId: string;
+    timezone: string;
+    role?: string;
   },
 ) {
   if (!Number.isInteger(params.newActualCashInPaisa) || params.newActualCashInPaisa < 0) {
@@ -407,6 +409,28 @@ export async function correctRegisterShift(
     // shift always has this set — but keep TypeScript honest.
     throw new CashRegisterError("This shift is missing its expected-cash snapshot.", 500);
   }
+
+  // QA hardening pass (Phase 43 / adversarial self-audit — daily-close lock
+  // coverage gap). This rewrites actualCashInPaisa/varianceInPaisa on an
+  // already-CLOSED shift — exactly the figures getRegisterSummaryForDay
+  // sums (bucketed by closedAt's business date) into a Daily Closing
+  // snapshot. Every other financial mutation route in this pass got the
+  // daily-close lock; this correction path was missed because it mutates a
+  // shift that's already closed rather than closing one itself. Keyed off
+  // the SHIFT's own closedAt business date (the day whose reconciliation
+  // this correction actually affects), not "now" — a correction made today
+  // to a shift that closed on an already-closed day must still raise the
+  // trust bar, even though today itself is open.
+  await assertBusinessDayWritable(
+    {
+      userId: params.correctedByUserId,
+      restaurantId: shift.restaurantId,
+      branchId: shift.branchId,
+      businessDate: restaurantDate(params.timezone, shift.closedAt ?? undefined),
+      role: params.role,
+    },
+    tx,
+  );
 
   const newVarianceInPaisa = params.newActualCashInPaisa - shift.expectedCashInPaisa;
 
