@@ -411,11 +411,42 @@ export async function mergeTables(
     throw new TableError("Choose two different tables to merge.");
   }
 
-  // Lock the source table too (not just the destination, which
-  // transferOrderToTable already locks per-order) so two concurrent merges
-  // FROM the same source table serialize instead of racing over which
-  // orders each one sees as "active".
-  await requireTableRowLock(tx, params.restaurantId, params.fromTableId);
+  // Lock BOTH tables — not just the source (which alone already serializes
+  // two concurrent merges FROM the same table over which orders each sees
+  // as "active") — and always in the same DETERMINISTIC order regardless
+  // of which one is "from" and which is "to".
+  //
+  // QA hardening pass (Phase 8 / master prompt section 11) — locking only
+  // fromTableId here, then relying on transferOrderToTable's own
+  // requireTableRowLock(toTableId) inside the loop below, meant the actual
+  // lock ACQUISITION order was always [fromTableId, toTableId] as the
+  // caller happened to name them. Two staff members concurrently merging
+  // the same pair of tables in opposite logical directions —
+  // mergeTables({fromTableId: X, toTableId: Y}) racing
+  // mergeTables({fromTableId: Y, toTableId: X}) — would then take the
+  // locks in opposite PHYSICAL order (X-then-Y vs Y-then-X): a textbook
+  // deadlock (Postgres error 40P01), with one of the two transactions
+  // aborted rather than simply waiting its turn. Sorting the two table ids
+  // before locking means every concurrent merge touching this same pair,
+  // regardless of logical direction, always acquires the locks in the
+  // same physical order — one txn always waits behind the other instead
+  // of both waiting on each other.
+  //
+  // This does mean toTableId is now validated to exist (and locked)
+  // slightly earlier than before — previously it wasn't touched until the
+  // first transferOrderToTable call inside the loop below, so an invalid
+  // toTableId combined with zero active orders on fromTableId used to
+  // surface as "source table has no active orders" instead of "table not
+  // found". Both are still TableError instances with sensible messages;
+  // failing on the more fundamental problem (destination table doesn't
+  // exist) first is, if anything, the more correct order — not a
+  // regression this fix should avoid.
+  const [firstTableId, secondTableId] =
+    params.fromTableId < params.toTableId
+      ? [params.fromTableId, params.toTableId]
+      : [params.toTableId, params.fromTableId];
+  await requireTableRowLock(tx, params.restaurantId, firstTableId);
+  await requireTableRowLock(tx, params.restaurantId, secondTableId);
 
   const activeOrders = await tx
     .select({ id: orders.id })

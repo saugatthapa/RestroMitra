@@ -11,7 +11,7 @@
  * Skipped (not failed) when DATABASE_URL isn't set.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
@@ -264,6 +264,66 @@ describe.skipIf(!hasDb)("Table Operations (integration)", () => {
     await expect(
       db.transaction((tx) => tables.mergeTables(tx, { restaurantId, fromTableId: table.id, toTableId: table.id })),
     ).rejects.toMatchObject({ status: 400 });
+  });
+
+  // QA hardening pass (Phase 8 / master prompt section 11) — deadlock
+  // regression test for the deterministic lock-ordering fix in
+  // mergeTables(). Before the fix, mergeTables locked only fromTableId up
+  // front (via requireTableRowLock) and locked toTableId later, inside the
+  // per-order loop in transferOrderToTable — always in caller-argument
+  // order. Two concurrent merges of the SAME table pair in OPPOSITE
+  // directions — merge(X -> Y) racing merge(Y -> X) — would then acquire
+  // their two row locks in reverse order of each other: the first
+  // transaction locks X and waits on Y, while the second locks Y and waits
+  // on X, a textbook Postgres 40P01 deadlock. The fix sorts the pair of
+  // table ids before locking, so both transactions always lock the same
+  // row first regardless of merge direction, which serializes them instead
+  // of deadlocking: whichever transaction acquires the locks first runs to
+  // completion, then the second proceeds against the post-first-merge
+  // state.
+  it("concurrent request: two opposite-direction mergeTables calls on the same table pair don't deadlock and serialize to a consistent final state", async () => {
+    const tableX = await makeTable(restaurantId, branchId);
+    const tableY = await makeTable(restaurantId, branchId);
+    const ordersOnX = await Promise.all([
+      makeOrder(restaurantId, branchId, { tableId: tableX.id, status: "pending" }),
+      makeOrder(restaurantId, branchId, { tableId: tableX.id, status: "preparing" }),
+    ]);
+    const ordersOnY = await Promise.all([
+      makeOrder(restaurantId, branchId, { tableId: tableY.id, status: "confirmed" }),
+      makeOrder(restaurantId, branchId, { tableId: tableY.id, status: "preparing" }),
+    ]);
+    const allOrderIds = [...ordersOnX, ...ordersOnY].map((o) => o.id);
+
+    const attempt = (fromTableId: string, toTableId: string) =>
+      db
+        .transaction((tx) => tables.mergeTables(tx, { restaurantId, fromTableId, toTableId }))
+        .then((result) => ({ ok: true as const, result }))
+        .catch((err) => ({ ok: false as const, err }));
+
+    const [a, b] = await Promise.all([
+      attempt(tableX.id, tableY.id),
+      attempt(tableY.id, tableX.id),
+    ]);
+
+    // Neither side should ever see a deadlock (or any other) error — both
+    // concurrent merges must complete successfully once locks serialize
+    // them instead of deadlocking.
+    expect(a.ok, a.ok ? "" : String((a as { ok: false; err: unknown }).err)).toBe(true);
+    expect(b.ok, b.ok ? "" : String((b as { ok: false; err: unknown }).err)).toBe(true);
+
+    // Whichever merge ran second sweeps up every order still active on its
+    // fromTableId — including whatever the first merge already relocated
+    // there — and moves all of it to its own toTableId. So the four
+    // orders must all land on exactly one of the two tables: never split
+    // across both, and never left on neither.
+    const finalRows = await db
+      .select({ id: schema.orders.id, tableId: schema.orders.tableId })
+      .from(schema.orders)
+      .where(inArray(schema.orders.id, allOrderIds));
+    expect(finalRows).toHaveLength(4);
+    const finalTableIds = new Set(finalRows.map((r) => r.tableId));
+    expect(finalTableIds.size).toBe(1);
+    expect([tableX.id, tableY.id]).toContain([...finalTableIds][0]);
   });
 
   // ---------------------------------------------------------------------
