@@ -407,6 +407,93 @@ describe.skipIf(!hasDb)("Stock transfer (integration)", () => {
     expect(after).toHaveLength(before.length);
   });
 
+  it("QA hardening (Phase 7) — receiveStockTransfer rejects a received quantity exceeding what was dispatched, and rejects negative received quantities, with no stock movement or status change on either rejection", async () => {
+    const itemId = await createItem();
+    await setSystemStock(itemId, branchAId, 5_000);
+    const created = await st.createStockTransfer({
+      restaurantId,
+      fromBranchId: branchAId,
+      toBranchId: branchBId,
+      requestedByUserId: userId,
+      items: [{ inventoryItemId: itemId, quantityMilliunits: 2_000 }],
+    });
+    await db.transaction((tx) => st.approveStockTransfer(tx, { restaurantId, stockTransferId: created.transfer.id, approvedByUserId: userId }));
+    await db.transaction((tx) => st.dispatchStockTransfer(tx, { restaurantId, stockTransferId: created.transfer.id, dispatchedByUserId: userId }));
+
+    // Over-dispatched: dispatched 2_000, trying to receive 2_001.
+    await expect(
+      db.transaction((tx) =>
+        st.receiveStockTransfer(tx, {
+          restaurantId,
+          stockTransferId: created.transfer.id,
+          receivedByUserId: userId,
+          items: [{ stockTransferItemId: created.items[0].id, receivedQuantityMilliunits: 2_001 }],
+        }),
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+
+    // Negative received quantity — pre-existing check, still holds.
+    await expect(
+      db.transaction((tx) =>
+        st.receiveStockTransfer(tx, {
+          restaurantId,
+          stockTransferId: created.transfer.id,
+          receivedByUserId: userId,
+          items: [{ stockTransferItemId: created.items[0].id, receivedQuantityMilliunits: -1 }],
+        }),
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+
+    // Neither rejected attempt touched anything — the transfer is still
+    // "dispatched" (not "received"), the line's receivedQuantityMilliunits
+    // is still unset, and no "transfer_in" movement (which would credit
+    // stock that was never actually sent) was ever written.
+    const [transfer] = await db.select().from(schema.stockTransfers).where(eq(schema.stockTransfers.id, created.transfer.id));
+    expect(transfer.status).toBe("dispatched");
+    const [line] = await db.select().from(schema.stockTransferItems).where(eq(schema.stockTransferItems.id, created.items[0].id));
+    expect(line.receivedQuantityMilliunits).toBeNull();
+    const movements = await db.select().from(schema.stockMovements).where(eq(schema.stockMovements.referenceId, created.transfer.id));
+    expect(movements.filter((m) => m.type === "transfer_in")).toHaveLength(0);
+
+    // Receiving EXACTLY what was dispatched (the boundary) still succeeds.
+    const received = await db.transaction((tx) =>
+      st.receiveStockTransfer(tx, {
+        restaurantId,
+        stockTransferId: created.transfer.id,
+        receivedByUserId: userId,
+        items: [{ stockTransferItemId: created.items[0].id, receivedQuantityMilliunits: 2_000 }],
+      }),
+    );
+    expect(received.transfer.status).toBe("received");
+  });
+
+  it("QA hardening (Phase 7) — two concurrent receiveStockTransfer calls on the same transfer: exactly one succeeds, only one set of transfer_in movements is ever written", async () => {
+    const itemId = await createItem();
+    await setSystemStock(itemId, branchAId, 3_000);
+    const created = await st.createStockTransfer({
+      restaurantId,
+      fromBranchId: branchAId,
+      toBranchId: branchBId,
+      requestedByUserId: userId,
+      items: [{ inventoryItemId: itemId, quantityMilliunits: 1_000 }],
+    });
+    await db.transaction((tx) => st.approveStockTransfer(tx, { restaurantId, stockTransferId: created.transfer.id, approvedByUserId: userId }));
+    await db.transaction((tx) => st.dispatchStockTransfer(tx, { restaurantId, stockTransferId: created.transfer.id, dispatchedByUserId: userId }));
+
+    const attempt = () =>
+      db
+        .transaction((tx) => st.receiveStockTransfer(tx, { restaurantId, stockTransferId: created.transfer.id, receivedByUserId: userId }))
+        .then((r) => ({ ok: true as const, r }))
+        .catch((err) => ({ ok: false as const, err }));
+
+    const outcomes = await Promise.all([attempt(), attempt()]);
+    expect(outcomes.filter((o) => o.ok)).toHaveLength(1);
+    expect(outcomes.filter((o) => !o.ok)).toHaveLength(1);
+
+    const movements = await db.select().from(schema.stockMovements).where(eq(schema.stockMovements.referenceId, created.transfer.id));
+    expect(movements.filter((m) => m.type === "transfer_in")).toHaveLength(1);
+  });
+
   it("edge case: dispatch/receive still succeed even when the source branch's stock goes negative (no blocking on insufficient stock, same convention as the rest of the app)", async () => {
     const itemId = await createItem();
     await setSystemStock(itemId, branchAId, 100); // only 0.1kg on hand

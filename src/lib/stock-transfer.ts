@@ -200,9 +200,28 @@ export async function receiveStockTransfer(
 
   const lines = await tx.select().from(stockTransferItems).where(eq(stockTransferItems.stockTransferId, transfer.id));
   const overrides = new Map((params.items ?? []).map((o) => [o.stockTransferItemId, o]));
+  const linesById = new Map(lines.map((l) => [l.id, l]));
   for (const override of overrides.values()) {
     if (override.receivedQuantityMilliunits < 0) {
       throw new StockTransferError("Received quantity can't be negative.");
+    }
+    // QA hardening pass (Phase 7 / master prompt section 10) — nothing
+    // previously stopped a received quantity from exceeding what was
+    // actually dispatched. Since dispatch already wrote the negative
+    // "transfer_out" movement at the source branch for exactly
+    // line.quantityMilliunits (see dispatchStockTransfer above), a
+    // received amount greater than that would credit the destination
+    // branch with stock that was never actually sent — manufacturing
+    // inventory out of nowhere, not merely mis-recording a real transfer.
+    // A stockTransferItemId that doesn't match any of this transfer's own
+    // lines is a separate, pre-existing validation concern (falls through
+    // to the "not found" branch inside the loop below), so this only
+    // checks overrides that DO match a real line here.
+    const line = linesById.get(override.stockTransferItemId);
+    if (line && override.receivedQuantityMilliunits > line.quantityMilliunits) {
+      throw new StockTransferError(
+        `Received quantity (${override.receivedQuantityMilliunits / 1000}) can't exceed what was dispatched (${line.quantityMilliunits / 1000}).`,
+      );
     }
   }
 
