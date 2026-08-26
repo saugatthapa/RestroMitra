@@ -8,6 +8,7 @@ import { recordStockAdjustmentSchema } from "@/lib/validation/inventory";
 import { recordStockMovement } from "@/lib/inventory";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { requireBranchAccess } from "@/lib/rbac/guard";
 
 /**
  * GET returns the movement ledger for one item (newest first) — the
@@ -57,7 +58,7 @@ export async function POST(
   }
   try {
     const { slug, itemId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_INVENTORY,
     );
@@ -75,6 +76,14 @@ export async function POST(
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
 
+    // QA hardening pass — a branch-scoped inventory manager could
+    // previously misattribute a stock adjustment/waste entry to ANY
+    // branch of the restaurant (only existence was checked, not that it
+    // was theirs).
+    await requireBranchAccess(session.user.id, restaurantId, data.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
     const ownedBranch = await db
       .select({ id: branches.id })
       .from(branches)

@@ -9,6 +9,7 @@ import { applyPurchaseCosting } from "@/lib/inventory";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { recordPurchaseLedgerEntry } from "@/lib/ledger";
+import { requireBranchAccess } from "@/lib/rbac/guard";
 
 export async function GET(
   _request: Request,
@@ -16,10 +17,19 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_INVENTORY);
+    const { restaurantId, branchId: grantedBranchId } = await resolveRestaurantContext(
+      slug,
+      PERMISSIONS.MANAGE_INVENTORY,
+    );
 
+    // QA hardening pass — purchases.branchId is NOT NULL (every purchase
+    // belongs to exactly one branch), so a branch-scoped caller is simply
+    // restricted to their own branch's purchases here.
     const rows = await db.query.purchases.findMany({
-      where: eq(purchases.restaurantId, restaurantId),
+      where:
+        grantedBranchId === null
+          ? eq(purchases.restaurantId, restaurantId)
+          : and(eq(purchases.restaurantId, restaurantId), eq(purchases.branchId, grantedBranchId)),
       orderBy: [desc(purchases.createdAt)],
       with: {
         supplier: true,
@@ -85,7 +95,7 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, timezone } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_INVENTORY,
     );
@@ -94,6 +104,14 @@ export async function POST(
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
 
+    // QA hardening pass — this used to only check the branch belonged to
+    // the restaurant, not that it belonged to the CALLER. purchases/void
+    // already enforces requireBranchAccess on the existing purchase; this
+    // create route needs the equivalent check on the branch being written.
+    await requireBranchAccess(session.user.id, restaurantId, data.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
     const ownedBranch = await db
       .select({ id: branches.id })
       .from(branches)

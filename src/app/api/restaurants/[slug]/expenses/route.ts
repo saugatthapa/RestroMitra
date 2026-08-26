@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/db";
 import { expenses, expenseCategories, branches } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
@@ -44,7 +44,7 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, role } = await resolveRestaurantContext(slug);
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(slug);
     await requireAnyPermission(session.user.id, restaurantId, ANY_EXPENSE_PERMISSION, role);
 
     const canSeeAll = await hasPermission(session.user.id, restaurantId, PERMISSIONS.MANAGE_EXPENSES, role) ||
@@ -80,6 +80,12 @@ export async function GET(
           from ? gte(expenses.expenseDate, from) : undefined,
           to ? lte(expenses.expenseDate, to) : undefined,
           canSeeAll ? undefined : eq(expenses.recordedByUserId, session.user.id),
+          // QA hardening pass — a branch-scoped caller only sees
+          // restaurant-wide (branchId IS NULL) expenses plus their own
+          // branch's, not every branch's spending.
+          grantedBranchId === null
+            ? undefined
+            : or(isNull(expenses.branchId), eq(expenses.branchId, grantedBranchId)),
         ),
       )
       .orderBy(desc(expenses.expenseDate), desc(expenses.createdAt))
@@ -106,7 +112,7 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, role, timezone } = await resolveRestaurantContext(slug);
+    const { session, restaurantId, role, branchId: grantedBranchId, timezone } = await resolveRestaurantContext(slug);
     await requireAnyPermission(session.user.id, restaurantId, ANY_EXPENSE_PERMISSION, role);
 
     const parsed = await parseJsonBody(request, createExpenseSchema);
@@ -120,9 +126,29 @@ export async function POST(
       return NextResponse.json({ error: "Choose a valid, active category." }, { status: 400 });
     }
 
-    if (data.branchId) {
+    // QA hardening pass — a branch-scoped submitter used to be able to tag
+    // an expense to ANY branch of the restaurant (the client-supplied
+    // branchId was only checked for existing, never for being THEIRS). A
+    // branch-scoped caller may only tag their own branch — an explicit
+    // mismatch is rejected; omitting it defaults to their own branch
+    // rather than leaving it ambiguously restaurant-wide. An unrestricted
+    // caller (owner/manager/platform_admin) keeps the original behavior:
+    // any branch, or none (restaurant-wide).
+    let branchId: string | null;
+    if (grantedBranchId !== null) {
+      if (data.branchId && data.branchId !== grantedBranchId) {
+        return NextResponse.json(
+          { error: "You can only record expenses for your own branch." },
+          { status: 403 },
+        );
+      }
+      branchId = grantedBranchId;
+    } else {
+      branchId = data.branchId ?? null;
+    }
+    if (branchId) {
       const branch = await db.query.branches.findFirst({
-        where: and(eq(branches.id, data.branchId), eq(branches.restaurantId, restaurantId)),
+        where: and(eq(branches.id, branchId), eq(branches.restaurantId, restaurantId)),
       });
       if (!branch) {
         return NextResponse.json({ error: "That branch doesn't belong to this restaurant." }, { status: 400 });
@@ -150,7 +176,7 @@ export async function POST(
         .insert(expenses)
         .values({
           restaurantId,
-          branchId: data.branchId ?? null,
+          branchId,
           categoryId: data.categoryId,
           amountInPaisa: data.amount,
           description: data.description,
