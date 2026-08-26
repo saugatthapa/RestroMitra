@@ -750,6 +750,18 @@ function CheckoutView({
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // QA hardening pass (QR-order idempotency audit) — generated once per
+  // mount of this checkout view (not inside handleSubmit), so it stays the
+  // SAME value across a retry of the same logical submission — a double
+  // tap, a network-timeout retry, or two browser tabs racing — matching
+  // the identical reasoning POSOrderBuilder.tsx already uses for its own
+  // clientRequestId. The backend (api/order/[token]/route.ts) already has
+  // full DB-backed idempotency (a partial unique index on
+  // (restaurantId, clientRequestId) plus catch-and-replay on conflict,
+  // tested in route.test.ts) — this view was simply never sending the key
+  // that turns that protection on, so real guest checkouts got zero
+  // dedup and N simultaneous taps produced N separate orders/KOTs/pushes.
+  const [clientRequestId] = useState(() => crypto.randomUUID());
 
   async function handleSubmit() {
     setSubmitting(true);
@@ -768,6 +780,7 @@ function CheckoutView({
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
         notes: notes.trim(),
+        clientRequestId,
       });
       onPlaced(res.order);
     } catch (err) {
