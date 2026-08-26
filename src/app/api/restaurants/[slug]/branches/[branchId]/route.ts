@@ -78,7 +78,11 @@ export async function PATCH(
         isActive: data.isActive ?? undefined,
         updatedAt: new Date(),
       })
-      .where(eq(branches.id, branchId))
+      // QA hardening pass (tenant-isolation audit) — every other query in
+      // this route (and this codebase's convention generally) repeats the
+      // restaurantId filter on every write, even when an earlier lookup
+      // already proved ownership; this UPDATE was the one exception.
+      .where(and(eq(branches.id, branchId), eq(branches.restaurantId, restaurantId)))
       .returning();
 
     await recordAuditLog({

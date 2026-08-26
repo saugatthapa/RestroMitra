@@ -2451,10 +2451,12 @@ export const loyaltyTransactions = pgTable(
 // per user per restaurant, deliberately NOT a single mutable "currently
 // clocked in?" flag on the user — same "ledger over mutable single field"
 // reasoning as payments/stock_movements. A record with a null clockOutAt
-// is an open shift; at most one open shift per user per restaurant is
-// enforced in src/lib/attendance.ts, not at the DB constraint level (an
-// exclusion constraint would be more airtight but is deferred — see
-// PHASE_8_NOTES.md).
+// is an open shift; at most one open shift per user per restaurant IS
+// enforced at the DB constraint level, via the partial unique index
+// attendance_records_one_open_shift_per_user_unique below (this comment
+// previously said otherwise — that was stale as of the QA hardening
+// pass's concurrency audit, which confirmed the constraint already exists
+// and closes this race regardless of the app layer).
 // ---------------------------------------------------------------------------
 
 export const attendanceRecords = pgTable(
