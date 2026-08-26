@@ -252,6 +252,18 @@ export function createEventStream(params: {
   wakeKey: string;
 }): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
+  // QA hardening (P2 backlog): shared between `start` and `cancel` below —
+  // `cancel()` used to be a documented no-op, so a client disconnect (tab
+  // closed, navigated away) left the polling loop running for up to
+  // DEFAULT_MAX_DURATION_MS (20s) longer than necessary: still hitting the
+  // DB every ~1s and calling `controller.enqueue`/`controller.close()` on a
+  // controller nobody would ever read from again. Not a leak (the loop
+  // always terminated on its own via the existing time cap), but genuinely
+  // wasted CPU/DB work multiplied by every open connection's disconnect.
+  // Setting this flag in `cancel()` and checking it at each of the loop's
+  // natural yield points lets an already-cancelled stream exit on its very
+  // next check instead of riding out the rest of the cap.
+  let cancelled = false;
 
   return new ReadableStream({
     async start(controller) {
@@ -261,11 +273,16 @@ export function createEventStream(params: {
 
       controller.enqueue(encoder.encode(`retry: 2000\n\n`));
 
-      while (true) {
+      while (!cancelled) {
         if (Date.now() - startedAt > DEFAULT_MAX_DURATION_MS) break;
 
         try {
           const events = await params.fetchEvents(cursor);
+          // The DB fetch above is the loop's other await point besides
+          // waitForWake — re-check here too, since a cancel can land while
+          // it's in flight, and enqueueing onto an already-cancelled
+          // controller would otherwise throw.
+          if (cancelled) break;
           for (const event of events) {
             cursor = event.id;
             controller.enqueue(
@@ -282,6 +299,8 @@ export function createEventStream(params: {
           console.error("SSE poll failed:", err);
         }
 
+        if (cancelled) break;
+
         if (Date.now() - lastSentAt > HEARTBEAT_MS) {
           controller.enqueue(encoder.encode(`: heartbeat\n\n`));
           lastSentAt = Date.now();
@@ -290,13 +309,17 @@ export function createEventStream(params: {
         await waitForWake(params.wakeKey, DEFAULT_POLL_INTERVAL_MS);
       }
 
-      controller.close();
+      // A real cancellation already tore down the controller — calling
+      // close() on it here would throw (or at best no-op noisily,
+      // depending on runtime). Only close it ourselves on the normal
+      // "hit the time cap" exit path.
+      if (!cancelled) {
+        controller.close();
+      }
     },
     cancel() {
-      // The client navigated away or the browser dropped the connection —
-      // nothing to clean up beyond letting the async generator above exit
-      // on its own next loop check, since there's no external resource
-      // (no held DB connection, no timer outside this closure) to release.
+      // The client navigated away or the browser dropped the connection.
+      cancelled = true;
     },
   });
 }
