@@ -11,6 +11,7 @@ import { recordPayrollLedgerEntry } from "@/lib/ledger";
 import { restaurantDate } from "@/lib/restaurant-date";
 import { getPayrollComputation } from "@/lib/payroll";
 import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
+import { isUniqueViolation } from "@/lib/db-error";
 
 const PAYROLL_LIST_LIMIT = 500;
 
@@ -114,41 +115,85 @@ export async function POST(
         ? await getPayrollComputation(restaurantId, data.userRoleId, data.periodStart, data.periodEnd, timezone)
         : null;
 
+    // QA hardening pass — idempotent create, same shape as the expenses
+    // route's own clientRequestId handling (see that route's doc
+    // comment): a pre-check up front, plus a catch-and-recover on the
+    // partial unique index's 23505 for two concurrent identical retries.
+    if (data.clientRequestId) {
+      const existingRows = await db
+        .select()
+        .from(payrollPayments)
+        .where(
+          and(
+            eq(payrollPayments.restaurantId, restaurantId),
+            eq(payrollPayments.clientRequestId, data.clientRequestId),
+          ),
+        )
+        .limit(1);
+      if (existingRows[0]) {
+        return NextResponse.json({ payment: existingRows[0], idempotentReplay: true }, { status: 200 });
+      }
+    }
+
     // Committed together, same "one write, two rows, one transaction"
     // shape as expense payment — a payroll payment should never exist
     // without its matching (name-redacted) Account Books debit.
-    const payment = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .insert(payrollPayments)
-        .values({
+    let payment;
+    try {
+      payment = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(payrollPayments)
+          .values({
+            restaurantId,
+            userRoleId: data.userRoleId,
+            staffNameSnapshot: staff.fullName,
+            amountInPaisa: data.amount,
+            payPeriodLabel: data.payPeriodLabel || null,
+            periodStart: data.periodStart ?? null,
+            periodEnd: data.periodEnd ?? null,
+            paymentMethod: data.paymentMethod,
+            note: data.note || null,
+            paidByUserId: session.user.id,
+            computedAmountInPaisa: computation?.owedAmountInPaisa ?? null,
+            attendanceMinutesSnapshot: computation?.attendanceMinutes ?? null,
+            attendanceDaysSnapshot: computation?.attendanceDays ?? null,
+            clientRequestId: data.clientRequestId || null,
+          })
+          .returning();
+
+        await recordPayrollLedgerEntry(tx, {
           restaurantId,
-          userRoleId: data.userRoleId,
-          staffNameSnapshot: staff.fullName,
-          amountInPaisa: data.amount,
-          payPeriodLabel: data.payPeriodLabel || null,
-          periodStart: data.periodStart ?? null,
-          periodEnd: data.periodEnd ?? null,
-          paymentMethod: data.paymentMethod,
-          note: data.note || null,
-          paidByUserId: session.user.id,
-          computedAmountInPaisa: computation?.owedAmountInPaisa ?? null,
-          attendanceMinutesSnapshot: computation?.attendanceMinutes ?? null,
-          attendanceDaysSnapshot: computation?.attendanceDays ?? null,
-        })
-        .returning();
+          payrollPaymentId: row.id,
+          amountInPaisa: row.amountInPaisa,
+          payPeriodLabel: row.payPeriodLabel,
+          paymentDate,
+          timezone,
+          recordedByUserId: session.user.id,
+        });
 
-      await recordPayrollLedgerEntry(tx, {
-        restaurantId,
-        payrollPaymentId: row.id,
-        amountInPaisa: row.amountInPaisa,
-        payPeriodLabel: row.payPeriodLabel,
-        paymentDate,
-        timezone,
-        recordedByUserId: session.user.id,
+        return row;
       });
-
-      return row;
-    });
+    } catch (err) {
+      // A concurrent duplicate submission of the SAME retry raced us past
+      // the pre-check above and lost the unique-index collision — recover
+      // by returning what the winner actually committed.
+      if (data.clientRequestId && isUniqueViolation(err)) {
+        const raceRows = await db
+          .select()
+          .from(payrollPayments)
+          .where(
+            and(
+              eq(payrollPayments.restaurantId, restaurantId),
+              eq(payrollPayments.clientRequestId, data.clientRequestId),
+            ),
+          )
+          .limit(1);
+        if (raceRows[0]) {
+          return NextResponse.json({ payment: raceRows[0], idempotentReplay: true }, { status: 200 });
+        }
+      }
+      throw err;
+    }
 
     await recordAuditLog({
       restaurantId,

@@ -13,6 +13,7 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { recordExpenseLedgerEntry } from "@/lib/ledger";
 import { HttpError } from "@/lib/http-error";
 import { restaurantDate } from "@/lib/restaurant-date";
+import { isUniqueViolation } from "@/lib/db-error";
 
 const EXPENSE_LIST_LIMIT = 500;
 
@@ -168,45 +169,93 @@ export async function POST(
     const expenseDate = data.expenseDate ?? restaurantDate(timezone);
     const now = new Date();
 
+    // QA hardening pass — idempotent create, same purpose as the orders
+    // route's own clientRequestId handling (see that route's doc comment).
+    // Unlike orders/payments, there's no pre-existing row here to take a
+    // FOR UPDATE lock on, so this checks up front (cheap, handles the
+    // common sequential retry) AND recovers after a 23505 from the
+    // partial unique index below (handles two concurrent identical
+    // retries racing each other) — the same two-layer shape.
+    if (data.clientRequestId) {
+      const existingRows = await db
+        .select()
+        .from(expenses)
+        .where(
+          and(eq(expenses.restaurantId, restaurantId), eq(expenses.clientRequestId, data.clientRequestId)),
+        )
+        .limit(1);
+      if (existingRows[0]) {
+        return NextResponse.json(
+          { expense: { ...existingRows[0], categoryName: category.name }, idempotentReplay: true },
+          { status: 200 },
+        );
+      }
+    }
+
     // Committed together — an expense should never exist without its
     // matching Account Books entry once paid, or vice versa (same "one
     // write, two rows, one transaction" shape as order completion).
-    const expense = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .insert(expenses)
-        .values({
-          restaurantId,
-          branchId,
-          categoryId: data.categoryId,
-          amountInPaisa: data.amount,
-          description: data.description,
-          expenseDate,
-          note: data.note || null,
-          status,
-          paymentMethod: status === "paid" ? data.paymentMethod : null,
-          approvedByUserId: status === "approved" || status === "paid" ? session.user.id : null,
-          approvedAt: status === "approved" || status === "paid" ? now : null,
-          paidByUserId: status === "paid" ? session.user.id : null,
-          paidAt: status === "paid" ? now : null,
-          recordedByUserId: session.user.id,
-        })
-        .returning();
+    let expense;
+    try {
+      expense = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(expenses)
+          .values({
+            restaurantId,
+            branchId,
+            categoryId: data.categoryId,
+            amountInPaisa: data.amount,
+            description: data.description,
+            expenseDate,
+            note: data.note || null,
+            status,
+            paymentMethod: status === "paid" ? data.paymentMethod : null,
+            approvedByUserId: status === "approved" || status === "paid" ? session.user.id : null,
+            approvedAt: status === "approved" || status === "paid" ? now : null,
+            paidByUserId: status === "paid" ? session.user.id : null,
+            paidAt: status === "paid" ? now : null,
+            recordedByUserId: session.user.id,
+            clientRequestId: data.clientRequestId || null,
+          })
+          .returning();
 
-      if (status === "paid") {
-        await recordExpenseLedgerEntry(tx, {
-          restaurantId,
-          expenseId: row.id,
-          amountInPaisa: row.amountInPaisa,
-          categoryLabel: category.name,
-          description: row.description,
-          expenseDate,
-          timezone,
-          recordedByUserId: session.user.id,
-        });
+        if (status === "paid") {
+          await recordExpenseLedgerEntry(tx, {
+            restaurantId,
+            expenseId: row.id,
+            amountInPaisa: row.amountInPaisa,
+            categoryLabel: category.name,
+            description: row.description,
+            expenseDate,
+            timezone,
+            recordedByUserId: session.user.id,
+          });
+        }
+
+        return row;
+      });
+    } catch (err) {
+      // A concurrent duplicate submission of the SAME retry raced us past
+      // the pre-check above and lost the unique-index collision — recover
+      // by returning what the winner actually committed, same as the
+      // orders route's own retry-race handling.
+      if (data.clientRequestId && isUniqueViolation(err)) {
+        const raceRows = await db
+          .select()
+          .from(expenses)
+          .where(
+            and(eq(expenses.restaurantId, restaurantId), eq(expenses.clientRequestId, data.clientRequestId)),
+          )
+          .limit(1);
+        if (raceRows[0]) {
+          return NextResponse.json(
+            { expense: { ...raceRows[0], categoryName: category.name }, idempotentReplay: true },
+            { status: 200 },
+          );
+        }
       }
-
-      return row;
-    });
+      throw err;
+    }
 
     await recordAuditLog({
       restaurantId,

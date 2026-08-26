@@ -30,6 +30,12 @@ export const createExpenseSchema = z.object({
   note: z.string().trim().max(1000).optional().or(z.literal("")),
   branchId: z.string().uuid().nullable().optional(),
   paymentMethod: z.enum(EXPENSE_PAYMENT_METHODS).optional(),
+  // QA hardening pass — a client-generated retry key identifying this
+  // exact submission attempt, not the expense itself. Mirrors
+  // createStaffOrderSchema's clientRequestId (see its comment): a retry of
+  // the same submission (dropped response, double-click) must return the
+  // original expense rather than double-create/double-debit it.
+  clientRequestId: z.string().trim().min(1).max(100).optional(),
 });
 
 export const updateExpenseSchema = z

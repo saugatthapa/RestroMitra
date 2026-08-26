@@ -29,4 +29,9 @@ export const createPayrollPaymentSchema = z.object({
   periodStart: isoDate.optional(),
   periodEnd: isoDate.optional(),
   note: z.string().trim().max(1000).optional().or(z.literal("")),
+  // QA hardening pass — same purpose and pattern as
+  // createExpenseSchema's clientRequestId (see its comment): a retry of
+  // the same payout submission must return the original payment rather
+  // than pay the staff member twice.
+  clientRequestId: z.string().trim().min(1).max(100).optional(),
 });

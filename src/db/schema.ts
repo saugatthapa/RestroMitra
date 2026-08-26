@@ -915,6 +915,12 @@ export const orders = pgTable(
     index("orders_branch_id_idx").on(table.branchId),
     index("orders_table_id_idx").on(table.tableId),
     index("orders_status_idx").on(table.status),
+    // QA hardening pass (dependency/CI/migration/index audit) — the
+    // single restaurantId index above forces a filter/sort step for every
+    // "orders for this restaurant, most recent first" query (order lists,
+    // reports, reconciliation), which is most of this table's read
+    // traffic. This composite covers that access pattern directly.
+    index("orders_restaurant_id_placed_at_idx").on(table.restaurantId, table.placedAt),
     uniqueIndex("orders_restaurant_order_number_unique").on(
       table.restaurantId,
       table.orderNumber,
@@ -1212,6 +1218,12 @@ export const payments = pgTable(
     index("payments_restaurant_id_idx").on(table.restaurantId),
     index("payments_order_id_idx").on(table.orderId),
     index("payments_split_id_idx").on(table.splitId),
+    // QA hardening pass (dependency/CI/migration/index audit) — same
+    // reasoning as orders_restaurant_id_placed_at_idx: financial
+    // reconciliation and reporting both filter payments by restaurant and
+    // order/sort by time, which the single restaurantId index above can't
+    // cover without an extra sort step.
+    index("payments_restaurant_id_created_at_idx").on(table.restaurantId, table.createdAt),
     // Partial, scoped to (order, clientRequestId) — most payments never set
     // clientRequestId, and a UUID collision across two different orders
     // isn't a real concern, so this only constrains retries of the same
@@ -2614,6 +2626,17 @@ export const expenses = pgTable(
     recordedByUserId: uuid("recorded_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    // QA hardening pass (financial-atomicity audit) — a client-generated
+    // retry key, same purpose and pattern as orders.clientRequestId /
+    // payments.clientRequestId (see those columns' own comments). Unlike
+    // orders/payments, expense creation has no pre-existing row to take a
+    // FOR UPDATE lock on, so the route can't rely on lock-serialization
+    // alone — the partial unique index below is the actual guard; the
+    // route does a pre-check (cheap, handles the common sequential retry)
+    // plus a catch-and-recover on 23505 (handles the concurrent-retry
+    // race), same shape as the order-creation route's own retry loop.
+    // Nullable: most expense submissions have no retry concern.
+    clientRequestId: varchar("client_request_id", { length: 100 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -2628,6 +2651,12 @@ export const expenses = pgTable(
     index("expenses_category_id_idx").on(table.categoryId),
     index("expenses_status_idx").on(table.status),
     check("expenses_amount_positive", sql`${table.amountInPaisa} > 0`),
+    // Partial: most expenses never set clientRequestId, so this only
+    // constrains the rows that actually opt into idempotent retry (see the
+    // column comment above).
+    uniqueIndex("expenses_restaurant_client_request_id_unique")
+      .on(table.restaurantId, table.clientRequestId)
+      .where(sql`${table.clientRequestId} IS NOT NULL`),
   ],
 );
 
@@ -3038,6 +3067,12 @@ export const payrollPayments = pgTable(
     paidAt: timestamp("paid_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // QA hardening pass (financial-atomicity audit) — same purpose,
+    // pattern, and reasoning as expenses.clientRequestId above (no
+    // pre-existing row to lock, so the route pre-checks then
+    // catches-and-recovers on 23505 against this column's partial unique
+    // index). Nullable: most payroll payments have no retry concern.
+    clientRequestId: varchar("client_request_id", { length: 100 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -3050,6 +3085,9 @@ export const payrollPayments = pgTable(
     index("payroll_payments_user_role_id_idx").on(table.userRoleId),
     index("payroll_payments_paid_at_idx").on(table.paidAt),
     check("payroll_payments_amount_positive", sql`${table.amountInPaisa} > 0`),
+    uniqueIndex("payroll_payments_restaurant_client_request_id_unique")
+      .on(table.restaurantId, table.clientRequestId)
+      .where(sql`${table.clientRequestId} IS NOT NULL`),
   ],
 );
 
@@ -3201,6 +3239,11 @@ export const auditLogs = pgTable(
     index("audit_logs_restaurant_id_idx").on(table.restaurantId),
     index("audit_logs_user_id_idx").on(table.userId),
     index("audit_logs_created_at_idx").on(table.createdAt),
+    // QA hardening pass (dependency/CI/migration/index audit, P2) — the
+    // audit log page's default view is "this restaurant's activity, most
+    // recent first," which the separate restaurantId/createdAt indexes
+    // above can each only partially serve.
+    index("audit_logs_restaurant_id_created_at_idx").on(table.restaurantId, table.createdAt),
   ],
 );
 
