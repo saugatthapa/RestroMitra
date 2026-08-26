@@ -12,6 +12,7 @@ import { recordAuditLog } from "@/lib/audit";
 import { buildEsewaFormFields } from "@/lib/payment-gateways/esewa";
 import { initiateKhaltiPayment, KhaltiApiError } from "@/lib/payment-gateways/khalti";
 import { requireBranchAccess } from "@/lib/rbac/guard";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Starts a redirect-based gateway payment (eSewa form-POST or Khalti REST
@@ -44,6 +45,29 @@ export async function POST(
       slug,
       PERMISSIONS.EDIT_ORDER,
     );
+
+    // QA hardening pass (Phase 20 / security audit — rate-limiting gap).
+    // This route calls out to an external gateway (Khalti's REST API, or
+    // hands back an eSewa form-POST) and writes a paymentGatewayTransactions
+    // row on every call, regardless of outcome. Being authenticated +
+    // branch-checked already rules out a random unauthenticated attacker,
+    // but nothing stopped a compromised staff session, a buggy retry loop
+    // on the client, or a fat-fingered rapid double-tap from hammering the
+    // gateway (real API cost, and risk of the gateway's own abuse detection
+    // flagging this restaurant's account) or flooding the transactions
+    // table. Same per-user rate-limit pattern as the AI assistant route
+    // (assistant/ask/route.ts) — generous enough (one call every ~20s
+    // sustained) not to get in the way of a busy till's legitimate use.
+    const limit = rateLimit(`gateway-initiate:user:${session.user.id}`, {
+      limit: 30,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Too many payment attempts in a short time. Please wait a few minutes and try again." },
+        { status: 429 },
+      );
+    }
 
     const order = await db.query.orders.findFirst({
       where: and(eq(orders.id, orderId), eq(orders.restaurantId, restaurantId)),

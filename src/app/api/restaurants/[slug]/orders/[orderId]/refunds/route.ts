@@ -15,6 +15,7 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { requireBranchAccess } from "@/lib/rbac/guard";
 import { restaurantDate } from "@/lib/restaurant-date";
 import { assertBusinessDayWritable } from "@/lib/daily-closing";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Records a refund against an order, stored as a negative-amount row in the
@@ -54,6 +55,27 @@ export async function POST(
     const { slug, orderId } = await ctx.params;
     const { session, restaurantId, role, timezone, branchId: grantedBranchId } =
       await resolveRestaurantContext(slug, PERMISSIONS.REFUND_ORDER);
+
+    // QA hardening pass (Phase 20 / security audit — rate-limiting gap).
+    // Refunds move real money back out and had no throttle at all — a
+    // compromised staff session, a buggy client retry loop, or a
+    // fat-fingered rapid double-tap could otherwise fire an unbounded
+    // number of refund attempts in quick succession. The FOR UPDATE lock
+    // + clientRequestId idempotency (see this route's own doc comment)
+    // already prevent a genuine double-refund of the SAME request, but
+    // that's a correctness guard, not a throttle on a caller issuing many
+    // DIFFERENT refund requests back to back. Same per-user rate-limit
+    // pattern as the AI assistant route and the gateway-initiate route.
+    const limit = rateLimit(`refund:user:${session.user.id}`, {
+      limit: 20,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Too many refund attempts in a short time. Please wait a few minutes and try again." },
+        { status: 429 },
+      );
+    }
 
     const parsed = await parseJsonBody(request, recordRefundSchema);
     if (!parsed.ok) return parsed.response;
