@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { restaurantTables, restaurants, orders, orderItems, orderItemAddons } from "@/db/schema";
 import { parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { submitPublicOrderSchema } from "@/lib/validation/orders";
-import { computeOrderPricing, generateOrderNumber } from "@/lib/orders";
+import { computeOrderPricing, generateOrderNumber, assertIdempotentOrderMatchesContext } from "@/lib/orders";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { rateLimit } from "@/lib/rate-limit";
@@ -90,6 +90,25 @@ export async function POST(
     // never had until now despite being the higher-risk one: no staff
     // oversight to notice a duplicate, on the flakiest network conditions
     // (a guest's own phone).
+    //
+    // QA hardening pass (Phase 9 / master prompt section 12) — the lookup
+    // below is scoped only to (restaurantId, clientRequestId), the same
+    // scope as the backing DB unique index (see schema.ts's
+    // orders_restaurant_client_request_id_unique — deliberately left broad
+    // rather than migrated to a tighter index, since narrowing it further
+    // is a schema change and the app-level check below already closes the
+    // authorization gap). clientRequestId is a client-supplied, unvalidated
+    // string (see submitPublicOrderSchema — any 1-100 char value), and this
+    // endpoint is completely UNAUTHENTICATED: the qrToken is the only proof
+    // of "which table." Before this fix, a request carrying a
+    // clientRequestId that happened to match a DIFFERENT table's order
+    // (guessed, leaked via logs/analytics, or copy-pasted from a shared
+    // device) would get that other table's order handed back — mislabeled
+    // with THIS table's tableName, since the response spliced
+    // resolved.tableName onto the other order's data. requireTableIdMatch
+    // below closes that: a clientRequestId collision against a different
+    // table is rejected outright rather than treated as "your own order,
+    // replayed."
     if (body.clientRequestId) {
       const existingRows = await db
         .select()
@@ -102,6 +121,7 @@ export async function POST(
         )
         .limit(1);
       if (existingRows[0]) {
+        assertIdempotentOrderMatchesContext(existingRows[0], { tableId: resolved.tableId });
         return NextResponse.json(
           {
             order: {
@@ -236,6 +256,11 @@ export async function POST(
             )
             .limit(1);
           if (raceRows[0]) {
+            // Same cross-table authorization check as the up-front lookup
+            // above — a unique-violation race can also surface a different
+            // table's order here, and it must be rejected the same way
+            // rather than handed back as "your own order, replayed."
+            assertIdempotentOrderMatchesContext(raceRows[0], { tableId: resolved.tableId });
             insertedOrder = raceRows[0];
             idempotentReplay = true;
           }

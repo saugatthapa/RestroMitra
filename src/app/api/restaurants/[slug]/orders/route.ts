@@ -11,7 +11,7 @@ import {
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/order-status";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { createStaffOrderSchema } from "@/lib/validation/payments";
-import { computeOrderPricing, generateOrderNumber } from "@/lib/orders";
+import { computeOrderPricing, generateOrderNumber, assertIdempotentOrderMatchesContext } from "@/lib/orders";
 import { computeComboPricing } from "@/lib/combos";
 import { getMainBranch } from "@/lib/restaurant";
 import { recordAuditLog } from "@/lib/audit";
@@ -192,6 +192,25 @@ export async function POST(
     // a second one. Checked up front (cheap, avoids doing pricing work for
     // what's almost always a no-op) AND after insert (handles the race
     // where two retries land concurrently — see the 23505 handling below).
+    //
+    // QA hardening pass (Phase 9 / master prompt section 12) — this lookup
+    // is scoped only to (restaurantId, clientRequestId) — the same scope
+    // as the backing DB unique index (orders_restaurant_client_request_id_unique
+    // in schema.ts) — and clientRequestId is an unvalidated client-supplied
+    // string (see createStaffOrderSchema / validation/payments.ts — any
+    // 1-100 char value). requireBranchAccess above only authorized this
+    // caller against the BRANCH this request itself resolved to; it never
+    // authorized reading whatever order a colliding clientRequestId happens
+    // to match. Before this fix, a clientRequestId that collided with a
+    // DIFFERENT branch's order (a stale value replayed from a shared
+    // kiosk/device, a client bug that fails to regenerate the id, or a
+    // leaked value) would hand back that other branch's full order row —
+    // customer PII, discounts, totals — to a caller who was never checked
+    // against that branch. Re-verifying branchId against the branch this
+    // request was actually authorized for closes that gap; a caller whose
+    // own branch grant covers this order's real branch already sees it via
+    // the ordinary GET list anyway, so this doesn't take away any
+    // legitimate access.
     if (body.clientRequestId) {
       const existingRows = await db
         .select()
@@ -201,6 +220,7 @@ export async function POST(
         )
         .limit(1);
       if (existingRows[0]) {
+        assertIdempotentOrderMatchesContext(existingRows[0], { branchId });
         return NextResponse.json({ order: existingRows[0], idempotentReplay: true }, { status: 200 });
       }
     }
@@ -454,6 +474,11 @@ export async function POST(
             )
             .limit(1);
           if (raceRows[0]) {
+            // Same cross-branch authorization check as the up-front lookup
+            // above — a unique-violation race can also surface a different
+            // branch's order here, and it must be rejected the same way
+            // rather than handed back as "your own order, replayed."
+            assertIdempotentOrderMatchesContext(raceRows[0], { branchId });
             insertedOrder = raceRows[0];
             idempotentReplay = true;
           }

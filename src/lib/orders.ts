@@ -11,6 +11,52 @@ export class OrderValidationError extends HttpError {
   }
 }
 
+/**
+ * QA hardening pass (Phase 9 / master prompt section 12) — guards the
+ * idempotent-replay path in the QR order route
+ * (src/app/api/order/[token]/route.ts) and the staff POS order route
+ * (src/app/api/restaurants/[slug]/orders/route.ts) against a cross-context
+ * authorization gap.
+ *
+ * Both routes look up "did this clientRequestId already create an order?"
+ * scoped only to (restaurantId, clientRequestId) — the same scope as the
+ * backing DB unique index (orders_restaurant_client_request_id_unique in
+ * schema.ts). clientRequestId is an unvalidated, client-supplied string (any
+ * 1-100 chars — see validation/orders.ts and validation/payments.ts), and
+ * the QR route in particular is completely unauthenticated. Without this
+ * check, a clientRequestId that happens to collide with a DIFFERENT table's
+ * (QR route) or DIFFERENT branch's (staff route) order — guessed, replayed
+ * from a shared device, or leaked via logs — would be treated as "this
+ * caller's own order, replayed," and that other order's full data (guest
+ * name/phone, totals, discounts) would be handed back to a caller never
+ * authorized to see it.
+ *
+ * Call this with the row matched by clientRequestId and the context the
+ * CURRENT request was actually resolved/authorized against, right before
+ * treating that row as a valid replay. Throws a 409 HttpError on mismatch —
+ * deliberately generic (never reveals whether a match existed, let alone
+ * what it was) — instead of silently falling through to insert (which would
+ * just re-hit the same unique-index collision) or handing back the
+ * mismatched row.
+ */
+export function assertIdempotentOrderMatchesContext(
+  existing: { tableId: string | null; branchId: string | null },
+  expected: { tableId?: string | null; branchId?: string | null },
+): void {
+  if (expected.tableId !== undefined && existing.tableId !== expected.tableId) {
+    throw new HttpError(
+      "This request could not be processed. Please refresh and try again.",
+      409,
+    );
+  }
+  if (expected.branchId !== undefined && existing.branchId !== expected.branchId) {
+    throw new HttpError(
+      "This request could not be processed. Please refresh and try again.",
+      409,
+    );
+  }
+}
+
 export type CartAddonInput = { addonId: string };
 export type CartItemInput = {
   menuItemId: string;
