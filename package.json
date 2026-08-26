@@ -22,7 +22,6 @@
     "@sentry/nextjs": "^10.70.0",
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.2",
-    "jose": "^6.2.8",
     "nepali-date-converter": "^3.4.0",
     "next": "15.5.23",
     "otplib": "^13.5.0",
