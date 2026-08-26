@@ -592,6 +592,11 @@ export const menuItems = pgTable(
   (table) => [
     index("menu_items_restaurant_id_idx").on(table.restaurantId),
     index("menu_items_category_id_idx").on(table.categoryId),
+    // QA hardening pass (dependency/CI/migration/index audit, P2) — app
+    // layer already never writes a negative price; this is a backstop for
+    // anything that writes to this table outside that path, matching the
+    // convention already used elsewhere (e.g. purchases_total_non_negative).
+    check("menu_items_base_price_non_negative", sql`${table.basePriceInPaisa} >= 0`),
   ],
 );
 
@@ -610,7 +615,10 @@ export const menuVariants = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("menu_variants_menu_item_id_idx").on(table.menuItemId)],
+  (table) => [
+    index("menu_variants_menu_item_id_idx").on(table.menuItemId),
+    check("menu_variants_price_non_negative", sql`${table.priceInPaisa} >= 0`),
+  ],
 );
 
 export const menuAddons = pgTable(
@@ -628,7 +636,10 @@ export const menuAddons = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("menu_addons_menu_item_id_idx").on(table.menuItemId)],
+  (table) => [
+    index("menu_addons_menu_item_id_idx").on(table.menuItemId),
+    check("menu_addons_price_non_negative", sql`${table.priceInPaisa} >= 0`),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -1224,6 +1235,15 @@ export const payments = pgTable(
     // order/sort by time, which the single restaurantId index above can't
     // cover without an extra sort step.
     index("payments_restaurant_id_created_at_idx").on(table.restaurantId, table.createdAt),
+    // QA hardening pass (dependency/CI/migration/index audit, P2) — CHECK
+    // backstops for the two non-amountInPaisa money columns here (that one
+    // is intentionally signed — positive=payment, negative=refund — so it
+    // gets no non-negativity check).
+    check("payments_tip_non_negative", sql`${table.tipInPaisa} >= 0`),
+    check(
+      "payments_received_non_negative",
+      sql`${table.receivedInPaisa} IS NULL OR ${table.receivedInPaisa} >= 0`,
+    ),
     // Partial, scoped to (order, clientRequestId) — most payments never set
     // clientRequestId, and a UUID collision across two different orders
     // isn't a real concern, so this only constrains retries of the same
@@ -1367,6 +1387,12 @@ export const paymentGatewayTransactions = pgTable(
     index("payment_gateway_transactions_restaurant_id_idx").on(table.restaurantId),
     index("payment_gateway_transactions_order_id_idx").on(table.orderId),
     uniqueIndex("payment_gateway_transactions_reference_unique").on(table.gatewayReference),
+    // QA hardening pass (dependency/CI/migration/index audit, P2) — this
+    // table only ever represents an initiated/completed COLLECTION
+    // attempt (never a refund — refunds are negative rows on `payments`,
+    // a different table), so unlike payments.amountInPaisa this one can
+    // be strictly positive.
+    check("payment_gateway_transactions_amount_positive", sql`${table.amountInPaisa} > 0`),
   ],
 );
 
@@ -1740,6 +1766,12 @@ export const ledgerEntries = pgTable(
     index("ledger_entries_entry_date_idx").on(table.entryDate),
     index("ledger_entries_due_status_idx").on(table.dueStatus),
     index("ledger_entries_customer_id_idx").on(table.customerId),
+    // QA hardening pass (dependency/CI/migration/index audit, P2) — the
+    // amountInPaisa column comment above already documents "always
+    // positive, direction carries the sign"; this just makes that an
+    // enforced invariant instead of only an app-layer convention.
+    check("ledger_entries_amount_positive", sql`${table.amountInPaisa} > 0`),
+    check("ledger_entries_settled_amount_non_negative", sql`${table.settledAmountInPaisa} >= 0`),
   ],
 );
 
@@ -1797,6 +1829,19 @@ export const coupons = pgTable(
     index("coupons_restaurant_id_idx").on(table.restaurantId),
     uniqueIndex("coupons_restaurant_code_unique").on(table.restaurantId, table.code),
     check("coupons_usage_count_non_negative", sql`${table.usageCount} >= 0`),
+    // QA hardening pass (dependency/CI/migration/index audit, P2) — same
+    // backstop reasoning as coupons_usage_count_non_negative above, for
+    // this table's other money/count columns that were missing one.
+    check("coupons_discount_value_non_negative", sql`${table.discountValue} >= 0`),
+    check(
+      "coupons_max_discount_non_negative",
+      sql`${table.maxDiscountInPaisa} IS NULL OR ${table.maxDiscountInPaisa} >= 0`,
+    ),
+    check(
+      "coupons_min_order_subtotal_non_negative",
+      sql`${table.minOrderSubtotalInPaisa} IS NULL OR ${table.minOrderSubtotalInPaisa} >= 0`,
+    ),
+    check("coupons_usage_limit_non_negative", sql`${table.usageLimit} IS NULL OR ${table.usageLimit} >= 0`),
   ],
 );
 
@@ -1824,6 +1869,7 @@ export const couponRedemptions = pgTable(
     index("coupon_redemptions_restaurant_id_idx").on(table.restaurantId),
     index("coupon_redemptions_coupon_id_idx").on(table.couponId),
     index("coupon_redemptions_order_id_idx").on(table.orderId),
+    check("coupon_redemptions_discount_non_negative", sql`${table.discountInPaisa} >= 0`),
   ],
 );
 
