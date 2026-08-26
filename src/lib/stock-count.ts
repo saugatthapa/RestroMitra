@@ -440,6 +440,13 @@ export async function getStockCountDetail(restaurantId: string, stockCountId: st
   return { stockCount: count, items: items.map(withVariance) };
 }
 
+// QA hardening pass (pagination audit) — every other list route in this
+// codebase enforces a hard cap (orders' ORDER_LIST_LIMIT, expenses'
+// EXPENSE_LIST_LIMIT, audit-log's MAX_LIST_LIMIT, etc.); this one had none
+// at all, unbounded and growing with every physical count a restaurant has
+// ever run.
+const STOCK_COUNT_LIST_LIMIT = 200;
+
 export async function listStockCounts(
   restaurantId: string,
   filters: { branchId?: string; status?: (typeof stockCounts.$inferSelect)["status"] } = {},
@@ -451,5 +458,6 @@ export async function listStockCounts(
     .select()
     .from(stockCounts)
     .where(and(...conditions))
-    .orderBy(desc(stockCounts.createdAt));
+    .orderBy(desc(stockCounts.createdAt))
+    .limit(STOCK_COUNT_LIST_LIMIT);
 }

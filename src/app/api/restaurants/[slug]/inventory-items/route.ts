@@ -10,6 +10,14 @@ import { isLowStock } from "@/lib/inventory";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 
+// QA hardening pass (pagination audit) — this was the one catalog-style
+// list route with no cap at all (menu items/categories/combos etc. are
+// similarly catalog-shaped but bounded by realistic menu size; inventory
+// items can accumulate faster for a restaurant with many raw ingredients).
+// Generous rather than tight, since this is a management screen that
+// expects to show the full catalog, not a paginated feed.
+const INVENTORY_ITEM_LIST_LIMIT = 1000;
+
 export async function GET(
   _request: Request,
   ctx: { params: Promise<{ slug: string }> },
@@ -22,7 +30,8 @@ export async function GET(
       .select()
       .from(inventoryItems)
       .where(eq(inventoryItems.restaurantId, restaurantId))
-      .orderBy(asc(inventoryItems.name));
+      .orderBy(asc(inventoryItems.name))
+      .limit(INVENTORY_ITEM_LIST_LIMIT);
 
     // isLowStock is derived, not stored — computed fresh on every read so
     // it can never drift from reorderLevelMilliunits/currentStockMilliunits.

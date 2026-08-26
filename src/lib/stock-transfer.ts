@@ -298,6 +298,10 @@ export async function getStockTransferDetail(restaurantId: string, stockTransfer
   return { transfer, items };
 }
 
+// QA hardening pass (pagination audit) — same gap, same fix as
+// listStockCounts: this list had no cap at all.
+const STOCK_TRANSFER_LIST_LIMIT = 200;
+
 export async function listStockTransfers(
   restaurantId: string,
   filters: { branchId?: string; status?: (typeof stockTransfers.$inferSelect)["status"] } = {},
@@ -312,5 +316,6 @@ export async function listStockTransfers(
     .select()
     .from(stockTransfers)
     .where(and(...conditions))
-    .orderBy(desc(stockTransfers.createdAt));
+    .orderBy(desc(stockTransfers.createdAt))
+    .limit(STOCK_TRANSFER_LIST_LIMIT);
 }
