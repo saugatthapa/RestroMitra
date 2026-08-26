@@ -285,6 +285,110 @@ describe.skipIf(!hasDb)("Financial reconciliation (integration)", () => {
     expect(unlimited.length).toBeGreaterThanOrEqual(2);
   });
 
+  // QA hardening pass (Phase 10 / master prompt timezone audit) —
+  // regression test for resolveDateFilterInstant's fix in
+  // financial-reconciliation.ts. A bare "YYYY-MM-DD" from/to filter used to
+  // be parsed with a plain `new Date(value)`, which for a date-only string
+  // resolves to UTC midnight (ECMA-262), not the restaurant's own local
+  // midnight (restaurants.timezone defaults to "Asia/Kathmandu", UTC+5:45 —
+  // see this fixture's own restaurant, created with no explicit timezone).
+  // The two payments below happen inside the ~5h45m window where local
+  // calendar day and UTC calendar day disagree, exposing the bug directly.
+  it("QA hardening (Phase 10): bare-date from/to filters bucket by the RESTAURANT's local calendar day, not UTC's", async () => {
+    // 2024-01-14T19:00:00Z is 2024-01-15T00:45 in Asia/Kathmandu (+5:45) —
+    // i.e. local calendar day Jan 15, but UTC calendar day Jan 14. Local
+    // midnight on Jan 15 in Kathmandu is 2024-01-14T18:15:00Z, so this
+    // payment falls just after that local-midnight boundary.
+    const boundaryStraddlingCreatedAt = new Date("2024-01-14T19:00:00.000Z");
+    const suffix = Math.random().toString(36).slice(2, 8);
+    const [order] = await db
+      .insert(schema.orders)
+      .values({
+        restaurantId,
+        branchId,
+        orderNumber: `TEST-RECON-TZ-${suffix}`,
+        source: "pos",
+        status: "completed",
+        subtotalInPaisa: 20_000,
+        taxInPaisa: 0,
+        totalInPaisa: 20_000,
+      })
+      .returning({ id: schema.orders.id });
+    const [payment] = await db
+      .insert(schema.payments)
+      .values({
+        restaurantId,
+        orderId: order.id,
+        amountInPaisa: 20_000,
+        method: "card",
+        createdAt: boundaryStraddlingCreatedAt,
+      })
+      .returning();
+
+    // from="2024-01-15" (bare date): correctly resolved to LOCAL midnight
+    // Jan 15 (2024-01-14T18:15:00Z) via restaurantStartOfDay, this payment
+    // (2024-01-14T19:00:00Z) is AFTER that instant, so it must be included.
+    // Under the old `new Date("2024-01-15")` = UTC midnight Jan 15 bug,
+    // this payment (19:00 UTC Jan 14, before UTC midnight Jan 15) would
+    // have been wrongly EXCLUDED.
+    const fromJan15 = await fr.listPaymentsForReconciliation(
+      restaurantId,
+      { branchId, from: "2024-01-15" },
+      "all",
+    );
+    expect(fromJan15.some((p) => p.id === payment.id)).toBe(true);
+
+    // to="2024-01-15" (exclusive, bare date): correctly resolved to the
+    // same local-midnight instant, this payment (local calendar day Jan
+    // 15) must be EXCLUDED — it falls ON the cutoff day, not before it.
+    // Under the old bug, `lt(createdAt, UTC midnight Jan 15)` would have
+    // wrongly INCLUDED it, since 19:00 UTC Jan 14 is before 00:00 UTC Jan
+    // 15 even though it's already local Jan 15.
+    const toJan15 = await fr.listPaymentsForReconciliation(
+      restaurantId,
+      { branchId, to: "2024-01-15" },
+      "all",
+    );
+    expect(toJan15.some((p) => p.id === payment.id)).toBe(false);
+
+    // A tight local-day window (Jan 15 00:00 -> Jan 16 00:00, both local)
+    // must include it — proves from/to compose correctly, not just each
+    // bound in isolation.
+    const localJan15Window = await fr.listPaymentsForReconciliation(
+      restaurantId,
+      { branchId, from: "2024-01-15", to: "2024-01-16" },
+      "all",
+    );
+    expect(localJan15Window.some((p) => p.id === payment.id)).toBe(true);
+
+    // getReconciliationSummary shares the same buildReconciliationWhere()
+    // filter path — confirm the fix applies there too, not just the list.
+    const summaryFromJan15 = await fr.getReconciliationSummary(restaurantId, {
+      branchId,
+      from: "2024-01-15",
+    });
+    const cardRow = summaryFromJan15.find((s) => s.method === "card");
+    expect(cardRow).toBeDefined();
+    expect(cardRow!.unreconciledTotalInPaisa).toBeGreaterThanOrEqual(20_000);
+
+    // A full ISO datetime (already unambiguous — carries its own "Z")
+    // bypasses restaurantStartOfDay entirely and is compared as-is,
+    // unaffected by this fix: an exact-instant boundary still behaves like
+    // a plain `new Date(value)` always did.
+    const exactInstant = await fr.listPaymentsForReconciliation(
+      restaurantId,
+      { branchId, from: boundaryStraddlingCreatedAt.toISOString() },
+      "all",
+    );
+    expect(exactInstant.some((p) => p.id === payment.id)).toBe(true);
+    const exactInstantAfter = await fr.listPaymentsForReconciliation(
+      restaurantId,
+      { branchId, from: new Date(boundaryStraddlingCreatedAt.getTime() + 1000).toISOString() },
+      "all",
+    );
+    expect(exactInstantAfter.some((p) => p.id === payment.id)).toBe(false);
+  });
+
   it("getReconciliationSummary reports separate reconciled/unreconciled totals per method", async () => {
     const { paymentId: reconciledOne } = await createPayment({
       restaurantId,

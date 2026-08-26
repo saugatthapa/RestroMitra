@@ -27,6 +27,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
       restaurantId,
       role,
       branchId: grantedBranchId,
+      timezone,
     } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_ACCOUNT_BOOKS);
 
     const url = new URL(request.url);
@@ -55,6 +56,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
         to: parsed.data.to,
       },
       parsed.data.status ?? "unreconciled",
+      500,
+      timezone,
     );
 
     return NextResponse.json({ payments });

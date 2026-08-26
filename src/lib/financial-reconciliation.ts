@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, isNotNull, lt, sql } from "dr
 import { db, type Transaction } from "@/db";
 import { orders, payments } from "@/db/schema";
 import { HttpError } from "@/lib/http-error";
+import { restaurantStartOfDay } from "@/lib/restaurant-date";
 import type { PaymentMethod } from "@/lib/payments";
 
 export class FinancialReconciliationError extends HttpError {
@@ -73,6 +74,41 @@ export type PaymentReconciliationRow = {
   reconciledByUserId: string | null;
 };
 
+// A bare "YYYY-MM-DD" date (no time component) is the ambiguous case —
+// see resolveDateFilterInstant's own doc comment just below.
+const BARE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Resolves a reconciliation `from`/`to` filter value (see
+ * ReconciliationFilters — either a bare "YYYY-MM-DD" date or a full ISO
+ * datetime, per reconciliationQuerySchema's dateOrDatetime validator) into
+ * an absolute instant to compare against payments.createdAt.
+ *
+ * QA hardening pass (Phase 10 / master prompt timezone audit) — this used
+ * to be a bare `new Date(value)` for both from and to. For a full ISO
+ * datetime that's fine (it already carries its own offset/Z, so it's
+ * unambiguous). But for a BARE date, `new Date("2026-08-01")` parses as UTC
+ * midnight per the ECMA-262 date-time string spec — not the restaurant's
+ * own midnight. For Asia/Kathmandu (UTC+5:45), that silently shifted every
+ * bare-date filter boundary ~5h45m later than a restaurant owner picking
+ * "from 2026-08-01" / "to 2026-08-02" (to see all of Aug 1) would expect:
+ * the "from" bound excluded roughly the first 6 hours of that day's
+ * payments, and the "to" bound (exclusive, per ReconciliationFilters' own
+ * doc comment) included roughly the first 6 hours of the day AFTER the
+ * intended cutoff. Same bug class, same fix, as the dayBounds() helper in
+ * reports.ts (restaurantStartOfDay) — see that file's own doc comment for
+ * the fuller history of this bug pattern across the codebase.
+ *
+ * A full ISO datetime is passed through untouched; only a bare date gets
+ * resolved against the restaurant's timezone. This preserves the exact
+ * inclusive/exclusive semantics ReconciliationFilters already documents —
+ * only the INSTANT a bare date resolves to changes, not how from/to are
+ * compared against it.
+ */
+function resolveDateFilterInstant(value: string, timezone: string): Date {
+  return BARE_DATE_RE.test(value) ? restaurantStartOfDay(timezone, value) : new Date(value);
+}
+
 // payments has no branchId of its own — every payment belongs to exactly
 // one order (orderId NOT NULL), so branch scoping always goes through an
 // inner join onto orders, same rationale as getPaymentMethodBreakdown /
@@ -81,6 +117,7 @@ function buildReconciliationWhere(
   restaurantId: string,
   filters: ReconciliationFilters,
   status: ReconciliationStatus,
+  timezone: string,
 ) {
   const conditions = [
     eq(payments.restaurantId, restaurantId),
@@ -92,8 +129,8 @@ function buildReconciliationWhere(
     assertReconcilableMethod(filters.method);
     conditions.push(eq(payments.method, filters.method));
   }
-  if (filters.from) conditions.push(gte(payments.createdAt, new Date(filters.from)));
-  if (filters.to) conditions.push(lt(payments.createdAt, new Date(filters.to)));
+  if (filters.from) conditions.push(gte(payments.createdAt, resolveDateFilterInstant(filters.from, timezone)));
+  if (filters.to) conditions.push(lt(payments.createdAt, resolveDateFilterInstant(filters.to, timezone)));
   if (status === "unreconciled") conditions.push(isNull(payments.reconciledAt));
   if (status === "reconciled") conditions.push(isNotNull(payments.reconciledAt));
   return and(...conditions);
@@ -110,6 +147,7 @@ export async function listPaymentsForReconciliation(
   filters: ReconciliationFilters = {},
   status: ReconciliationStatus = "unreconciled",
   limit = 500,
+  timezone = "Asia/Kathmandu",
 ): Promise<PaymentReconciliationRow[]> {
   const rows = await db
     .select({
@@ -126,7 +164,7 @@ export async function listPaymentsForReconciliation(
     })
     .from(payments)
     .innerJoin(orders, eq(payments.orderId, orders.id))
-    .where(buildReconciliationWhere(restaurantId, filters, status))
+    .where(buildReconciliationWhere(restaurantId, filters, status, timezone))
     .orderBy(status === "unreconciled" ? asc(payments.createdAt) : desc(payments.createdAt))
     .limit(limit);
 
@@ -150,6 +188,7 @@ export type ReconciliationSummary = {
 export async function getReconciliationSummary(
   restaurantId: string,
   filters: Omit<ReconciliationFilters, "method"> = {},
+  timezone = "Asia/Kathmandu",
 ): Promise<ReconciliationSummary[]> {
   const rows = await db
     .select({
@@ -161,7 +200,7 @@ export async function getReconciliationSummary(
     })
     .from(payments)
     .innerJoin(orders, eq(payments.orderId, orders.id))
-    .where(buildReconciliationWhere(restaurantId, filters, "all"))
+    .where(buildReconciliationWhere(restaurantId, filters, "all", timezone))
     .groupBy(payments.method)
     .orderBy(asc(payments.method));
 

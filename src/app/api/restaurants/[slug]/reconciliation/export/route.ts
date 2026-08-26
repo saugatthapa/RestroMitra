@@ -28,6 +28,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
       restaurantId,
       role,
       branchId: grantedBranchId,
+      timezone,
     } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_ACCOUNT_BOOKS);
 
     const url = new URL(request.url);
@@ -57,6 +58,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
       },
       parsed.data.status ?? "unreconciled",
       EXPORT_ROW_LIMIT,
+      timezone,
     );
 
     const csv = toCsv(rows, [

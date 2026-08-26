@@ -14,6 +14,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
       restaurantId,
       role,
       branchId: grantedBranchId,
+      timezone,
     } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_ACCOUNT_BOOKS);
 
     const url = new URL(request.url);
@@ -33,11 +34,15 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
       effectiveBranchId = parsed.data.branchId;
     }
 
-    const summary = await getReconciliationSummary(restaurantId, {
-      branchId: effectiveBranchId,
-      from: parsed.data.from,
-      to: parsed.data.to,
-    });
+    const summary = await getReconciliationSummary(
+      restaurantId,
+      {
+        branchId: effectiveBranchId,
+        from: parsed.data.from,
+        to: parsed.data.to,
+      },
+      timezone,
+    );
 
     return NextResponse.json({ summary });
   } catch (err) {
