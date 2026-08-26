@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { userRoles, users, staffSalaryConfigs, payrollPayments } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
-import { getPayrollComputation } from "@/lib/payroll";
+import { getPayrollComputationsBatch } from "@/lib/payroll";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -77,22 +77,30 @@ export async function GET(
     const lastPaidByUserRoleId = new Map(lastPaidRows.map((r) => [r.userRoleId, r.lastPaidAt]));
 
     // Only worth computing for a row that actually HAS a salary config —
-    // getPayrollComputation returns null for one that doesn't anyway, but
-    // skipping the query entirely avoids N pointless round trips on a
+    // skipping the rest entirely avoids doing attendance work for a
     // roster where most staff have no salary set yet.
+    //
+    // QA hardening pass (Phase 27 / performance audit) — this used to call
+    // getPayrollComputation() once per salaried staff member via
+    // Promise.all (N×2 round trips: a redundant salary-config re-lookup
+    // this route already has from staffRows, plus a separate
+    // attendanceRecords query per person). getPayrollComputationsBatch
+    // does the same computation in exactly ONE attendanceRecords query for
+    // the whole roster — see its own doc comment in payroll.ts.
     const computations = hasValidPeriod
-      ? new Map(
-          await Promise.all(
-            staffRows
-              .filter((r) => r.salary !== null)
-              .map(
-                async (r) =>
-                  [
-                    r.userRoleId,
-                    await getPayrollComputation(restaurantId, r.userRoleId, periodStart!, periodEnd!, timezone),
-                  ] as const,
-              ),
-          ),
+      ? await getPayrollComputationsBatch(
+          restaurantId,
+          staffRows
+            .filter((r) => r.salary !== null)
+            .map((r) => ({
+              userRoleId: r.userRoleId,
+              userId: r.userId,
+              salaryType: r.salary!.salaryType,
+              amountInPaisa: r.salary!.amountInPaisa,
+            })),
+          periodStart!,
+          periodEnd!,
+          timezone,
         )
       : new Map();
 

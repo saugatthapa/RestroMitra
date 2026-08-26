@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gte, lt } from "drizzle-orm";
+import { and, eq, gte, inArray, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { attendanceRecords, staffSalaryConfigs, userRoles } from "@/db/schema";
 import { summarizeAttendance } from "@/lib/attendance";
@@ -113,4 +113,90 @@ export async function getPayrollComputation(
     attendanceDays: summary.daysPresent,
     owedAmountInPaisa,
   };
+}
+
+export type StaffSalaryInput = {
+  userRoleId: string;
+  userId: string;
+  salaryType: SalaryType;
+  amountInPaisa: number;
+};
+
+/**
+ * Batched sibling of getPayrollComputation() — computes owed amounts for
+ * MULTIPLE staff members over the same [periodStart, periodEnd] window in
+ * exactly ONE attendanceRecords query, instead of one query per staff
+ * member.
+ *
+ * QA hardening pass (Phase 27 / performance audit) — the payroll roster
+ * route (payroll/staff/route.ts) used to call getPayrollComputation() once
+ * per salaried staff member via Promise.all. Each call re-ran the
+ * userRoles/staffSalaryConfigs join (redundant — the roster route had
+ * ALREADY joined and fetched that same salary config for its own listing)
+ * and its own separate attendanceRecords query. Parallelizing with
+ * Promise.all hides the added LATENCY somewhat, but it's still 2N round
+ * trips to Postgres for a roster of N salaried staff — real connection-pool
+ * pressure and query-planner overhead on a restaurant with a large staff
+ * list, worse under concurrent requests (every open Payroll tab repeats
+ * the same N×2 queries). This does the identical computation — same
+ * computeOwedAmountInPaisa/summarizeAttendance logic, not a reimplemented
+ * or diverging version of it — with exactly ONE attendanceRecords query
+ * (scoped to every userId in the batch via inArray, then grouped in
+ * application code) and zero redundant salary lookups, since the caller
+ * already has that data from its own roster query.
+ *
+ * Returns a Map keyed by userRoleId (matching every input entry — never
+ * omits one), mirroring how the roster route already builds its
+ * lastPaidByUserRoleId lookup.
+ */
+export async function getPayrollComputationsBatch(
+  restaurantId: string,
+  staff: StaffSalaryInput[],
+  periodStart: string,
+  periodEnd: string,
+  timezone: string,
+): Promise<Map<string, PayrollComputation>> {
+  const result = new Map<string, PayrollComputation>();
+  if (staff.length === 0) return result;
+
+  const dayStart = restaurantStartOfDay(timezone, periodStart);
+  const dayAfterEnd = new Date(restaurantStartOfDay(timezone, periodEnd).getTime() + 24 * 60 * 60 * 1000);
+
+  const userIds = [...new Set(staff.map((s) => s.userId))];
+  const records = await db
+    .select({
+      userId: attendanceRecords.userId,
+      clockInAt: attendanceRecords.clockInAt,
+      clockOutAt: attendanceRecords.clockOutAt,
+    })
+    .from(attendanceRecords)
+    .where(
+      and(
+        eq(attendanceRecords.restaurantId, restaurantId),
+        inArray(attendanceRecords.userId, userIds),
+        gte(attendanceRecords.clockInAt, dayStart),
+        lt(attendanceRecords.clockInAt, dayAfterEnd),
+      ),
+    );
+
+  const recordsByUserId = new Map<string, { clockInAt: Date; clockOutAt: Date | null }[]>();
+  for (const r of records) {
+    const list = recordsByUserId.get(r.userId);
+    if (list) list.push(r);
+    else recordsByUserId.set(r.userId, [r]);
+  }
+
+  for (const s of staff) {
+    const summary = summarizeAttendance(recordsByUserId.get(s.userId) ?? [], (d) => restaurantDate(timezone, d));
+    const owedAmountInPaisa = computeOwedAmountInPaisa(s.salaryType, s.amountInPaisa, summary);
+    result.set(s.userRoleId, {
+      salaryType: s.salaryType,
+      standingAmountInPaisa: s.amountInPaisa,
+      attendanceMinutes: summary.totalMinutes,
+      attendanceDays: summary.daysPresent,
+      owedAmountInPaisa,
+    });
+  }
+
+  return result;
 }

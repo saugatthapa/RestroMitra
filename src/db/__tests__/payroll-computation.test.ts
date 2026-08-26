@@ -26,6 +26,11 @@ describe.skipIf(!hasDb)("Payroll computation (integration)", () => {
   let userId: string;
   let userRoleId: string;
   let otherUserRoleId: string;
+  // A second real staff member in the SAME restaurant, used only by the
+  // getPayrollComputationsBatch tests below — batching only says anything
+  // interesting with more than one person in the batch.
+  let userId2: string;
+  let userRoleId2: string;
 
   const TZ = "UTC";
 
@@ -65,6 +70,18 @@ describe.skipIf(!hasDb)("Payroll computation (integration)", () => {
       .values({ userId, restaurantId: otherRestaurantId, role: "waiter" })
       .returning({ id: schema.userRoles.id });
     otherUserRoleId = otherRole.id;
+
+    const [user2] = await db
+      .insert(schema.users)
+      .values({ fullName: "TEST Payroll Comp User 2", phone: `978${suffix}`, passwordHash: "x" })
+      .returning({ id: schema.users.id });
+    userId2 = user2.id;
+
+    const [role2] = await db
+      .insert(schema.userRoles)
+      .values({ userId: userId2, restaurantId, role: "waiter" })
+      .returning({ id: schema.userRoles.id });
+    userRoleId2 = role2.id;
   });
 
   afterAll(async () => {
@@ -75,6 +92,7 @@ describe.skipIf(!hasDb)("Payroll computation (integration)", () => {
     await db.delete(schema.userRoles).where(eq(schema.userRoles.restaurantId, restaurantId));
     await db.delete(schema.userRoles).where(eq(schema.userRoles.restaurantId, otherRestaurantId));
     await db.delete(schema.users).where(eq(schema.users.id, userId));
+    await db.delete(schema.users).where(eq(schema.users.id, userId2));
     await db.delete(schema.restaurants).where(eq(schema.restaurants.id, restaurantId));
     await db.delete(schema.restaurants).where(eq(schema.restaurants.id, otherRestaurantId));
   });
@@ -243,6 +261,96 @@ describe.skipIf(!hasDb)("Payroll computation (integration)", () => {
 
       await db.delete(schema.staffSalaryConfigs).where(eq(schema.staffSalaryConfigs.userRoleId, userRoleId));
       await db.delete(schema.staffSalaryConfigs).where(eq(schema.staffSalaryConfigs.userRoleId, otherUserRoleId));
+      await db.delete(schema.attendanceRecords).where(eq(schema.attendanceRecords.userId, userId));
+    });
+  });
+
+  // QA hardening pass (Phase 27 / performance audit) —
+  // getPayrollComputationsBatch is the batched sibling wired into the
+  // payroll roster route (payroll/staff/route.ts) to replace one
+  // getPayrollComputation() call per staff member with a single query for
+  // the whole roster. These tests prove the batched path produces IDENTICAL
+  // results to calling getPayrollComputation() once per person — same
+  // computation, just fewer round trips — plus its own isolation/edge
+  // cases (multiple people in one batch, an empty batch, a person with no
+  // attendance in range still getting a zeroed entry).
+  describe("getPayrollComputationsBatch (integration)", () => {
+    it("empty batch: returns an empty Map without querying anything", async () => {
+      const result = await payroll.getPayrollComputationsBatch(restaurantId, [], "2026-07-01", "2026-07-31", TZ);
+      expect(result.size).toBe(0);
+    });
+
+    it("matches getPayrollComputation() exactly for each person in a multi-person batch, and isolates attendance per user", async () => {
+      await setSalary(userRoleId, restaurantId, "hourly", 150_00);
+      await setSalary(userRoleId2, restaurantId, "daily", 800_00);
+
+      // userRoleId: two shifts, 3h + 2h = 5h.
+      await clockIn(userId, restaurantId, new Date("2026-07-02T09:00:00Z"), new Date("2026-07-02T12:00:00Z"));
+      await clockIn(userId, restaurantId, new Date("2026-07-03T09:00:00Z"), new Date("2026-07-03T11:00:00Z"));
+      // userRoleId2: two shifts on two distinct days.
+      await clockIn(userId2, restaurantId, new Date("2026-07-04T05:00:00Z"), new Date("2026-07-04T09:00:00Z"));
+      await clockIn(userId2, restaurantId, new Date("2026-07-05T05:00:00Z"), new Date("2026-07-05T09:00:00Z"));
+
+      const batch = await payroll.getPayrollComputationsBatch(
+        restaurantId,
+        [
+          { userRoleId, userId, salaryType: "hourly", amountInPaisa: 150_00 },
+          { userRoleId: userRoleId2, userId: userId2, salaryType: "daily", amountInPaisa: 800_00 },
+        ],
+        "2026-07-01",
+        "2026-07-31",
+        TZ,
+      );
+
+      const individual1 = await payroll.getPayrollComputation(restaurantId, userRoleId, "2026-07-01", "2026-07-31", TZ);
+      const individual2 = await payroll.getPayrollComputation(restaurantId, userRoleId2, "2026-07-01", "2026-07-31", TZ);
+
+      expect(batch.size).toBe(2);
+      expect(batch.get(userRoleId)).toEqual(individual1);
+      expect(batch.get(userRoleId2)).toEqual(individual2);
+      // Sanity on the actual figures, not just "matches the other function"
+      // (which could both be wrong the same way).
+      expect(batch.get(userRoleId)!.attendanceMinutes).toBe(300);
+      expect(batch.get(userRoleId)!.owedAmountInPaisa).toBe(750_00);
+      expect(batch.get(userRoleId2)!.attendanceDays).toBe(2);
+      expect(batch.get(userRoleId2)!.owedAmountInPaisa).toBe(1_600_00);
+
+      await db.delete(schema.staffSalaryConfigs).where(eq(schema.staffSalaryConfigs.userRoleId, userRoleId));
+      await db.delete(schema.staffSalaryConfigs).where(eq(schema.staffSalaryConfigs.userRoleId, userRoleId2));
+      await db.delete(schema.attendanceRecords).where(eq(schema.attendanceRecords.userId, userId));
+      await db.delete(schema.attendanceRecords).where(eq(schema.attendanceRecords.userId, userId2));
+    });
+
+    it("a person with no attendance in range still gets a zeroed (never omitted) entry in the returned Map", async () => {
+      const batch = await payroll.getPayrollComputationsBatch(
+        restaurantId,
+        [{ userRoleId, userId, salaryType: "daily", amountInPaisa: 500_00 }],
+        "2026-08-01",
+        "2026-08-31",
+        TZ,
+      );
+      expect(batch.has(userRoleId)).toBe(true);
+      expect(batch.get(userRoleId)!.attendanceDays).toBe(0);
+      expect(batch.get(userRoleId)!.owedAmountInPaisa).toBe(0);
+    });
+
+    it("wrong-restaurant isolation: a same-physical-user shift logged under a DIFFERENT restaurant is never picked up", async () => {
+      // Same physical user (userId), but one shift under `restaurantId`
+      // and an identically-timed one under `otherRestaurantId` — mirrors
+      // getPayrollComputation's own isolation test above.
+      await clockIn(userId, restaurantId, new Date("2026-09-01T08:00:00Z"), new Date("2026-09-01T16:00:00Z"));
+      await clockIn(userId, otherRestaurantId, new Date("2026-09-01T08:00:00Z"), new Date("2026-09-01T16:00:00Z"));
+
+      const batch = await payroll.getPayrollComputationsBatch(
+        restaurantId,
+        [{ userRoleId, userId, salaryType: "daily", amountInPaisa: 500_00 }],
+        "2026-09-01",
+        "2026-09-01",
+        TZ,
+      );
+      expect(batch.get(userRoleId)!.attendanceDays).toBe(1);
+      expect(batch.get(userRoleId)!.owedAmountInPaisa).toBe(500_00);
+
       await db.delete(schema.attendanceRecords).where(eq(schema.attendanceRecords.userId, userId));
     });
   });
