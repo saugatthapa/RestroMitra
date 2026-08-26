@@ -188,23 +188,41 @@ export async function getMfaChallenge(token: string): Promise<MfaChallenge | nul
  * in the same transaction — both must succeed together, or neither does,
  * so a code can never be accepted without its replay-protection state
  * actually being recorded.
+ *
+ * QA hardening pass — the read of mfaLastUsedTimeStep, the TOTP
+ * verification against it, and the eventual write of the new
+ * mfaLastUsedTimeStep now ALL happen under one `SELECT ... FOR UPDATE`
+ * lock on this user's row, inside one transaction. Previously the read +
+ * verify happened before the transaction even opened: two concurrent
+ * login attempts for the SAME user, each holding a DIFFERENT valid MFA
+ * challenge (e.g. two browser tabs, or an attacker who obtained two
+ * challenge tokens), submitting the SAME still-valid TOTP code at the
+ * same moment, would both read the same (stale) mfaLastUsedTimeStep,
+ * both pass verifyTotpCode, and both commit — each claiming its own
+ * distinct challengeId (the per-challenge CAS below was already race-safe
+ * on its own, but only protects re-use of ONE challenge, not cross-
+ * challenge replay of one code). Locking the user row first serializes
+ * the two attempts: the second one blocks until the first commits its
+ * mfaLastUsedTimeStep update, then re-reads it and correctly fails
+ * verifyTotpCode against the now-updated value.
  */
 export async function verifyMfaChallengeWithTotp(
   challengeId: string,
   userId: string,
   code: string,
 ): Promise<boolean> {
-  const [user] = await db
-    .select({ mfaEnabled: users.mfaEnabled, mfaSecret: users.mfaSecret, mfaLastUsedTimeStep: users.mfaLastUsedTimeStep })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-  if (!user?.mfaEnabled || !user.mfaSecret) return false;
-
-  const result = await verifyTotpCode(user.mfaSecret, code, user.mfaLastUsedTimeStep);
-  if (!result.valid) return false;
-
   return db.transaction(async (tx) => {
+    const [user] = await tx
+      .select({ mfaEnabled: users.mfaEnabled, mfaSecret: users.mfaSecret, mfaLastUsedTimeStep: users.mfaLastUsedTimeStep })
+      .from(users)
+      .where(eq(users.id, userId))
+      .for("update")
+      .limit(1);
+    if (!user?.mfaEnabled || !user.mfaSecret) return false;
+
+    const result = await verifyTotpCode(user.mfaSecret, code, user.mfaLastUsedTimeStep);
+    if (!result.valid) return false;
+
     const [claimed] = await tx
       .update(mfaChallenges)
       .set({ usedAt: new Date() })

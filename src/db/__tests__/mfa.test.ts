@@ -169,6 +169,46 @@ describe.skipIf(!hasDb)("MFA (integration)", () => {
     await mfa.disableMfa(userId);
   });
 
+  it(
+    "concurrent request / cross-challenge replay: two simultaneous verifications of the SAME code " +
+      "against two DIFFERENT (both live) challenges for the same user — exactly one succeeds",
+    async () => {
+      // QA hardening pass — this is the actual race the FOR UPDATE fix in
+      // verifyMfaChallengeWithTotp closes, distinct from the "same
+      // challenge twice" test above. Before the fix, the mfaLastUsedTimeStep
+      // read + TOTP verify happened OUTSIDE any transaction/lock, so two
+      // concurrent requests each holding their OWN distinct (and thus
+      // independently CAS-able) challenge could both read the same stale
+      // mfaLastUsedTimeStep, both pass verification, and both commit —
+      // two sessions from one TOTP code. The per-challenge CAS alone can't
+      // catch this, since each request claims a DIFFERENT challenge row.
+      const { secret } = await enroll(userId);
+      const code = await generate({ secret, period: 30 });
+
+      const tokenA = await mfa.createMfaChallenge(userId, null, null);
+      const tokenB = await mfa.createMfaChallenge(userId, null, null);
+      const challengeA = await mfa.getMfaChallenge(tokenA);
+      const challengeB = await mfa.getMfaChallenge(tokenB);
+
+      const [a, b] = await Promise.all([
+        mfa.verifyMfaChallengeWithTotp(challengeA!.id, userId, code),
+        mfa.verifyMfaChallengeWithTotp(challengeB!.id, userId, code),
+      ]);
+      const outcomes = [a, b];
+      expect(outcomes.filter(Boolean)).toHaveLength(1);
+      expect(outcomes.filter((o) => !o)).toHaveLength(1);
+
+      // The loser's challenge must be left live for a genuine retry (with a
+      // fresh code), not silently burned — same contract as every other
+      // rejected-verification path in this file.
+      const loserToken = a ? tokenB : tokenA;
+      const loserStillLive = await mfa.getMfaChallenge(loserToken);
+      expect(loserStillLive).not.toBeNull();
+
+      await mfa.disableMfa(userId);
+    },
+  );
+
   it("wrong code: an invalid code fails and leaves the challenge live for a retry", async () => {
     const { secret } = await enroll(userId);
     const token = await mfa.createMfaChallenge(userId, null, null);
