@@ -237,6 +237,96 @@ describe.skipIf(!hasDb)("Daily closing (integration)", () => {
     expect(previewAfterLateExpense.expenses.cashExpensesInPaisa).toBe(3_000 + 999_00);
   });
 
+  it("QA hardening — getCashExpensesSummary/getDailyClosingPreview genuinely route through a passed transaction: an uncommitted write made via that SAME tx is visible to a query using it, but invisible to a concurrent query through the bare module-level db (proving real transactional isolation, not the pre-fix no-op where the tx argument was silently ignored)", async () => {
+    const TX_DATE = "2024-02-05";
+
+    let insideTxTotal: number | undefined;
+    let outsideDuringTxTotal: number | undefined;
+
+    await db.transaction(async (tx) => {
+      await tx.insert(schema.expenses).values({
+        restaurantId,
+        branchId,
+        categoryId: expenseCategoryId,
+        amountInPaisa: 77_00,
+        description: "TEST uncommitted cash expense (transactional isolation proof)",
+        status: "paid",
+        paymentMethod: "cash",
+        paidAt: new Date("2024-02-05T10:00:00Z"),
+      });
+
+      // Read through the SAME tx — before this fix, getCashExpensesSummary
+      // always queried the module-level `db` regardless of what was passed,
+      // so this would have read 0 (its own uncommitted write invisible to
+      // itself via a second connection). It must now see 77_00.
+      const insideSummary = await dailyClosing.getCashExpensesSummary(
+        restaurantId,
+        TX_DATE,
+        TZ,
+        branchId,
+        tx,
+      );
+      insideTxTotal = insideSummary.totalInPaisa;
+
+      // Read through the bare module-level db (a genuinely different
+      // connection) WHILE this transaction is still open and uncommitted —
+      // Postgres MVCC guarantees this must NOT see the uncommitted row yet.
+      const outsideSummary = await dailyClosing.getCashExpensesSummary(
+        restaurantId,
+        TX_DATE,
+        TZ,
+        branchId,
+      );
+      outsideDuringTxTotal = outsideSummary.totalInPaisa;
+    });
+
+    expect(insideTxTotal).toBe(77_00);
+    expect(outsideDuringTxTotal).toBe(0);
+
+    // After commit, the bare db path sees it too — confirming the row was
+    // real, not just visible-to-itself for some other reason.
+    const afterCommit = await dailyClosing.getCashExpensesSummary(restaurantId, TX_DATE, TZ, branchId);
+    expect(afterCommit.totalInPaisa).toBe(77_00);
+  });
+
+  it("QA hardening — closeDailyBusiness routes its preview computation through its OWN transaction end-to-end: a write made via that same tx just before closing is reflected in the frozen snapshot, proving getDailyClosingPreview isn't silently reading through a different, non-participating connection", async () => {
+    const TX_DATE = "2024-02-06";
+    expect(await dailyClosing.isBusinessDateClosed(restaurantId, branchId, TX_DATE)).toBe(false);
+
+    const closed = await db.transaction(async (tx) => {
+      // Written via `tx`, uncommitted from every other connection's point
+      // of view, right before closeDailyBusiness(tx, ...) runs in the same
+      // transaction. Before this fix, closeDailyBusiness's internal
+      // getDailyClosingPreview call ignored `tx` entirely and read through
+      // the module-level `db` instead — a genuinely different connection
+      // that cannot see this row (it isn't committed yet) — so the frozen
+      // snapshot would have recorded 0, not 42_00, for this expense.
+      await tx.insert(schema.expenses).values({
+        restaurantId,
+        branchId,
+        categoryId: expenseCategoryId,
+        amountInPaisa: 42_00,
+        description: "TEST same-tx expense written just before close",
+        status: "paid",
+        paymentMethod: "cash",
+        paidAt: new Date("2024-02-06T10:00:00Z"),
+      });
+
+      return dailyClosing.closeDailyBusiness(tx, {
+        restaurantId,
+        branchId,
+        businessDate: TX_DATE,
+        timezone: TZ,
+        closedByUserId: userId,
+        notes: "TEST tx-consistency close",
+      });
+    });
+
+    const snapshot = closed.snapshotJson as { expenses: { cashExpensesInPaisa: number } };
+    expect(snapshot.expenses.cashExpensesInPaisa).toBe(42_00);
+    expect(closed.notes).toBe("TEST tx-consistency close");
+  });
+
   it("isBusinessDateClosed is branch-scoped — closing one branch's day doesn't lock a different branch's same day", async () => {
     const [otherBranch] = await db
       .insert(schema.branches)

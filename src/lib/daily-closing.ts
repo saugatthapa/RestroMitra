@@ -1,6 +1,7 @@
 import "server-only";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
-import { db, type Transaction } from "@/db";
+import { db, type Database, type Transaction } from "@/db";
+import { isUniqueViolation } from "@/lib/db-error";
 import {
   dailyCloses,
   purchases,
@@ -38,9 +39,17 @@ export async function getPurchasesSummary(
   businessDate: string,
   timezone: string,
   branchId: string,
+  // QA hardening pass — see reports.ts's getSalesSummary for the full
+  // rationale: this optional trailing param lets closeDailyBusiness route
+  // every summary function through its OWN open transaction, so the frozen
+  // daily_closes snapshot is computed from one consistent view of the
+  // database instead of several independent, non-isolated connections.
+  // Every other existing caller (the preview route, tests) omits it and
+  // keeps using the module-level `db`, unchanged.
+  dbOrTx: Database | Transaction = db,
 ) {
   const { dayStart, dayAfterEnd } = dayBounds(businessDate, timezone);
-  const [row] = await db
+  const [row] = await dbOrTx
     .select({
       totalInPaisa: sql<string>`coalesce(sum(${purchases.totalInPaisa}), 0)`,
       purchaseCount: sql<string>`count(*)`,
@@ -71,9 +80,10 @@ export async function getCashExpensesSummary(
   businessDate: string,
   timezone: string,
   branchId: string,
+  dbOrTx: Database | Transaction = db,
 ) {
   const { dayStart, dayAfterEnd } = dayBounds(businessDate, timezone);
-  const [row] = await db
+  const [row] = await dbOrTx
     .select({ totalInPaisa: sql<string>`coalesce(sum(${expenses.amountInPaisa}), 0)` })
     .from(expenses)
     .where(
@@ -103,9 +113,10 @@ export async function getStockAdjustmentsSummary(
   businessDate: string,
   timezone: string,
   branchId: string,
+  dbOrTx: Database | Transaction = db,
 ) {
   const { dayStart, dayAfterEnd } = dayBounds(businessDate, timezone);
-  const [row] = await db
+  const [row] = await dbOrTx
     .select({
       netValueChangeInPaisa: sql<string>`
         coalesce(sum(round(${stockMovements.quantityDeltaMilliunits} * ${inventoryItems.costPerUnitInPaisa} / 1000.0)), 0)
@@ -141,9 +152,10 @@ export async function getRegisterSummaryForDay(
   businessDate: string,
   timezone: string,
   branchId: string,
+  dbOrTx: Database | Transaction = db,
 ) {
   const { dayStart, dayAfterEnd } = dayBounds(businessDate, timezone);
-  const [row] = await db
+  const [row] = await dbOrTx
     .select({
       shiftsClosedCount: sql<string>`count(*)`,
       openingCashInPaisa: sql<string>`coalesce(sum(${registerShifts.openingCashInPaisa}), 0)`,
@@ -199,14 +211,26 @@ export async function getDailyClosingPreview(
   branchId: string,
   businessDate: string,
   timezone: string,
+  // QA hardening pass — threaded through to every sub-summary below (see
+  // getPurchasesSummary's comment). closeDailyBusiness passes its own
+  // `tx` here so the ENTIRE preview — sales, COGS, wastage, purchases,
+  // cash expenses, stock adjustments, register reconciliation — is
+  // computed from one transactionally-consistent snapshot immediately
+  // before the freezing insert, rather than several independent
+  // connections that could each observe a different, partially-mutated
+  // state of the database. The read-only preview route still omits this
+  // and reads from the plain module-level `db`, which is correct there —
+  // that route never writes anything, so there is no transaction to be
+  // consistent WITH.
+  dbOrTx: Database | Transaction = db,
 ) {
   const range: ReportDateRange = { from: businessDate, to: businessDate };
   const [report, purchasesSummary, cashExpenses, stockAdjustments, register] = await Promise.all([
-    getReportSummary(restaurantId, range, timezone, branchId),
-    getPurchasesSummary(restaurantId, businessDate, timezone, branchId),
-    getCashExpensesSummary(restaurantId, businessDate, timezone, branchId),
-    getStockAdjustmentsSummary(restaurantId, businessDate, timezone, branchId),
-    getRegisterSummaryForDay(restaurantId, businessDate, timezone, branchId),
+    getReportSummary(restaurantId, range, timezone, branchId, dbOrTx),
+    getPurchasesSummary(restaurantId, businessDate, timezone, branchId, dbOrTx),
+    getCashExpensesSummary(restaurantId, businessDate, timezone, branchId, dbOrTx),
+    getStockAdjustmentsSummary(restaurantId, businessDate, timezone, branchId, dbOrTx),
+    getRegisterSummaryForDay(restaurantId, businessDate, timezone, branchId, dbOrTx),
   ]);
 
   return {
@@ -253,8 +277,15 @@ export async function isBusinessDateClosed(
   restaurantId: string,
   branchId: string,
   businessDate: string,
+  // QA hardening pass — same optional-trailing-param convention as the
+  // rest of this module. A mutation route that wants to check-and-write
+  // atomically (no gap between the lock check and the write it's guarding)
+  // should pass its own open `tx` here so both happen against the same
+  // snapshot; the two pre-existing callers (refunds route, preview route)
+  // keep reading through the plain module-level `db`, unchanged.
+  dbOrTx: Database | Transaction = db,
 ): Promise<boolean> {
-  const rows = await db
+  const rows = await dbOrTx
     .select({ id: dailyCloses.id })
     .from(dailyCloses)
     .where(
@@ -287,11 +318,22 @@ export async function closeDailyBusiness(
     notes?: string | null;
   },
 ) {
+  // QA hardening pass — `tx` is now threaded all the way down through
+  // getDailyClosingPreview into every summary function it calls (sales,
+  // COGS, wastage, purchases, cash expenses, stock adjustments, register).
+  // Previously this call omitted `tx` entirely, so the ENTIRE preview ran
+  // on separate, non-transactional connections concurrently with the
+  // final `tx.insert` below — a mutation landing between the preview reads
+  // and the insert (e.g. a payment or expense recorded mid-close) could
+  // produce a snapshot that was already stale the moment it was frozen.
+  // Now every read here participates in the same transaction as the
+  // insert, so the frozen snapshot is guaranteed internally consistent.
   const snapshot = await getDailyClosingPreview(
     params.restaurantId,
     params.branchId,
     params.businessDate,
     params.timezone,
+    tx,
   );
 
   try {
@@ -320,10 +362,4 @@ export async function closeDailyBusiness(
     }
     throw err;
   }
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  const code =
-    (err as { code?: string })?.code ?? (err as { cause?: { code?: string } })?.cause?.code;
-  return code === "23505";
 }

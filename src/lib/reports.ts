@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, desc, eq, gte, lt, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { db } from "@/db";
+import { db, type Database, type Transaction } from "@/db";
 import {
   orders,
   orderItems,
@@ -62,10 +62,21 @@ export async function getSalesSummary(
   range: ReportDateRange,
   timezone: string,
   branchId?: string,
+  // QA hardening pass (Daily Closing transactionality) — every function in
+  // this module now accepts the querying connection as an optional final
+  // parameter, defaulting to the module-level `db` so every OTHER existing
+  // caller (the Reports dashboard, the AI assistant, dashboard-summary,
+  // etc.) is completely unaffected. Daily Closing is the one caller that
+  // passes its own open transaction, so the entire snapshot it persists is
+  // computed from ONE consistent, transactionally-isolated view of the
+  // database rather than several independent connections racing whatever
+  // mutations happen to land mid-computation. See daily-closing.ts's own
+  // comment on closeDailyBusiness for the full rationale.
+  dbOrTx: Database | Transaction = db,
 ) {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
-  const [completedRow] = await db
+  const [completedRow] = await dbOrTx
     .select({
       revenueInPaisa: sql<string>`coalesce(sum(${orders.totalInPaisa}), 0)`,
       orderCount: sql<string>`count(*)`,
@@ -88,7 +99,7 @@ export async function getSalesSummary(
       ),
     );
 
-  const [cancelledRow] = await db
+  const [cancelledRow] = await dbOrTx
     .select({ count: sql<string>`count(*)` })
     .from(orders)
     .where(
@@ -114,7 +125,7 @@ export async function getSalesSummary(
   // reduces the revenue attributed to the day the sale was made, matching
   // this function's accrual-style "revenue" definition (see the module
   // doc comment above).
-  const [refundRow] = await db
+  const [refundRow] = await dbOrTx
     .select({
       netRefundInPaisa: sql<string>`
         coalesce(sum(case when ${payments.amountInPaisa} < 0 then -${payments.amountInPaisa} else 0 end), 0)
@@ -167,6 +178,7 @@ export async function getTipsSummary(
   range: ReportDateRange,
   timezone: string,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<{ totalTipsInPaisa: number }> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
@@ -178,7 +190,7 @@ export async function getTipsSummary(
   // the result when branchId is omitted — payments.orderId always
   // resolves to exactly one order row, so the join can't drop or
   // duplicate a payment.
-  const [row] = await db
+  const [row] = await dbOrTx
     .select({ totalTipsInPaisa: sql<string>`coalesce(sum(${payments.tipInPaisa}), 0)` })
     .from(payments)
     .innerJoin(orders, eq(payments.orderId, orders.id))
@@ -218,10 +230,11 @@ export async function getPeakHourStats(
   range: ReportDateRange,
   timezone: string,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<PeakHourStats> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
-  const rows = await db
+  const rows = await dbOrTx
     .select({
       hour: sql<string>`extract(hour from ${orders.placedAt} at time zone ${timezone})`,
       orderCount: sql<string>`count(*)`,
@@ -284,10 +297,11 @@ export async function getHourlyHeatmap(
   range: ReportDateRange,
   timezone: string,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<HourlyHeatmapCell[]> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
-  const rows = await db
+  const rows = await dbOrTx
     .select({
       dayOfWeek: sql<string>`extract(dow from ${orders.placedAt} at time zone ${timezone})`,
       hour: sql<string>`extract(hour from ${orders.placedAt} at time zone ${timezone})`,
@@ -341,16 +355,17 @@ export async function getBranchComparison(
   restaurantId: string,
   range: ReportDateRange,
   timezone: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<BranchComparisonRow[]> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
-  const branchRows = await db
+  const branchRows = await dbOrTx
     .select({ id: branches.id, name: branches.name, isMain: branches.isMain })
     .from(branches)
     .where(and(eq(branches.restaurantId, restaurantId), eq(branches.isActive, true)))
     .orderBy(asc(branches.createdAt));
 
-  const salesRows = await db
+  const salesRows = await dbOrTx
     .select({
       branchId: orders.branchId,
       revenueInPaisa: sql<string>`coalesce(sum(${orders.totalInPaisa}), 0)`,
@@ -412,10 +427,11 @@ export async function getCompletionStats(
   range: ReportDateRange,
   timezone: string,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<CompletionStats> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
-  const [totalRow] = await db
+  const [totalRow] = await dbOrTx
     .select({ count: sql<string>`count(*)` })
     .from(orders)
     .where(
@@ -428,7 +444,7 @@ export async function getCompletionStats(
       ),
     );
 
-  const [paidRow] = await db
+  const [paidRow] = await dbOrTx
     .select({ count: sql<string>`count(*)` })
     .from(orders)
     .where(
@@ -442,7 +458,7 @@ export async function getCompletionStats(
       ),
     );
 
-  const [avgRow] = await db
+  const [avgRow] = await dbOrTx
     .select({
       avgMinutes: sql<string | null>`avg(extract(epoch from (${orders.updatedAt} - ${orders.placedAt})) / 60)`,
     })
@@ -515,11 +531,12 @@ async function getStageDuration(
   dayStart: Date,
   dayAfterEnd: Date,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<OrderStageDurationRow> {
   const arrived = alias(orderStatusHistory, "arrived");
 
   if (fromStatus === "pending") {
-    const [row] = await db
+    const [row] = await dbOrTx
       .select({
         avgMinutes: sql<string | null>`avg(extract(epoch from (${arrived.changedAt} - ${orders.placedAt})) / 60)`,
         transitionCount: sql<string>`count(*)`,
@@ -544,7 +561,7 @@ async function getStageDuration(
   }
 
   const entered = alias(orderStatusHistory, "entered");
-  const [row] = await db
+  const [row] = await dbOrTx
     .select({
       avgMinutes: sql<string | null>`avg(extract(epoch from (${arrived.changedAt} - ${entered.changedAt})) / 60)`,
       transitionCount: sql<string>`count(*)`,
@@ -588,6 +605,7 @@ export async function getOrderPerformanceStats(
   range: ReportDateRange,
   timezone: string,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<OrderPerformanceStats> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
@@ -596,10 +614,10 @@ export async function getOrderPerformanceStats(
   const [stageDurations, [totalRow], [cancelledRow], [cancelledAvgRow], reasonRows] = await Promise.all([
     Promise.all(
       ORDER_STAGE_PAIRS.map(([from, to]) =>
-        getStageDuration(restaurantId, from, to, dayStart, dayAfterEnd, branchId),
+        getStageDuration(restaurantId, from, to, dayStart, dayAfterEnd, branchId, dbOrTx),
       ),
     ),
-    db
+    dbOrTx
       .select({ count: sql<string>`count(*)` })
       .from(orders)
       .where(
@@ -610,7 +628,7 @@ export async function getOrderPerformanceStats(
           ...branchFilter,
         ),
       ),
-    db
+    dbOrTx
       .select({ count: sql<string>`count(*)` })
       .from(orders)
       .where(
@@ -622,7 +640,7 @@ export async function getOrderPerformanceStats(
           ...branchFilter,
         ),
       ),
-    db
+    dbOrTx
       .select({
         avgMinutes: sql<string | null>`avg(extract(epoch from (${orderStatusHistory.changedAt} - ${orders.placedAt})) / 60)`,
       })
@@ -637,7 +655,7 @@ export async function getOrderPerformanceStats(
           ...branchFilter,
         ),
       ),
-    db
+    dbOrTx
       .select({
         reason: sql<string>`coalesce(${orderStatusHistory.reason}, 'No reason given')`,
         count: sql<string>`count(*)`,
@@ -680,8 +698,9 @@ export async function getTotalExpensesInPaisa(
   // uniformly.
   _timezone: string,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<number> {
-  const [row] = await db
+  const [row] = await dbOrTx
     .select({ totalInPaisa: sql<string>`coalesce(sum(${expenses.amountInPaisa}), 0)` })
     .from(expenses)
     .where(
@@ -718,10 +737,11 @@ export async function getDailyRevenueVsExpenses(
   range: ReportDateRange,
   timezone: string,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<DailySeriesPoint[]> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
-  const revenueRows = await db
+  const revenueRows = await dbOrTx
     .select({
       day: sql<string>`to_char(${orders.placedAt} at time zone ${timezone}, 'YYYY-MM-DD')`,
       revenueInPaisa: sql<string>`coalesce(sum(${orders.totalInPaisa}), 0)`,
@@ -738,7 +758,7 @@ export async function getDailyRevenueVsExpenses(
     )
     .groupBy(sql`1`);
 
-  const expenseRows = await db
+  const expenseRows = await dbOrTx
     .select({
       day: expenses.expenseDate,
       totalInPaisa: sql<string>`coalesce(sum(${expenses.amountInPaisa}), 0)`,
@@ -788,10 +808,11 @@ export async function getTopMenuItems(
   timezone: string,
   limit = 10,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<TopMenuItemRow[]> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
-  const rows = await db
+  const rows = await dbOrTx
     .select({
       name: orderItems.menuItemNameSnapshot,
       quantitySold: sql<string>`sum(${orderItems.quantity})`,
@@ -832,12 +853,13 @@ export async function getPaymentMethodBreakdown(
   range: ReportDateRange,
   timezone: string,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<PaymentBreakdownRow[]> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
   // Same unconditional join-to-orders rationale as getTipsSummary above —
   // payments has no branchId of its own.
-  const rows = await db
+  const rows = await dbOrTx
     .select({
       method: payments.method,
       totalInPaisa: sql<string>`coalesce(sum(${payments.amountInPaisa}), 0)`,
@@ -870,8 +892,9 @@ export async function getExpenseCategoryBreakdown(
   // signature consistency across this module.
   _timezone: string,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<ExpenseBreakdownRow[]> {
-  const rows = await db
+  const rows = await dbOrTx
     .select({
       category: expenseCategories.name,
       totalInPaisa: sql<string>`coalesce(sum(${expenses.amountInPaisa}), 0)`,
@@ -979,6 +1002,7 @@ export async function getCogsSummary(
   range: ReportDateRange,
   timezone: string,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<CogsSummary> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
@@ -990,7 +1014,7 @@ export async function getCogsSummary(
   )`;
   const hasRecipeNowSubquery = sql`EXISTS (SELECT 1 FROM ${recipeItems} WHERE ${recipeItems.menuItemId} = ${orderItems.menuItemId})`;
 
-  const [row] = await db
+  const [row] = await dbOrTx
     .select({
       cogsInPaisa: sql<string>`
         coalesce(sum(coalesce(${orderItems.recipeCostInPaisa}, ${liveRecipeCostSubquery}, 0)), 0)
@@ -1071,6 +1095,7 @@ export async function getProductProfitability(
   range: ReportDateRange,
   timezone: string,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<ProductProfitabilityRow[]> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
@@ -1082,7 +1107,7 @@ export async function getProductProfitability(
   )`;
   const hasRecipeNowSubquery = sql`EXISTS (SELECT 1 FROM ${recipeItems} WHERE ${recipeItems.menuItemId} = ${orderItems.menuItemId})`;
 
-  const rows = await db
+  const rows = await dbOrTx
     .select({
       name: orderItems.menuItemNameSnapshot,
       quantitySold: sql<string>`sum(${orderItems.quantity})`,
@@ -1158,10 +1183,11 @@ export async function getWastageSummary(
   range: ReportDateRange,
   timezone: string,
   branchId?: string,
+  dbOrTx: Database | Transaction = db,
 ): Promise<WastageSummary> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
-  const rows = await db
+  const rows = await dbOrTx
     .select({
       wasteReason: stockMovements.wasteReason,
       costInPaisa: sql<string>`
@@ -1231,6 +1257,16 @@ export async function getReportSummary(
   range: ReportDateRange,
   timezone: string,
   branchId?: string,
+  // QA hardening pass — passed through to every sub-query below. Daily
+  // Closing (see daily-closing.ts's getDailyClosingPreview) is the only
+  // caller that passes an actual `tx`, so its entire snapshot — sales,
+  // expenses, COGS, wastage, everything — is read from the SAME
+  // transactionally-isolated connection as the eventual `daily_closes`
+  // insert, instead of racing several independent connections against
+  // whatever else is mutating the database concurrently. Every other
+  // caller (Reports dashboard, AI assistant, dashboard-summary) omits this
+  // argument entirely and keeps using the module-level `db`, unchanged.
+  dbOrTx: Database | Transaction = db,
 ) {
   const [
     sales,
@@ -1248,26 +1284,26 @@ export async function getReportSummary(
     wastage,
     orderPerformance,
   ] = await Promise.all([
-    getSalesSummary(restaurantId, range, timezone, branchId),
-    getTotalExpensesInPaisa(restaurantId, range, timezone, branchId),
-    getDailyRevenueVsExpenses(restaurantId, range, timezone, branchId),
-    getTopMenuItems(restaurantId, range, timezone, 10, branchId),
-    getPaymentMethodBreakdown(restaurantId, range, timezone, branchId),
-    getExpenseCategoryBreakdown(restaurantId, range, timezone, branchId),
-    getTipsSummary(restaurantId, range, timezone, branchId),
-    getPeakHourStats(restaurantId, range, timezone, branchId),
-    getCompletionStats(restaurantId, range, timezone, branchId),
-    getHourlyHeatmap(restaurantId, range, timezone, branchId),
+    getSalesSummary(restaurantId, range, timezone, branchId, dbOrTx),
+    getTotalExpensesInPaisa(restaurantId, range, timezone, branchId, dbOrTx),
+    getDailyRevenueVsExpenses(restaurantId, range, timezone, branchId, dbOrTx),
+    getTopMenuItems(restaurantId, range, timezone, 10, branchId, dbOrTx),
+    getPaymentMethodBreakdown(restaurantId, range, timezone, branchId, dbOrTx),
+    getExpenseCategoryBreakdown(restaurantId, range, timezone, branchId, dbOrTx),
+    getTipsSummary(restaurantId, range, timezone, branchId, dbOrTx),
+    getPeakHourStats(restaurantId, range, timezone, branchId, dbOrTx),
+    getCompletionStats(restaurantId, range, timezone, branchId, dbOrTx),
+    getHourlyHeatmap(restaurantId, range, timezone, branchId, dbOrTx),
     // A branch-vs-branch comparison is meaningless once the whole report
     // is already scoped to one branch — skip the query entirely rather
     // than compute a comparison table that would just get discarded (the
     // UI already hides this section once it has 1 or fewer rows).
     branchId
       ? Promise.resolve([] as BranchComparisonRow[])
-      : getBranchComparison(restaurantId, range, timezone),
-    getCogsSummary(restaurantId, range, timezone, branchId),
-    getWastageSummary(restaurantId, range, timezone, branchId),
-    getOrderPerformanceStats(restaurantId, range, timezone, branchId),
+      : getBranchComparison(restaurantId, range, timezone, dbOrTx),
+    getCogsSummary(restaurantId, range, timezone, branchId, dbOrTx),
+    getWastageSummary(restaurantId, range, timezone, branchId, dbOrTx),
+    getOrderPerformanceStats(restaurantId, range, timezone, branchId, dbOrTx),
   ]);
 
   const netProfitInPaisa = computeNetProfitInPaisa(sales.revenueInPaisa, totalExpensesInPaisa);
@@ -1284,11 +1320,14 @@ export async function getReportSummary(
   // vs last month" pill on its Orders tile). Fetched as a second round trip
   // rather than folded into the Promise.all above so the previous period's
   // getSalesSummary/getTotalExpensesInPaisa calls can run in parallel with
-  // each other without complicating the primary batch above.
+  // each other without complicating the primary batch above. Still routed
+  // through the same dbOrTx — when called from inside Daily Closing's
+  // transaction, this comparison read is just as much a part of that one
+  // consistent snapshot as everything else above.
   const previousRange = previousPeriodRange(range);
   const [previousSales, previousExpensesInPaisa] = await Promise.all([
-    getSalesSummary(restaurantId, previousRange, timezone, branchId),
-    getTotalExpensesInPaisa(restaurantId, previousRange, timezone, branchId),
+    getSalesSummary(restaurantId, previousRange, timezone, branchId, dbOrTx),
+    getTotalExpensesInPaisa(restaurantId, previousRange, timezone, branchId, dbOrTx),
   ]);
   const previousNetProfitInPaisa = computeNetProfitInPaisa(
     previousSales.revenueInPaisa,
