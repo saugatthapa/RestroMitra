@@ -131,7 +131,7 @@ export async function DELETE(
   }
   try {
     const { slug, tableId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_TABLES,
     );
@@ -140,6 +140,12 @@ export async function DELETE(
     if (!existing) {
       return NextResponse.json({ error: "Table not found." }, { status: 404 });
     }
+    // QA hardening pass — PATCH on this same resource already checks this;
+    // DELETE (soft-delete/deactivate) didn't.
+    await requireBranchAccess(session.user.id, restaurantId, existing.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
 
     // Soft delete: the table's QR code may already be printed and taped to
     // a physical table. Deactivating (not deleting) means a customer who

@@ -9,6 +9,7 @@ import { canTransition, type ReservationStatus } from "@/lib/reservation-status"
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { markTableSeated, releaseTableIfSoleReservation } from "@/lib/tables";
+import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
 
 /**
  * Advances (or cancels) a reservation's status — the one place the
@@ -26,7 +27,7 @@ export async function PATCH(
   }
   try {
     const { slug, reservationId } = await ctx.params;
-    const { session, restaurantId, timezone } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_RESERVATIONS,
     );
@@ -40,6 +41,11 @@ export async function PATCH(
     if (!existing) {
       return NextResponse.json({ error: "Reservation not found." }, { status: 404 });
     }
+    // QA hardening pass — same branch check as the sibling edit route.
+    await requireBranchAccessForNullableTarget(session.user.id, restaurantId, existing.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
     const currentStatus = existing.status as ReservationStatus;
 
     const parsed = await parseJsonBody(request, updateReservationStatusSchema);

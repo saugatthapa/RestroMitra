@@ -14,6 +14,7 @@ import {
   markTableReservedIfAvailable,
   releaseTableIfSoleReservation,
 } from "@/lib/tables";
+import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
 
 async function getOwnedReservation(restaurantId: string, reservationId: string) {
   const rows = await db
@@ -40,7 +41,7 @@ export async function PATCH(
   }
   try {
     const { slug, reservationId } = await ctx.params;
-    const { session, restaurantId, timezone } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_RESERVATIONS,
     );
@@ -49,6 +50,12 @@ export async function PATCH(
     if (!existing) {
       return NextResponse.json({ error: "Reservation not found." }, { status: 404 });
     }
+    // QA hardening pass — the list+create route already checks branch
+    // access; this edit route didn't.
+    await requireBranchAccessForNullableTarget(session.user.id, restaurantId, existing.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
 
     const parsed = await parseJsonBody(request, updateReservationSchema);
     if (!parsed.ok) return parsed.response;

@@ -11,6 +11,7 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { recordAuditLog } from "@/lib/audit";
 import { buildEsewaFormFields } from "@/lib/payment-gateways/esewa";
 import { initiateKhaltiPayment, KhaltiApiError } from "@/lib/payment-gateways/khalti";
+import { requireBranchAccess } from "@/lib/rbac/guard";
 
 /**
  * Starts a redirect-based gateway payment (eSewa form-POST or Khalti REST
@@ -39,7 +40,7 @@ export async function POST(
     }
     const gateway = gatewayParsed.data;
 
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.EDIT_ORDER,
     );
@@ -51,6 +52,12 @@ export async function POST(
     if (!order) {
       return NextResponse.json({ error: "Order not found." }, { status: 404 });
     }
+    // QA hardening pass — same branch check the manual-payment route
+    // already has; this gateway-initiate route was missing it.
+    await requireBranchAccess(session.user.id, restaurantId, order.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
     if (order.status === "cancelled") {
       return NextResponse.json(
         { error: "Cannot take a payment against a cancelled order." },

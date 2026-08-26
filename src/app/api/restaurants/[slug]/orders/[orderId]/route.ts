@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
 import { computeBillingSummary } from "@/lib/payments";
 import { db } from "@/db";
+import { requireBranchAccess } from "@/lib/rbac/guard";
 
 /**
  * Full detail for a single order — items, addons, table, and the payment
@@ -16,7 +17,7 @@ export async function GET(
 ) {
   try {
     const { slug, orderId } = await ctx.params;
-    const { restaurantId } = await resolveRestaurantContext(slug);
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(slug);
 
     const order = await db.query.orders.findFirst({
       where: (o, { and, eq }) => and(eq(o.id, orderId), eq(o.restaurantId, restaurantId)),
@@ -40,6 +41,13 @@ export async function GET(
     if (!order) {
       return NextResponse.json({ error: "Order not found." }, { status: 404 });
     }
+    // QA hardening pass — every sibling route on this resource (status,
+    // payments, refunds, adjustments) already requires branch access; this
+    // detail GET (which includes payments + customer PII) didn't.
+    await requireBranchAccess(session.user.id, restaurantId, order.branchId, {
+      role,
+      branchId: grantedBranchId,
+    });
 
     const billing = computeBillingSummary(
       order.totalInPaisa,
