@@ -1,26 +1,34 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { createRestaurantSchema } from "@/lib/validation/onboarding";
-import { requireAuth, AuthError } from "@/lib/rbac/guard";
+import { requireAuth } from "@/lib/rbac/guard";
 import { setActiveRestaurant } from "@/lib/auth/session";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { createRestaurantOnboarding } from "@/lib/onboarding";
+import { toErrorResponse } from "@/lib/api-route-helpers";
 
+// QA hardening (P2 backlog): this route used to hand-roll its own
+// AuthError-only try/catch around just the requireAuth() call, instead of
+// the shared toErrorResponse used everywhere else in this app —
+// AuthError already extends HttpError (see rbac/guard.ts), so
+// toErrorResponse handles it identically, and wrapping the WHOLE handler
+// (not just requireAuth) additionally gives every other unexpected
+// failure below the same consistent JSON shape + Sentry reporting as
+// every other route, with no change to any explicit return path.
 export async function POST(request: Request) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
-
-  let session;
   try {
-    session = await requireAuth();
+    return await handleCreateRestaurant(request);
   } catch (err) {
-    if (err instanceof AuthError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
-    }
-    throw err;
+    return toErrorResponse(err);
   }
+}
+
+async function handleCreateRestaurant(request: Request) {
+  const session = await requireAuth();
 
   const body = await request.json().catch(() => null);
   const parsed = createRestaurantSchema.safeParse(body);

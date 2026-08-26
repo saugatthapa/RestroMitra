@@ -8,12 +8,26 @@ import { createSession } from "@/lib/auth/session";
 import { recordAuditLog } from "@/lib/audit";
 import { rateLimit } from "@/lib/rate-limit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { toErrorResponse } from "@/lib/api-route-helpers";
 
+// QA hardening (P2 backlog): see login/route.ts's comment for why every
+// pre-auth route now wraps its body in try/catch + toErrorResponse —
+// consistent JSON error shape and Sentry reporting on truly unexpected
+// failures (e.g. a concurrent duplicate-phone insert racing past the
+// existing-user check below), no behavior change on any explicit return
+// path.
 export async function POST(request: Request) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
+  try {
+    return await handleRegister(request);
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
 
+async function handleRegister(request: Request) {
   const ip = getClientIp(request) ?? "unknown";
   const limited = rateLimit(`register:${ip}`, { limit: 5, windowMs: 60_000 });
   if (!limited.allowed) {

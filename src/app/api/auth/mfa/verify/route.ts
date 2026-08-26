@@ -12,6 +12,7 @@ import { createSession } from "@/lib/auth/session";
 import { recordAuditLog } from "@/lib/audit";
 import { rateLimit } from "@/lib/rate-limit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { toErrorResponse } from "@/lib/api-route-helpers";
 
 const GENERIC_ERROR = "Invalid or expired code.";
 const CHALLENGE_EXPIRED_ERROR = "Your login has expired. Please log in again.";
@@ -24,11 +25,22 @@ const CHALLENGE_EXPIRED_ERROR = "Your login has expired. Please log in again.";
  * limited (both by IP and by the challenge itself, so a stolen/guessed
  * challengeToken can't be brute-forced past a 6-digit code indefinitely).
  */
+// QA hardening (P2 backlog): see login/route.ts's comment for why every
+// pre-auth route now wraps its body in try/catch + toErrorResponse —
+// consistent JSON error shape and Sentry reporting on truly unexpected
+// failures, no behavior change on any explicit return path.
 export async function POST(request: Request) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
+  try {
+    return await handleMfaVerify(request);
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
 
+async function handleMfaVerify(request: Request) {
   const ip = getClientIp(request) ?? "unknown";
   const limitedByIp = rateLimit(`mfa-verify-ip:${ip}`, { limit: 20, windowMs: 60_000 });
   if (!limitedByIp.allowed) {

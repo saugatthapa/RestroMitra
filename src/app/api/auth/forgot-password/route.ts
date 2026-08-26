@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
+import * as Sentry from "@sentry/nextjs";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { forgotPasswordSchema } from "@/lib/validation/auth";
@@ -35,11 +36,31 @@ const GENERIC_RESPONSE = {
  * a real, known limitation, not silently swallowed: the forgot-password
  * page's own copy says so.
  */
+// QA hardening (P2 backlog): this route previously had no top-level
+// try/catch, unlike the rest of this app's routes (see login/route.ts's
+// comment for the general fix). This one needs a BESPOKE catch rather
+// than the shared toErrorResponse, though: toErrorResponse returns a
+// distinct 500 body/status, which would break the one invariant this
+// route's whole design hinges on (its own doc comment above) — the exact
+// same response for every outcome, so an unauthenticated caller can never
+// learn anything from how the response differs. An unexpected failure
+// (a DB hiccup, etc.) still needs to be logged/reported so it doesn't
+// silently vanish, but the response back to the caller must stay
+// GENERIC_RESPONSE regardless.
 export async function POST(request: Request) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
+  try {
+    return await handleForgotPassword(request);
+  } catch (err) {
+    console.error("forgot-password: unexpected error", err);
+    Sentry.captureException(err);
+    return NextResponse.json(GENERIC_RESPONSE);
+  }
+}
 
+async function handleForgotPassword(request: Request) {
   const ip = getClientIp(request) ?? "unknown";
 
   const body = await request.json().catch(() => null);

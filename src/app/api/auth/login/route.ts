@@ -9,6 +9,7 @@ import { createMfaChallenge } from "@/lib/auth/mfa";
 import { recordAuditLog } from "@/lib/audit";
 import { rateLimit } from "@/lib/rate-limit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { toErrorResponse } from "@/lib/api-route-helpers";
 
 const GENERIC_ERROR = "Invalid phone number or password.";
 
@@ -17,6 +18,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
+  // QA hardening (P2 backlog): this route previously had no top-level
+  // try/catch at all, unlike every restaurant-scoped route (which all go
+  // through resolveRestaurantContext's own try/catch + toErrorResponse).
+  // An unexpected failure here (a dropped DB connection, etc.) fell through
+  // to Next's generic framework error handling instead of this app's usual
+  // consistent `{ error: "..." }` JSON shape, and — more importantly —
+  // wasn't reported to Sentry the way every other unhandled API error is.
+  // Wrapping the existing logic changes no behavior on any of its explicit
+  // return paths below; it only gives truly unexpected errors the same
+  // shape and observability as the rest of the app.
+  try {
+    return await handleLogin(request);
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+async function handleLogin(request: Request) {
   const ip = getClientIp(request) ?? "unknown";
 
   const body = await request.json().catch(() => null);

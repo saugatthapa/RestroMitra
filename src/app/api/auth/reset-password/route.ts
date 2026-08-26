@@ -6,6 +6,7 @@ import { destroyAllSessions } from "@/lib/auth/session";
 import { recordAuditLog } from "@/lib/audit";
 import { rateLimit } from "@/lib/rate-limit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { toErrorResponse } from "@/lib/api-route-helpers";
 
 const GENERIC_ERROR = "This reset link is invalid or has expired. Request a new one.";
 
@@ -27,11 +28,22 @@ const GENERIC_ERROR = "This reset link is invalid or has expired. Request a new 
  * every existing session should stop being trusted. The person resetting
  * it logs in fresh afterward.
  */
+// QA hardening (P2 backlog): see login/route.ts's comment for why every
+// pre-auth route now wraps its body in try/catch + toErrorResponse —
+// consistent JSON error shape and Sentry reporting on truly unexpected
+// failures, no behavior change on any explicit return path.
 export async function POST(request: Request) {
   if (!hasValidCsrfHeader(request)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
+  try {
+    return await handleResetPassword(request);
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
 
+async function handleResetPassword(request: Request) {
   const ip = getClientIp(request) ?? "unknown";
   const limited = rateLimit(`reset-complete-ip:${ip}`, { limit: 15, windowMs: 60_000 });
   if (!limited.allowed) {
