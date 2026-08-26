@@ -10,7 +10,7 @@ import {
   inventoryItems,
   registerShifts,
 } from "@/db/schema";
-import { restaurantStartOfDay } from "@/lib/restaurant-date";
+import { restaurantDate, restaurantStartOfDay } from "@/lib/restaurant-date";
 import { getReportSummary, type ReportDateRange } from "@/lib/reports";
 import { HttpError } from "@/lib/http-error";
 
@@ -318,6 +318,25 @@ export async function closeDailyBusiness(
     notes?: string | null;
   },
 ) {
+  // QA hardening pass (Phase 5b) — reject closing a business date that
+  // hasn't happened yet in the RESTAURANT's own timezone. Enforced here,
+  // in the one service-layer function every close request must go
+  // through, rather than only in the request-validation schema — a
+  // schema-level check can't know "today" (that depends on the
+  // restaurant's timezone, resolved per-request), and centralizing the
+  // check here means any future caller of closeDailyBusiness inherits it
+  // for free, matching this codebase's "improve the shared helper, don't
+  // duplicate the check per call site" convention. Plain string comparison
+  // is safe: both sides are YYYY-MM-DD, which sorts lexicographically
+  // identically to chronologically.
+  const today = restaurantDate(params.timezone);
+  if (params.businessDate > today) {
+    throw new DailyClosingError(
+      `Cannot close ${params.businessDate} — that is in the future (today is ${today} for this restaurant).`,
+      400,
+    );
+  }
+
   // QA hardening pass — `tx` is now threaded all the way down through
   // getDailyClosingPreview into every summary function it calls (sales,
   // COGS, wastage, purchases, cash expenses, stock adjustments, register).

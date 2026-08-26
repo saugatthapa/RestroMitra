@@ -327,6 +327,24 @@ describe.skipIf(!hasDb)("Daily closing (integration)", () => {
     expect(closed.notes).toBe("TEST tx-consistency close");
   });
 
+  it("QA hardening (Phase 5b) — closeDailyBusiness rejects a future-dated businessDate and never creates a row for it", async () => {
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    await expect(
+      db.transaction((tx) =>
+        dailyClosing.closeDailyBusiness(tx, {
+          restaurantId,
+          branchId,
+          businessDate: tomorrow,
+          timezone: TZ,
+          closedByUserId: userId,
+        }),
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+
+    expect(await dailyClosing.isBusinessDateClosed(restaurantId, branchId, tomorrow)).toBe(false);
+  });
+
   it("isBusinessDateClosed is branch-scoped — closing one branch's day doesn't lock a different branch's same day", async () => {
     const [otherBranch] = await db
       .insert(schema.branches)
