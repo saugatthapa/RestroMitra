@@ -70,6 +70,7 @@ This closes every item RELEASE_READINESS.md's scorecard listed as **"Not built"*
 - **MFA** has no SMS fallback — this app has no SMS delivery capability; TOTP + backup codes are the only two factors offered.
 - **Split Bill**: redefining an order's shares (whole-state-replace) untags any payment recorded against the old share ids (`ON DELETE SET NULL`) — the payment itself is never lost, just its per-payer label.
 - **Coupons and manual discounts share one discount slot per order** (pre-existing constraint, unchanged) — a coupon and a manual discount can't both apply to the same order at once.
+- **Multi-branch inventory totals are pooled, not per-branch, in the Items tab** — a deliberate, documented tradeoff from Phase 3's branch-scoped inventory foundation (see `BRANCH_INVENTORY.md`): `inventoryItems.currentStockMilliunits` stays the single restaurant-wide figure the Items tab reads, while the actual per-branch breakdown lives in the newer `branch_inventory_levels` table (kept in lockstep, sum-invariant-verified — see that doc's own Verification section). A multi-branch restaurant sees one combined stock number per item today, not a per-branch split, until the `InventoryBoard` UI is extended to surface the already-correct per-branch data.
 
 ## Final verification pass (this session)
 

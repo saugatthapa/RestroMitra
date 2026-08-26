@@ -19,3 +19,19 @@ export function localDateIso(date: Date = new Date()): string {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+/**
+ * QA hardening (P2 backlog): the first calendar day of `date`'s month, on
+ * THIS DEVICE's clock — same local-timezone reasoning as localDateIso
+ * above, just anchored to day 1 instead of today. Extracted here because
+ * ReportsBoard.tsx and StaffBoard.tsx had each hand-rolled an identical
+ * copy of this exact function (same getFullYear/getMonth/padStart logic)
+ * as a default "This month" / payroll-period-start anchor — cosmetic
+ * duplication, not a bug, but a shared home means the next such default
+ * doesn't need a third copy.
+ */
+export function firstOfMonthIso(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}-01`;
+}

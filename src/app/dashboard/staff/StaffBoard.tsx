@@ -7,7 +7,7 @@ import { computeDurationMinutes, formatDuration } from "@/lib/attendance";
 import { useDateSystem } from "@/lib/date-system";
 import { formatDate } from "@/lib/nepali-date";
 import { formatNPR } from "@/lib/money";
-import { localDateIso } from "@/lib/local-date";
+import { localDateIso, firstOfMonthIso } from "@/lib/local-date";
 import { SALARY_TYPES, SALARY_TYPE_LABELS, type SalaryType } from "@/lib/finance/salary-type";
 import { PAYOUT_METHODS, PAYOUT_METHOD_LABELS, type PayoutMethod } from "@/lib/finance/payout-methods";
 
@@ -802,11 +802,6 @@ function AttendanceTab({ slug }: { slug: string }) {
 // ---------------------------------------------------------------------------
 // Payroll tab (Phase 22)
 // ---------------------------------------------------------------------------
-
-function firstOfMonthIso() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
 
 function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll: boolean }) {
   const [staff, setStaff] = useState<PayrollStaffMember[]>([]);

@@ -10,7 +10,7 @@ import { IconStatTile, StatIcon } from "@/components/StatTile";
 import { useDateSystem, type DateSystem } from "@/lib/date-system";
 import { useActiveBranch } from "@/lib/branch-context";
 import { formatDate, formatBsHint } from "@/lib/nepali-date";
-import { localDateIso } from "@/lib/local-date";
+import { localDateIso, firstOfMonthIso } from "@/lib/local-date";
 import { WASTE_REASON_LABELS, type WasteReasonValue } from "@/lib/waste-reasons";
 import { ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
 import { toCsv } from "@/lib/csv";
@@ -146,11 +146,6 @@ function daysAgoIso(days: number) {
   const d = new Date();
   d.setDate(d.getDate() - days);
   return localDateIso(d);
-}
-
-function firstOfMonthIso() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
 /**
