@@ -1001,14 +1001,24 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
                 <td className="px-3 py-2 text-neutral-500">{PAYOUT_METHOD_LABELS[p.paymentMethod]}</td>
                 <td className="px-3 py-2">{formatNPR(p.amountInPaisa)}</td>
                 <td className="px-3 py-2 text-right">
-                  {canManagePayroll && !p.isVoided && (
-                    <button
-                      onClick={() => voidPayment(p)}
-                      className="text-xs font-medium text-neutral-500 hover:text-red-600 hover:underline"
+                  <div className="flex justify-end gap-3">
+                    <a
+                      href={`/print/payslip/${p.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium text-neutral-500 hover:text-neutral-900 hover:underline"
                     >
-                      Void
-                    </button>
-                  )}
+                      Payslip
+                    </a>
+                    {canManagePayroll && !p.isVoided && (
+                      <button
+                        onClick={() => voidPayment(p)}
+                        className="text-xs font-medium text-neutral-500 hover:text-red-600 hover:underline"
+                      >
+                        Void
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1048,14 +1058,32 @@ function PaySalaryModal({
   const [method, setMethod] = useState<PayoutMethod>(staff.salary?.paymentMethod ?? "cash");
   const [payPeriodLabel, setPayPeriodLabel] = useState("");
   const [note, setNote] = useState("");
+  // Commercial completion pass — payslip generation. Purely itemized,
+  // manually-entered withholdings (e.g. "Advance recovery") shown on the
+  // printed payslip as "Amount above + deductions = gross"; never a
+  // computed statutory figure (see src/lib/payslip.ts's doc comment).
+  const [deductions, setDeductions] = useState<Array<{ label: string; amount: string }>>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function addDeduction() {
+    setDeductions((prev) => [...prev, { label: "", amount: "" }]);
+  }
+  function updateDeduction(i: number, patch: Partial<{ label: string; amount: string }>) {
+    setDeductions((prev) => prev.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
+  }
+  function removeDeduction(i: number) {
+    setDeductions((prev) => prev.filter((_, idx) => idx !== i));
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
     try {
+      const cleanDeductions = deductions
+        .filter((d) => d.label.trim() && Number(d.amount) > 0)
+        .map((d) => ({ label: d.label.trim(), amount: Number(d.amount) }));
       await apiPost(`${base(slug)}/payroll/payments`, {
         userRoleId: staff.userRoleId,
         amount: Number(amount),
@@ -1064,6 +1092,7 @@ function PaySalaryModal({
         periodStart,
         periodEnd,
         note: note || undefined,
+        deductions: cleanDeductions.length > 0 ? cleanDeductions : undefined,
       });
       onPaid();
     } catch (err) {
@@ -1134,6 +1163,54 @@ function PaySalaryModal({
             <span className="mb-1 block text-neutral-600">Note (optional)</span>
             <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
           </label>
+
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-sm text-neutral-600">Deductions (optional)</span>
+              <button
+                type="button"
+                onClick={addDeduction}
+                className="text-xs font-medium text-neutral-500 hover:text-neutral-900 hover:underline"
+              >
+                + Add deduction
+              </button>
+            </div>
+            {deductions.length > 0 && (
+              <p className="mb-2 text-xs text-neutral-400">
+                The amount above is the net amount you&apos;re actually paying. Any deductions listed
+                here are shown on the payslip as withheld from gross pay — they don&apos;t change what
+                you enter above.
+              </p>
+            )}
+            <div className="space-y-2">
+              {deductions.map((d, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    value={d.label}
+                    onChange={(e) => updateDeduction(i, { label: e.target.value })}
+                    placeholder="e.g. Advance recovery"
+                    className="input flex-1"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={d.amount}
+                    onChange={(e) => updateDeduction(i, { amount: e.target.value })}
+                    placeholder="Rs"
+                    className="input w-28"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeDeduction(i)}
+                    className="px-2 text-xs font-medium text-neutral-400 hover:text-red-600"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {method === "cash" ? (

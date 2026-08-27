@@ -1,0 +1,1 @@
+ALTER TABLE "payroll_payments" ADD COLUMN "deductions_json" jsonb;

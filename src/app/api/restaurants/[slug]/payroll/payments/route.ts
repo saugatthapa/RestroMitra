@@ -178,6 +178,9 @@ export async function POST(
             computedAmountInPaisa: computation?.owedAmountInPaisa ?? null,
             attendanceMinutesSnapshot: computation?.attendanceMinutes ?? null,
             attendanceDaysSnapshot: computation?.attendanceDays ?? null,
+            deductionsJson: data.deductions?.length
+              ? data.deductions.map((d) => ({ label: d.label, amountInPaisa: d.amount }))
+              : null,
             clientRequestId: data.clientRequestId || null,
           })
           .returning();

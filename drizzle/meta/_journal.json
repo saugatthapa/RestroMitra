@@ -372,6 +372,13 @@
       "when": 1787752150732,
       "tag": "0052_qa_hardening_check_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1787850070563,
+      "tag": "0053_payroll_payslip_deductions",
+      "breakpoints": true
     }
   ]
 }

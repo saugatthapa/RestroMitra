@@ -21,6 +21,17 @@ const isoDate = z
  * amount is ALWAYS manually entered here regardless of method, since
  * there's no payout API to pull a number from either way) and it's booked.
  */
+// Commercial completion pass — payslip generation. A manager may itemize
+// what was withheld from this payout (advance recovery, uniform cost, a
+// loan installment) purely as free-text label + manually-entered amount —
+// deliberately NOT a statutory tax calculator (see src/lib/payslip.ts's
+// doc comment for why PF/SSF/TDS math is out of scope). Capped at a small
+// list so this stays a lightweight itemization, not a second ledger.
+const deductionLineSchema = z.object({
+  label: z.string().trim().min(1, "Enter a label.").max(100),
+  amount: rupeeAmount,
+});
+
 export const createPayrollPaymentSchema = z.object({
   userRoleId: z.string().uuid("Choose a staff member."),
   amount: rupeeAmount,
@@ -29,6 +40,7 @@ export const createPayrollPaymentSchema = z.object({
   periodStart: isoDate.optional(),
   periodEnd: isoDate.optional(),
   note: z.string().trim().max(1000).optional().or(z.literal("")),
+  deductions: z.array(deductionLineSchema).max(20).optional(),
   // QA hardening pass — same purpose and pattern as
   // createExpenseSchema's clientRequestId (see its comment): a retry of
   // the same payout submission must return the original payment rather

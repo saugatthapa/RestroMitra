@@ -3103,6 +3103,18 @@ export const payrollPayments = pgTable(
     computedAmountInPaisa: integer("computed_amount_in_paisa"),
     attendanceMinutesSnapshot: integer("attendance_minutes_snapshot"),
     attendanceDaysSnapshot: integer("attendance_days_snapshot"),
+    // Commercial completion pass — payslip generation. Optional, itemized
+    // deductions a manager typed in for THIS payout (e.g. "Advance
+    // recovery", "Uniform cost", "Loan repayment") — deliberately free-text
+    // labels with a manually-entered amount, never an invented statutory
+    // formula (no PF/SSF/TDS math anywhere in this codebase; see
+    // src/lib/payslip.ts's doc comment for why). Null/empty means no
+    // itemized deductions were recorded for this payment (the common case
+    // for older rows and for restaurants that don't itemize). amountInPaisa
+    // above keeps its existing meaning unchanged (the actual net amount
+    // paid) — the payslip's "gross" is derived as amountInPaisa + sum of
+    // these, never stored redundantly.
+    deductionsJson: jsonb("deductions_json").$type<Array<{ label: string; amountInPaisa: number }>>(),
     // Same "reverse via a new ledger entry, never mutate/delete the
     // original" pattern as expenses.isVoided — see reversePayrollLedgerEntry
     // in ledger.ts.
