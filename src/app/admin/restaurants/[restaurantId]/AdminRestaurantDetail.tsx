@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiGet, apiPatch, apiPost, ApiError } from "@/lib/api-client";
-import { PLANS, type PlanKey } from "@/lib/plans";
+import { type Plan, type PlanKey } from "@/lib/plans";
 import { SUBSCRIPTION_STATUS_LABELS, type SubscriptionStatus } from "@/lib/subscription";
 
 type Detail = {
@@ -17,6 +17,9 @@ type Detail = {
     subscriptionStatus: SubscriptionStatus;
     trialEndsAt: string | null;
     planKey: PlanKey | null;
+    // This restaurant's own effective plan (price-lock applied) — see
+    // getEffectivePlan() in lib/plans-db.ts.
+    plan: Plan | null;
     isActive: boolean;
     createdAt: string;
   };
@@ -32,6 +35,9 @@ type Detail = {
     createdAt: string;
     performedBy: string | null;
   }[];
+  // Phase 4 — every plan, including retired ones, for the "Assign plan"
+  // dropdown; see getAllPlansForAdmin() in lib/plans-db.ts.
+  plans: Plan[];
 };
 
 function formatEventType(eventType: string) {
@@ -48,7 +54,10 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
   const [busy, setBusy] = useState(false);
 
   const [extendDays, setExtendDays] = useState(30);
-  const [assignPlanKey, setAssignPlanKey] = useState<PlanKey>("starter");
+  // Phase 4 — no more hardcoded "starter" default (plan keys aren't a
+  // fixed literal set anymore); seeded from the loaded catalog once it
+  // arrives, see the effect below.
+  const [assignPlanKey, setAssignPlanKey] = useState<PlanKey>("");
   const [activateOnAssign, setActivateOnAssign] = useState(true);
   const [note, setNote] = useState("");
 
@@ -70,6 +79,13 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurantId]);
+
+  useEffect(() => {
+    if (!assignPlanKey && data && data.plans.length > 0) {
+      setAssignPlanKey(data.restaurant.planKey ?? data.plans[0].key);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   async function runAction(body: Record<string, unknown>) {
     setBusy(true);
@@ -148,7 +164,7 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
             <dl className="space-y-2 text-sm">
               <Row label="Owner" value={owner ? `${owner.fullName} · ${owner.phone}` : "—"} />
               <Row label="Staff accounts" value={String(data.staffCount)} />
-              <Row label="Plan" value={PLANS.find((p) => p.key === restaurant.planKey)?.name ?? "None assigned"} />
+              <Row label="Plan" value={restaurant.plan?.name ?? "None assigned"} />
               <Row
                 label="Trial ends"
                 value={restaurant.trialEndsAt ? formatDate(restaurant.trialEndsAt) : "—"}
@@ -236,7 +252,7 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
                   onChange={(e) => setAssignPlanKey(e.target.value as PlanKey)}
                   className="input mt-1"
                 >
-                  {PLANS.map((p) => (
+                  {data.plans.map((p) => (
                     <option key={p.key} value={p.key}>
                       {p.name}
                     </option>
@@ -244,7 +260,7 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
                 </select>
               </label>
               <button
-                disabled={busy}
+                disabled={busy || !assignPlanKey}
                 onClick={() =>
                   runAction({
                     action: "assign_plan",

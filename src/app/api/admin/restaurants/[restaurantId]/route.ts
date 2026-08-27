@@ -5,7 +5,7 @@ import { restaurants, userRoles, users, subscriptionEvents } from "@/db/schema";
 import { requirePlatformPermission } from "@/lib/rbac/guard";
 import { PLATFORM_PERMISSIONS } from "@/lib/rbac/platform-permissions";
 import { toErrorResponse } from "@/lib/api-route-helpers";
-import { getEffectivePlan } from "@/lib/plans";
+import { getEffectivePlan, getAllPlansForAdmin } from "@/lib/plans-db";
 
 const EVENT_HISTORY_LIMIT = 50;
 
@@ -61,6 +61,13 @@ export async function GET(
       .orderBy(desc(subscriptionEvents.createdAt))
       .limit(EVENT_HISTORY_LIMIT);
 
+    // Phase 4 — plan is DB-backed now; `plans` (every plan, including
+    // retired ones — an admin assigning a plan should still see a
+    // since-retired one this restaurant might already be on) replaces the
+    // static PLANS array the detail page used to import client-side for
+    // its "Assign plan" dropdown.
+    const [plan, allPlans] = await Promise.all([getEffectivePlan(restaurant), getAllPlansForAdmin()]);
+
     return NextResponse.json({
       restaurant: {
         id: restaurant.id,
@@ -72,7 +79,7 @@ export async function GET(
         subscriptionStatus: restaurant.subscriptionStatus,
         trialEndsAt: restaurant.trialEndsAt,
         planKey: restaurant.planKey,
-        plan: getEffectivePlan(restaurant),
+        plan,
         lockedMonthlyPriceInPaisa: restaurant.lockedMonthlyPriceInPaisa,
         isActive: restaurant.isActive,
         createdAt: restaurant.createdAt,
@@ -80,6 +87,7 @@ export async function GET(
       owner: owner ?? null,
       staffCount: staffCountRow?.n ?? 0,
       events,
+      plans: allPlans,
     });
   } catch (err) {
     return toErrorResponse(err);

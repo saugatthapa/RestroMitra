@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { restaurants, subscriptionEvents } from "@/db/schema";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
 import { computeSubscriptionAccess } from "@/lib/subscription";
-import { getEffectivePlan } from "@/lib/plans";
+import { getEffectivePlan, getActivePlans } from "@/lib/plans-db";
 
 const EVENT_HISTORY_LIMIT = 20;
 
@@ -62,11 +62,20 @@ export async function GET(
       .orderBy(desc(subscriptionEvents.createdAt))
       .limit(EVENT_HISTORY_LIMIT);
 
+    // Phase 4 — the plan-picker grid used to import the static PLANS array
+    // directly (a client component can't hit the DB); now the catalog is
+    // DB-backed, so this route hands the active catalog to the client
+    // instead. Active plans only — a retired plan shouldn't be offered to
+    // someone choosing a NEW plan, even though `plan` above (this
+    // restaurant's OWN current plan) resolves regardless of isActive.
+    const [plan, activePlans] = await Promise.all([getEffectivePlan(restaurant), getActivePlans()]);
+
     return NextResponse.json({
       subscriptionStatus: restaurant.subscriptionStatus,
       trialEndsAt: restaurant.trialEndsAt,
       planKey: restaurant.planKey,
-      plan: getEffectivePlan(restaurant),
+      plan,
+      plans: activePlans,
       access: computeSubscriptionAccess(restaurant),
       canManageSubscription: role === "owner" || role === "platform_admin",
       events,

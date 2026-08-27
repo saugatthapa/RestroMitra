@@ -1,9 +1,15 @@
 import { z } from "zod";
-import { PLAN_KEYS } from "@/lib/plans";
+
+// Phase 4 — plan keys are no longer a fixed literal union (a platform admin
+// can add a new one from /admin/plans without a code change), so this is a
+// shape-only check. "Does this key actually exist / is it active" is a DB
+// question, validated at the route layer via getPlanByKey (see
+// src/lib/plans-db.ts) — never here.
+const planKeySchema = z.string().trim().min(1).max(40);
 
 /** An owner requesting a plan from their /billing page — logs intent only, doesn't activate anything. */
 export const upgradeRequestSchema = z.object({
-  planKey: z.enum(PLAN_KEYS),
+  planKey: planKeySchema,
   note: z.string().trim().max(500).optional(),
 });
 
@@ -31,7 +37,7 @@ export const adminSubscriptionActionSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("assign_plan"),
-    planKey: z.enum(PLAN_KEYS),
+    planKey: planKeySchema,
     activate: z.boolean(),
     note: z.string().trim().max(500).optional(),
   }),

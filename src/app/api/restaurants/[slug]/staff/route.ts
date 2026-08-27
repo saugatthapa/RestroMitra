@@ -9,7 +9,7 @@ import { addStaffSchema } from "@/lib/validation/staff";
 import { hashPassword, validatePasswordStrength } from "@/lib/auth/password";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
-import { maxStaffForRestaurant } from "@/lib/plans";
+import { maxStaffForRestaurant } from "@/lib/plans-db";
 
 /**
  * Lists everyone with an active role at this restaurant — owner included
@@ -108,7 +108,7 @@ export async function POST(
       .from(restaurants)
       .where(eq(restaurants.id, restaurantId))
       .limit(1);
-    const maxStaff = maxStaffForRestaurant(restaurantRow ?? { planKey: null });
+    const maxStaff = await maxStaffForRestaurant(restaurantRow ?? { planKey: null });
     if (maxStaff !== null) {
       const [staffCountRow] = await db
         .select({ n: count() })

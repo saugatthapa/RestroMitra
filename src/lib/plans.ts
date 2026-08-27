@@ -1,50 +1,51 @@
 /**
- * Phase 10 — the fixed plan catalog. Deliberately a plain, dependency-free
- * module (no "server-only", no DB import), same pattern as
- * expense-categories.ts/reservation-status.ts, so it's shared unmodified
- * between the billing UI, the admin UI, and the staff-limit check on the
- * invite route.
+ * Plan catalog — TYPES AND PURE MATH ONLY. Deliberately a plain,
+ * dependency-free module (no "server-only", no DB import), same "pure
+ * counterpart to a *-db.ts module" pattern as src/lib/subscription.ts vs
+ * subscription-db.ts — this file is safe to import from a client
+ * component (BillingBoard, the admin restaurant detail page), which is
+ * exactly why the actual catalog data can't live here.
  *
- * PRICING — researched against the actual Nepal small-restaurant-POS market
- * (August 2026), not a guess. The previous numbers here (Rs 1,500/3,500/
- * 6,500 per month) were an explicit placeholder — this pass replaced them
- * after checking what a restaurant in RestroMitra's actual target segment
- * (a single small restaurant/cafe/momo shop, Itahari-first) would see from
- * every direct competitor with public pricing:
+ * Platform Control Center (Phase 4) — the plan catalog itself (the actual
+ * starter/growth/pro rows, their price/limits/features) moved to the `plans`
+ * DB table, admin-editable at /admin/plans, so a platform admin can add a
+ * genuinely new plan or change pricing without a code change. The DB-backed
+ * loaders (getActivePlans, getPlanByKey, getEffectivePlan,
+ * maxStaffForRestaurant, maxBranchesForRestaurant) live in
+ * src/lib/plans-db.ts — server-only, since they hit the database.
+ *
+ * PRICING HISTORY (kept for context — the actual live numbers are in the
+ * `plans` table, seeded by drizzle/0056_plan_catalog_table.sql with these
+ * exact values):
+ *
+ * Researched against the actual Nepal small-restaurant-POS market (August
+ * 2026), not a guess. The previous numbers here (Rs 1,500/3,500/6,500 per
+ * month) were an explicit placeholder — replaced after checking what a
+ * restaurant in RestroMitra's actual target segment (a single small
+ * restaurant/cafe/momo shop, Itahari-first) would see from every direct
+ * competitor with public pricing:
  *   - LekhaPatra: Rs 500/mo (Rs 4,999/yr) entry, Rs 800/mo (Rs 7,999/yr) top
  *   - Hamro SAN: Rs 599 / 999 / 1,199 per month (3 tiers, monthly only)
  *   - Restronp: Rs 500 / 1,000 / 2,000 per month equivalent (annual-only billing)
  *   - NRestro: Rs 833/mo entry, ~Rs 1,250–2,000/mo "most popular" tier
- * The old placeholder priced RestroMitra's entry tier ABOVE every
- * competitor's most-popular mid tier, and its mid/top tiers above anything
- * else in the market — a real barrier to adoption in a price-sensitive
- * market. These numbers land RestroMitra at the upper end of that
- * competitive band (justified by real differentiators none of the above
- * advertise — an AI assistant, offline-capable POS, eSewa/Khalti payment
- * gateways included rather than gated, a website builder), not above it.
+ * These land RestroMitra at the upper end of that competitive band
+ * (justified by real differentiators none of the above advertise — an AI
+ * assistant, offline-capable POS, eSewa/Khalti payment gateways included
+ * rather than gated, a website builder), not above it.
  *
- * PHASE 25c RECALIBRATION (Aug 2026) — Growth only, Rs 1,799 → Rs 1,399/mo.
- * RestroHub (a real, active competitor not covered in the pass above)
- * publishes a Standard tier — the direct feature-equivalent of Growth — at
- * Rs 15,400/yr, and the broader "full toolkit, single outlet" cluster
- * (Restronp Premium, NRestro's promo tier, RestroHub Standard) sits Rs
- * 12,000–15,400/yr. Growth's old Rs 17,990/yr was the most expensive plan
- * in that entire comparison set, ~17% above RestroHub, despite Growth
- * genuinely outfeaturing it. Rs 1,399/mo (Rs 13,990/yr, same "10x monthly"
- * yearly framing) undercuts RestroHub by ~9% and lands mid-cluster instead
- * of above it. Starter and Pro are untouched — Starter already undercuts
- * LekhaPatra's own top tier, and Pro (unlimited staff/branches) has no
- * published competitor equivalent to benchmark against (RestroHub's only
- * tier above Standard is custom-quoted Enterprise).
+ * PHASE 25c RECALIBRATION (Aug 2026) — Growth only, Rs 1,799 → Rs 1,399/mo,
+ * benchmarked against RestroHub's Standard tier (Rs 15,400/yr). Starter and
+ * Pro untouched. Still true after Phase 4's migration to a DB table — these
+ * ARE the seeded values, not superseded by it.
  *
- * This is a live catalog, and existing restaurants already active on
- * Growth must NOT have their bill silently drop (or rise) just because
- * this file changed — see restaurants.lockedMonthlyPriceInPaisa in
- * src/db/schema.ts and getEffectivePlan() below, which every price-
+ * This is a live catalog, and existing restaurants already active on a plan
+ * must NOT have their bill silently drop (or rise) just because the catalog
+ * changed — see restaurants.lockedMonthlyPriceInPaisa in src/db/schema.ts
+ * and applyPriceLock()/getEffectivePlan() below, which every price-
  * displaying route/component should read through rather than a raw
  * getPlanByKey() when rendering a SPECIFIC restaurant's current plan.
- * PLANS/getPlanByKey() alone are still correct for "what would a NEW
- * signup pay" (the plan-picker grid, the marketing page).
+ * getActivePlans()/getPlanByKey() alone are still correct for "what would a
+ * NEW signup pay" (the plan-picker grid, the marketing page).
  *
  * Yearly = 10x the monthly price (2 months free) at every tier — the same
  * "pay 10, get 12" framing LekhaPatra and most SaaS pricing uses, simple
@@ -57,74 +58,31 @@
  * changing what's charged to any restaurant already on a paid plan.
  */
 
-export const PLAN_KEYS = ["starter", "growth", "pro"] as const;
-export type PlanKey = (typeof PLAN_KEYS)[number];
+// Phase 4 — no longer a fixed literal union: a platform admin can add a
+// new plan key from /admin/plans without a code change, so this is just a
+// readability alias for "a plan's slug," not a closed set. Validation of
+// "does this key actually exist" happens at the DB layer (plans-db.ts),
+// never at the type layer.
+export type PlanKey = string;
 
 export type Plan = {
   key: PlanKey;
   name: string;
   tagline: string;
   priceInPaisaMonthly: number;
-  /** null = unlimited. Counts active non-owner staff (see maxStaffForRestaurant). */
+  /** null = unlimited. Counts active non-owner staff (see maxStaffForRestaurant in plans-db.ts). */
   maxStaff: number | null;
-  /** null = unlimited. Counts active branches (see maxBranchesForRestaurant). */
+  /** null = unlimited. Counts active branches (see maxBranchesForRestaurant in plans-db.ts). */
   maxBranches: number | null;
-  highlight?: boolean;
+  highlight: boolean;
+  /** Free marketing copy shown on /billing's plan cards, e.g. "QR table ordering". */
   features: string[];
+  /** Machine-checkable references into src/lib/feature-catalog.ts's FEATURES — what Phase 5's entitlement engine actually gates on. */
+  featureKeys: string[];
+  /** Catalog display order (ascending) — see getActivePlans()/getAllPlansForAdmin() in plans-db.ts. */
+  sortOrder: number;
+  isActive: boolean;
 };
-
-export const PLANS: Plan[] = [
-  {
-    key: "starter",
-    name: "Starter",
-    tagline: "For a single small restaurant, cafe, or momo shop getting started.",
-    priceInPaisaMonthly: 79_900, // Rs 799/mo
-    maxStaff: 5,
-    maxBranches: 1,
-    features: [
-      "QR table ordering",
-      "POS & billing",
-      "Kitchen display (KDS)",
-      "eSewa & Khalti payments",
-      "Up to 5 staff accounts",
-      "1 branch",
-    ],
-  },
-  {
-    key: "growth",
-    name: "Growth",
-    tagline: "For a busy restaurant that needs the full toolkit.",
-    priceInPaisaMonthly: 139_900, // Rs 1,399/mo — see PHASE 25c RECALIBRATION above
-    maxStaff: 15,
-    maxBranches: 3,
-    highlight: true,
-    features: [
-      "Everything in Starter",
-      "Inventory & recipe costing",
-      "Customers & loyalty program",
-      "AI restaurant assistant",
-      "Website builder",
-      "Expense tracking & reports",
-      "Up to 15 staff accounts",
-      "Up to 3 branches",
-    ],
-  },
-  {
-    key: "pro",
-    name: "Pro",
-    tagline: "For established restaurants that want everything, unlimited.",
-    priceInPaisaMonthly: 349_900, // Rs 3,499/mo
-    maxStaff: null,
-    maxBranches: null,
-    features: [
-      "Everything in Growth",
-      "Reservations",
-      "Unlimited staff accounts",
-      "Unlimited branches",
-      "Priority support",
-    ],
-  },
-];
 
 /** Yearly price for a plan — 10x the monthly rate (2 months free), rounded
  * to the nearest rupee. Kept as a function of priceInPaisaMonthly rather
@@ -140,41 +98,16 @@ export function monthlyEquivalentWhenYearlyInPaisa(plan: Plan): number {
   return Math.round(yearlyPriceInPaisa(plan) / 12);
 }
 
-export const PLAN_MAP: Record<PlanKey, Plan> = Object.fromEntries(
-  PLANS.map((p) => [p.key, p]),
-) as Record<PlanKey, Plan>;
-
-export function getPlanByKey(key: string | null | undefined): Plan | null {
-  if (!key) return null;
-  return PLAN_MAP[key as PlanKey] ?? null;
-}
-
 /**
- * The plan a SPECIFIC restaurant is actually being charged — same features
- * and limits as the catalog entry, but with priceInPaisaMonthly overridden
- * to `lockedMonthlyPriceInPaisa` when one is set (see the schema comment
- * on that column: it exists so a catalog price cut/raise, like Growth's
- * Aug 2026 recalibration, never silently changes what an already-active
- * restaurant is billed). Every derived helper here (yearlyPriceInPaisa,
- * monthlyEquivalentWhenYearlyInPaisa) takes a Plan and reads
- * priceInPaisaMonthly, so they automatically respect the lock once called
- * on the object this returns — no separate "locked yearly price" needed.
- *
- * Use this (not getPlanByKey) anywhere a specific restaurant's own current
- * plan/price is being displayed — e.g. the billing page's "you're on
- * Growth at Rs X/mo" line, or a platform admin's restaurant detail view.
- * getPlanByKey/PLANS are still correct for "what would a new signup pay"
- * (the plan-picker grid, the marketing page) — those should always show
- * today's catalog price, never a lock that doesn't apply to them.
+ * Pure price-lock transform, extracted out of the old (DB-backed)
+ * getEffectivePlan so the actual arithmetic stays unit-testable without a
+ * database. See restaurants.lockedMonthlyPriceInPaisa's schema comment for
+ * why this exists (price grandfathering — a catalog price change must
+ * never silently reprice an existing restaurant).
  */
-export function getEffectivePlan(restaurant: {
-  planKey: string | null | undefined;
-  lockedMonthlyPriceInPaisa?: number | null;
-}): Plan | null {
-  const plan = getPlanByKey(restaurant.planKey);
-  if (!plan) return null;
-  if (restaurant.lockedMonthlyPriceInPaisa == null) return plan;
-  return { ...plan, priceInPaisaMonthly: restaurant.lockedMonthlyPriceInPaisa };
+export function applyPriceLock(plan: Plan, lockedMonthlyPriceInPaisa?: number | null): Plan {
+  if (lockedMonthlyPriceInPaisa == null) return plan;
+  return { ...plan, priceInPaisaMonthly: lockedMonthlyPriceInPaisa };
 }
 
 /**
@@ -185,17 +118,6 @@ export function getEffectivePlan(restaurant: {
 export const TRIAL_MAX_STAFF = 10;
 
 /**
- * The staff-seat ceiling that currently applies to a restaurant: its
- * assigned plan's limit once one is set, otherwise the trial default.
- * Returns null for "unlimited" (Pro plan).
- */
-export function maxStaffForRestaurant(restaurant: { planKey: string | null }): number | null {
-  const plan = getPlanByKey(restaurant.planKey);
-  if (!plan) return TRIAL_MAX_STAFF;
-  return plan.maxStaff;
-}
-
-/**
  * Trial default for branches: 2, not 1 — generous enough that a restaurant
  * actually evaluating whether RestroMitra fits a multi-location business can
  * try that during the trial itself, rather than being forced to commit to
@@ -204,14 +126,3 @@ export function maxStaffForRestaurant(restaurant: { planKey: string | null }): n
  * branches are a much bigger structural commitment than a staff seat.)
  */
 export const TRIAL_MAX_BRANCHES = 2;
-
-/**
- * The branch-count ceiling that currently applies to a restaurant: its
- * assigned plan's limit once one is set, otherwise the trial default.
- * Returns null for "unlimited" (Pro plan).
- */
-export function maxBranchesForRestaurant(restaurant: { planKey: string | null }): number | null {
-  const plan = getPlanByKey(restaurant.planKey);
-  if (!plan) return TRIAL_MAX_BRANCHES;
-  return plan.maxBranches;
-}

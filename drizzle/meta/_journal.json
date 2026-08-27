@@ -393,6 +393,13 @@
       "when": 1787858486175,
       "tag": "0055_subscription_paused_status",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1787859743689,
+      "tag": "0056_plan_catalog_table",
+      "breakpoints": true
     }
   ]
 }

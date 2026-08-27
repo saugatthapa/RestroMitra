@@ -66,13 +66,6 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "expired",
 ]);
 
-// Phase 10 — the fixed plan catalog. A code-defined set (src/lib/plans.ts),
-// same "enum, not a table" reasoning as expense_category: pricing/limits
-// change rarely enough that a DB-editable plans table would be more
-// machinery than this app needs before there's even a payment gateway
-// (that's Phase 11's job) to actually charge for one.
-export const planKeyEnum = pgEnum("plan_key", ["starter", "growth", "pro"]);
-
 // Every state transition a restaurant's subscription goes through, logged
 // to subscription_events below — the same ledger-over-mutable-field
 // pattern as payments/stock_movements/loyalty_transactions elsewhere in
@@ -363,6 +356,46 @@ export const mfaBackupCodes = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Platform Control Center (Phase 4) — the plan catalog, moved off the
+// fixed 3-value plan_key enum this table used to be (see git history for
+// the removed planKeyEnum) onto a real, admin-editable table. This is what
+// makes "assign a plan" a data lookup instead of a hardcoded
+// if (plan === "growth") anywhere in the app — see src/lib/plans-db.ts.
+// `key` stays a short slug (e.g. "starter") for readability in code/URLs/
+// audit logs, but is no longer a closed set — a platform admin can add a
+// brand-new plan (a new row) without a schema migration.
+// ---------------------------------------------------------------------------
+
+export const plans = pgTable("plans", {
+  key: varchar("key", { length: 40 }).primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  tagline: text("tagline").notNull(),
+  priceInPaisaMonthly: integer("price_in_paisa_monthly").notNull(),
+  /** null = unlimited. Counts active non-owner staff (see maxStaffForRestaurant in plans-db.ts). */
+  maxStaff: integer("max_staff"),
+  /** null = unlimited. Counts active branches (see maxBranchesForRestaurant in plans-db.ts). */
+  maxBranches: integer("max_branches"),
+  highlight: boolean("highlight").notNull().default(false),
+  // Human marketing copy shown on /billing's plan cards — free text, one
+  // line per bullet. Distinct from featureKeys below (see feature-catalog.ts):
+  // this is what a customer reads; featureKeys is what the entitlement
+  // engine (Phase 5) actually checks against.
+  features: jsonb("features").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  featureKeys: jsonb("feature_keys").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  sortOrder: integer("sort_order").notNull().default(0),
+  // A platform admin retires a plan (stops offering it to new signups /
+  // the assign-plan picker's default view) by turning this off — existing
+  // restaurants already on it are UNAFFECTED (getPlanByKey/getEffectivePlan
+  // resolve a plan by key regardless of isActive; only the "what can a new
+  // signup choose" listing filters on it). Never hard-deleted while any
+  // restaurant still references it — the FK from restaurants.plan_key
+  // enforces that at the DB level (default RESTRICT).
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
 // Tenant root: restaurants + branches
 // ---------------------------------------------------------------------------
 
@@ -398,9 +431,13 @@ export const restaurants = pgTable(
     // to a plan yet (see src/lib/plans.ts's TRIAL_MAX_STAFF for the limits
     // that apply in the meantime). Set once a platform admin assigns/
     // activates a plan (src/app/api/admin/restaurants/[id]/subscription).
-    planKey: planKeyEnum("plan_key"),
+    // Phase 4 — a real FK into the new `plans` table (was a fixed 3-value
+    // enum). Default RESTRICT (no onDelete specified) — a plan currently
+    // assigned to any restaurant can't be hard-deleted out from under it;
+    // retiring a plan is always a soft isActive:false, never a delete.
+    planKey: varchar("plan_key", { length: 40 }).references(() => plans.key),
     // Phase 25c — price grandfathering. Null means "use whatever
-    // src/lib/plans.ts's catalog currently charges for planKey" (the
+    // src/lib/plans-db.ts's catalog currently charges for planKey" (the
     // normal case, including every brand-new plan assignment). Set only
     // when a restaurant was already paying a price the catalog has since
     // moved on from — e.g. the Aug 2026 Growth reprice (Rs 1,799 → Rs
@@ -410,7 +447,7 @@ export const restaurants = pgTable(
     // platform admin makes a fresh assign_plan call (see the admin
     // subscription route) — a new assignment always means "charge
     // whatever the catalog says today," never "keep the old lock." See
-    // src/lib/plans.ts's getEffectivePlan().
+    // src/lib/plans-db.ts's getEffectivePlan().
     lockedMonthlyPriceInPaisa: integer("locked_monthly_price_in_paisa"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -3289,7 +3326,11 @@ export const subscriptionEvents = pgTable(
     eventType: subscriptionEventTypeEnum("event_type").notNull(),
     fromStatus: subscriptionStatusEnum("from_status"),
     toStatus: subscriptionStatusEnum("to_status"),
-    planKey: planKeyEnum("plan_key"),
+    // Phase 4 — plain text, deliberately NOT an FK into `plans`: this is a
+    // historical record ("what plan key was involved in this past event"),
+    // and must stay valid/readable even if that plan is later renamed or
+    // (in the rare case nothing references it anymore) removed.
+    planKey: varchar("plan_key", { length: 40 }),
     note: text("note"),
     performedByUserId: uuid("performed_by_user_id").references(() => users.id, {
       onDelete: "set null",

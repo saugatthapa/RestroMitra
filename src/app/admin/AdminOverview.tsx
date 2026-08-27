@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiGet, ApiError } from "@/lib/api-client";
 import { SUBSCRIPTION_STATUSES, SUBSCRIPTION_STATUS_LABELS, type SubscriptionStatus } from "@/lib/subscription";
-import { getPlanByKey } from "@/lib/plans";
 
 type AdminRestaurant = {
   id: string;
@@ -14,6 +13,10 @@ type AdminRestaurant = {
   subscriptionStatus: SubscriptionStatus;
   trialEndsAt: string | null;
   planKey: string | null;
+  // Phase 4 — resolved server-side (the plan catalog is DB-backed now, and
+  // this is a client component that can't hit the DB itself); see the
+  // /api/admin/restaurants route.
+  planName: string | null;
   isActive: boolean;
   createdAt: string;
   owner: { fullName: string; phone: string } | null;
@@ -158,7 +161,7 @@ export function AdminOverview() {
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-neutral-600">{getPlanByKey(r.planKey)?.name ?? "—"}</td>
+                <td className="px-4 py-3 text-neutral-600">{r.planName ?? "—"}</td>
                 <td className="px-4 py-3 text-neutral-500">
                   {r.trialEndsAt
                     ? new Date(r.trialEndsAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })

@@ -5,7 +5,7 @@ import { branches, restaurants } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { createBranchSchema } from "@/lib/validation/branches";
-import { maxBranchesForRestaurant } from "@/lib/plans";
+import { maxBranchesForRestaurant } from "@/lib/plans-db";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 
@@ -67,7 +67,7 @@ export async function POST(
       .from(restaurants)
       .where(eq(restaurants.id, restaurantId))
       .limit(1);
-    const maxBranches = maxBranchesForRestaurant(restaurantRow ?? { planKey: null });
+    const maxBranches = await maxBranchesForRestaurant(restaurantRow ?? { planKey: null });
     if (maxBranches !== null) {
       const [branchCountRow] = await db
         .select({ n: count() })

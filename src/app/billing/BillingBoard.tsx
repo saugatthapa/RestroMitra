@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiPost, ApiError } from "@/lib/api-client";
 import {
-  PLANS,
   yearlyPriceInPaisa,
   monthlyEquivalentWhenYearlyInPaisa,
   type Plan,
@@ -16,11 +15,17 @@ type BillingInfo = {
   trialEndsAt: string | null;
   planKey: PlanKey | null;
   // The plan this restaurant is ACTUALLY being charged — same features as
-  // the matching PLANS entry, but its priceInPaisaMonthly may be locked to
-  // an older rate (see getEffectivePlan() in lib/plans.ts). Only trust
-  // this for "what am I currently paying" — for "what would a new/switched
-  // plan cost," the live PLANS catalog below is the correct source.
+  // the matching `plans` entry, but its priceInPaisaMonthly may be locked
+  // to an older rate (see getEffectivePlan() in lib/plans-db.ts). Only
+  // trust this for "what am I currently paying" — for "what would a
+  // new/switched plan cost," the live `plans` catalog below is the correct
+  // source.
   plan: Plan | null;
+  // Phase 4 — the plan catalog is DB-backed now; a client component can't
+  // hit the DB itself, so the billing API hands over the active catalog
+  // (see /api/restaurants/[slug]/billing) instead of this importing a
+  // static PLANS array.
+  plans: Plan[];
   access: { allowed: boolean; reason: string };
   canManageSubscription: boolean;
   events: {
@@ -142,7 +147,7 @@ export function BillingBoard({ slug }: { slug: string }) {
             )}
             {data.subscriptionStatus === "active" && data.planKey && (
               <p className="mt-1 text-sm text-neutral-600">
-                You&apos;re on the {PLANS.find((p) => p.key === data.planKey)?.name} plan
+                You&apos;re on the {data.plan?.name ?? data.plans.find((p) => p.key === data.planKey)?.name} plan
                 {data.plan && ` at ${formatRupees(data.plan.priceInPaisaMonthly)}/mo`}.
               </p>
             )}
@@ -206,7 +211,7 @@ export function BillingBoard({ slug }: { slug: string }) {
         </div>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {PLANS.map((plan) => {
+        {data.plans.map((plan) => {
           const isCurrent = data.planKey === plan.key && data.subscriptionStatus === "active";
           const alreadyRequested = requestedPlans.has(plan.key);
           // Current plan: show what this restaurant is ACTUALLY paying

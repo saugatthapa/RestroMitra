@@ -7,6 +7,7 @@ import { PLATFORM_PERMISSIONS } from "@/lib/rbac/platform-permissions";
 import { parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { adminSubscriptionActionSchema } from "@/lib/validation/subscription";
 import { recordSubscriptionEvent } from "@/lib/subscription-db";
+import { getPlanByKey } from "@/lib/plans-db";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 
@@ -47,6 +48,20 @@ export async function PATCH(
     const parsed = await parseJsonBody(request, adminSubscriptionActionSchema);
     if (!parsed.ok) return parsed.response;
     const body = parsed.data;
+
+    // Phase 4 — planKey is no longer a closed enum the schema can validate
+    // at parse time (a platform admin can add a new plan from /admin/plans
+    // without a code change), so "does this key actually exist" is now a
+    // DB check here instead. Deliberately allows an inactive/retired plan
+    // to be assigned — an admin might legitimately need to put a
+    // restaurant back on a grandfathered plan; isActive only gates what a
+    // NEW signup is offered, never an admin's own assignment.
+    if (body.action === "assign_plan") {
+      const plan = await getPlanByKey(body.planKey);
+      if (!plan) {
+        return NextResponse.json({ error: "Unknown plan." }, { status: 400 });
+      }
+    }
 
     const fromStatus = existing.subscriptionStatus;
     let toStatus = fromStatus;

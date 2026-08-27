@@ -6,6 +6,7 @@ import { requirePlatformPermission } from "@/lib/rbac/guard";
 import { PLATFORM_PERMISSIONS } from "@/lib/rbac/platform-permissions";
 import { toErrorResponse } from "@/lib/api-route-helpers";
 import { SUBSCRIPTION_STATUSES } from "@/lib/subscription";
+import { getAllPlansForAdmin } from "@/lib/plans-db";
 
 const LIST_LIMIT = 200;
 
@@ -76,10 +77,19 @@ export async function GET(request: Request) {
         : [];
     const ownerByRestaurant = new Map(owners.map((o) => [o.restaurantId, o]));
 
+    // Phase 4 — the list used to embed a static PLANS lookup client-side;
+    // the catalog is DB-backed now, so this route resolves plan names
+    // server-side instead. getAllPlansForAdmin (not getActivePlans) so a
+    // restaurant on a since-retired plan still shows its actual name
+    // rather than "—".
+    const allPlans = await getAllPlansForAdmin();
+    const planNameByKey = new Map(allPlans.map((p) => [p.key, p.name]));
+
     return NextResponse.json({
       restaurants: rows.map((r) => ({
         ...r,
         owner: ownerByRestaurant.get(r.id) ?? null,
+        planName: r.planKey ? (planNameByKey.get(r.planKey) ?? r.planKey) : null,
       })),
     });
   } catch (err) {

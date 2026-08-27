@@ -4,6 +4,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { upgradeRequestSchema } from "@/lib/validation/subscription";
 import { recordSubscriptionEvent } from "@/lib/subscription-db";
+import { getPlanByKey } from "@/lib/plans-db";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 
@@ -37,6 +38,16 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, upgradeRequestSchema);
     if (!parsed.ok) return parsed.response;
+
+    // Phase 4 — planKey is no longer a closed enum the schema validates at
+    // parse time, so check it against the DB here. Active only — this is
+    // an owner picking from what's currently offered, unlike the platform
+    // admin's own assign_plan action, which may legitimately need to put a
+    // restaurant back on a retired/grandfathered plan.
+    const requestedPlan = await getPlanByKey(parsed.data.planKey);
+    if (!requestedPlan || !requestedPlan.isActive) {
+      return NextResponse.json({ error: "Unknown plan." }, { status: 400 });
+    }
 
     await db.transaction(async (tx) => {
       await recordSubscriptionEvent(tx, {
