@@ -163,9 +163,14 @@ function CustomerList({
           placeholder="Search by name or phone…"
           className="input sm:max-w-xs"
         />
-        <button onClick={() => setShowAdd((v) => !v)} className="btn-primary">
-          {showAdd ? "Cancel" : "+ Add customer"}
-        </button>
+        <div className="flex gap-2">
+          <a href={`${base(slug)}/customers/export`} download className="btn-secondary text-xs">
+            Export CSV
+          </a>
+          <button onClick={() => setShowAdd((v) => !v)} className="btn-primary">
+            {showAdd ? "Cancel" : "+ Add customer"}
+          </button>
+        </div>
       </div>
 
       {showAdd && (

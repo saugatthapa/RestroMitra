@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import { db, type Transaction } from "@/db";
 import { ledgerEntries } from "@/db/schema";
 import { HttpError } from "@/lib/http-error";
@@ -507,6 +507,35 @@ export async function getCustomerOutstandingBalance(
       ),
     );
   return Number(row?.outstandingInPaisa ?? 0);
+}
+
+/**
+ * Commercial completion pass — Data Export gap (customers CSV export needed
+ * this same figure for every customer at once). Same math as
+ * getCustomerOutstandingBalance above, just grouped by customerId in one
+ * query instead of one query per customer — an export can plausibly cover
+ * this restaurant's entire customer base, and N+1 queries against it would
+ * scale badly.
+ */
+export async function getCustomerOutstandingBalancesByRestaurant(
+  restaurantId: string,
+): Promise<Map<string, number>> {
+  const rows = await db
+    .select({
+      customerId: ledgerEntries.customerId,
+      outstandingInPaisa: sql<string>`coalesce(sum(${ledgerEntries.amountInPaisa} - ${ledgerEntries.settledAmountInPaisa}), 0)`,
+    })
+    .from(ledgerEntries)
+    .where(
+      and(
+        eq(ledgerEntries.restaurantId, restaurantId),
+        eq(ledgerEntries.dueStatus, "outstanding"),
+        eq(ledgerEntries.isVoided, false),
+        isNotNull(ledgerEntries.customerId),
+      ),
+    )
+    .groupBy(ledgerEntries.customerId);
+  return new Map(rows.map((r) => [r.customerId as string, Number(r.outstandingInPaisa)]));
 }
 
 /**

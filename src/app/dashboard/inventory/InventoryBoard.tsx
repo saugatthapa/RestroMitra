@@ -244,7 +244,10 @@ function ItemsTab({ slug, canViewProfit }: { slug: string; canViewProfit: boolea
     <div className="space-y-4">
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <a href={`${base(slug)}/inventory-items/export`} download className="btn-secondary text-xs">
+          Export CSV
+        </a>
         <button onClick={() => setShowCreate((v) => !v)} className="btn-primary">
           {showCreate ? "Cancel" : "+ New item"}
         </button>
@@ -778,7 +781,10 @@ function SuppliersTab({ slug }: { slug: string }) {
     <div className="space-y-4">
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <a href={`${base(slug)}/suppliers/export`} download className="btn-secondary text-xs">
+          Export CSV
+        </a>
         <button onClick={() => setShowCreate((v) => !v)} className="btn-primary">
           {showCreate ? "Cancel" : "+ New supplier"}
         </button>
