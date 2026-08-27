@@ -4,7 +4,7 @@ Companion to `RELEASE_READINESS.md` / `FINAL_RELEASE_AUDIT.md` (the pilot-readin
 
 ```text
 Baseline commit:  891bb74d21d5a6f95bc05a3809fdb56ad948d8ba  (RELEASE_READINESS.md snapshot)
-Final commit:     83b7eef6e3bdbf390a03ba57cf0a51c082eb5b21
+Final commit:     83b7eef6e3bdbf390a03ba57cf0a51c082eb5b21  (Phase A/B pass, described below)
 Commits in pass:  20 (Phase A.1–A.8, Phase B.1–B.9)
 Tests:            905 passing (111 files) — up from 696 (92 files) at baseline
 E2E:              5/5 passing (owner-login, qr-order, reservations, staff-order-management)
@@ -15,6 +15,19 @@ npm audit:        3 high (sharp/postcss, transitive via next@15.5.23's own tree)
                    breaking Next 16 upgrade, deferred; same finding RELEASE_READINESS.md already
                    carried at baseline, unchanged by this pass
 ```
+
+## Update — Commercial Completion Pass (see current commit)
+
+A later engagement window (multiple "hardening"/"QA" passes, then this one) closed out the P2 backlog this report's own "Remaining gaps" section below used to list, and — per its own governing prompt's explicit instruction to verify against actual current code rather than trust any prior report, including this one — re-checked every P1 feature this document claims below. Verdict: **every claim in this document below held up against direct code inspection**, with one exception, now also closed:
+
+- **Payroll payslip generation** — the one gap this report's "Remaining gaps" section originally and honestly flagged as *not* built. It's built now: `src/lib/payslip.ts`, `GET .../payroll/payments/[paymentId]/payslip`, a printable `/print/payslip/[paymentId]` page, and an optional itemized-deductions field on the pay form (`payrollPayments.deductionsJson`). Deliberately still **not** a statutory (PF/SSF/TDS) calculator — a payslip shows gross/deductions/net from manually-entered figures, per this project's standing instruction not to invent Nepal tax rules. The "Payroll" scorecard row below is now **Ready**, not Partial.
+- **Data export** was scoped to ledger/reconciliation only (B.5, below) — CSV export is now also available for inventory items, suppliers, customers, and the staff roster (permission-gated identically to each resource's own list view; staff export deliberately excludes salary figures, preserving the same privacy boundary payroll data already has).
+- **Order Performance reporting** (B.1, below) covered stage durations and cancellation stats but not table-turn-time or per-staff throughput — both added to `getOrderPerformanceStats`, the Reports dashboard, and the AI assistant's data view.
+- A security/concurrency self-review of everything touched in this pass found and fixed a CSV/formula-injection gap in `src/lib/csv.ts` (pre-existing, now closed for every export route — old and new) and added a missing row cap on the new staff export.
+- `npm audit` — `sharp` (see the finding this report's own table lists below) is now fixed non-breaking (`npm audit fix`, no `next` version change). The `postcss`/Next-16 finding is unchanged and still deferred for the same reason stated below; a separate, newly-surfaced `esbuild`/`drizzle-kit` **dev-server-only** moderate finding is also deferred (fix requires downgrading `drizzle-kit`, not appropriate to force unattended).
+- Current test count: **985 passing (125 files)** — up from the 905/111 this report originally recorded, and further still from the 696/92 baseline the *stale* copy of this claim (circulated outside this repository) kept citing. E2E could not be re-run to completion in this particular sandbox (Playwright's Chromium launch was repeatedly OOM-killed here — a sandbox resource constraint documented in `.github/workflows/ci.yml`'s own comments, not a code regression); it runs for real in CI against GitHub-hosted runners on every push to `main`.
+
+Everything below this line is the **original** Phase A/B report, left as written — it's what the verification pass above checked against and confirmed, not what it superseded.
 
 ## Scope and honesty note (Section 66)
 

@@ -1,5 +1,7 @@
 # RestroMitra — Release Readiness Scorecard
 
+> **Historical snapshot, superseded.** This scorecard is frozen as of commit `891bb74` (below) — a point-in-time pilot-readiness audit, kept as-is for its own historical record rather than rewritten. Its "Not built"/"Partial" rows (table management, cash register, EOD closing, supplier dues, payroll, data export, forgot-password/MFA — rows 10–17) describe that commit, **not the current codebase** — every one of them has since shipped; see `FINAL_COMMERCIAL_READINESS.md` (which explicitly picks up from this document) for what closed them and the current commercial-readiness verdict. Don't cite this file's scorecard as today's feature status.
+
 Companion document to `FINAL_RELEASE_AUDIT.md` (the full findings) — this is the condensed scorecard and the explicit pilot/commercial-readiness answers the release-candidate review process requires.
 
 ```text
