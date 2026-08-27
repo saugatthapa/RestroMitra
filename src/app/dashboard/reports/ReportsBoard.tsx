@@ -100,6 +100,9 @@ type ReportSummary = {
     cancellationRatePercent: number;
     avgMinutesBeforeCancellation: number | null;
     cancellationReasons: { reason: string; count: number }[];
+    /** Commercial completion pass — Order Performance Analytics gap. */
+    avgTableTurnMinutes: number | null;
+    staffThroughput: { userId: string; staffName: string; completedOrders: number; revenueInPaisa: number }[];
   };
 };
 
@@ -685,6 +688,13 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
                   icon={<StatIcon.Clock />}
                   color="amber"
                 />
+                <IconStatTile
+                  label="Avg. table turn time"
+                  value={formatMinutes(data.orderPerformance.avgTableTurnMinutes)}
+                  note="Dine-in: seated → cleared"
+                  icon={<StatIcon.Table />}
+                  color="blue"
+                />
               </div>
 
               {data.orderPerformance.cancellationReasons.length > 0 && (
@@ -697,6 +707,24 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
                       <li key={r.reason} className="flex items-center justify-between">
                         <span>{r.reason}</span>
                         <span className="font-medium text-neutral-900">{r.count}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {data.orderPerformance.staffThroughput.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500">
+                    Staff throughput (orders completed)
+                  </p>
+                  <ul className="space-y-1 text-sm text-neutral-700">
+                    {data.orderPerformance.staffThroughput.map((s) => (
+                      <li key={s.userId} className="flex items-center justify-between">
+                        <span>{s.staffName}</span>
+                        <span className="font-medium text-neutral-900">
+                          {s.completedOrders} orders · {paisaToRupeesLabel(s.revenueInPaisa)}
+                        </span>
                       </li>
                     ))}
                   </ul>

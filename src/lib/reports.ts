@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, lt, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, lt, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db, type Database, type Transaction } from "@/db";
 import {
@@ -13,6 +13,7 @@ import {
   inventoryItems,
   stockMovements,
   orderStatusHistory,
+  users,
 } from "@/db/schema";
 import type { WasteReasonValue } from "@/lib/waste-reasons";
 import {
@@ -588,6 +589,23 @@ async function getStageDuration(
 
 export type CancellationReasonRow = { reason: string; count: number };
 
+/**
+ * Commercial completion pass — Order Performance Analytics gap (the P1
+ * verification pass found stage-duration/cancellation analytics already
+ * built, but no table-turn-time or per-staff throughput). One row per
+ * staff member who completed at least one order in range — ordered by
+ * completedOrders desc, capped so a restaurant with a large/high-turnover
+ * roster can't return an unbounded list.
+ */
+export type StaffThroughputRow = {
+  userId: string;
+  staffName: string;
+  completedOrders: number;
+  revenueInPaisa: number;
+};
+
+const STAFF_THROUGHPUT_LIMIT = 50;
+
 export type OrderPerformanceStats = {
   /** In stage order: pending->confirmed, confirmed->preparing, preparing->ready, ready->served, served->completed. */
   stageDurations: OrderStageDurationRow[];
@@ -598,6 +616,15 @@ export type OrderPerformanceStats = {
   avgMinutesBeforeCancellation: number | null;
   /** Most-cancelled reason first. "No reason given" groups every cancellation with a null reason. */
   cancellationReasons: CancellationReasonRow[];
+  /**
+   * Average minutes from placedAt to the ->completed transition, for
+   * dine-in orders only (orders.tableId IS NOT NULL) — "how long a table
+   * was occupied by one dining party," the standard restaurant meaning of
+   * table-turn time. Null when no dine-in order completed in range.
+   */
+  avgTableTurnMinutes: number | null;
+  /** Which staff member completed how many orders (and how much revenue), most-active first. */
+  staffThroughput: StaffThroughputRow[];
 };
 
 export async function getOrderPerformanceStats(
@@ -611,7 +638,8 @@ export async function getOrderPerformanceStats(
 
   const branchFilter = branchId ? [eq(orders.branchId, branchId)] : [];
 
-  const [stageDurations, [totalRow], [cancelledRow], [cancelledAvgRow], reasonRows] = await Promise.all([
+  const [stageDurations, [totalRow], [cancelledRow], [cancelledAvgRow], reasonRows, [tableTurnRow], staffRows] =
+    await Promise.all([
     Promise.all(
       ORDER_STAGE_PAIRS.map(([from, to]) =>
         getStageDuration(restaurantId, from, to, dayStart, dayAfterEnd, branchId, dbOrTx),
@@ -673,6 +701,52 @@ export async function getOrderPerformanceStats(
       )
       .groupBy(sql`1`)
       .orderBy(desc(sql`count(*)`)),
+    // Table-turn time: placedAt -> ->completed transition, dine-in orders
+    // only (tableId IS NOT NULL). Same shape as the cancellation-avg query
+    // above, just scoped to toStatus "completed" and dine-in.
+    dbOrTx
+      .select({
+        avgMinutes: sql<string | null>`avg(extract(epoch from (${orderStatusHistory.changedAt} - ${orders.placedAt})) / 60)`,
+      })
+      .from(orderStatusHistory)
+      .innerJoin(orders, eq(orderStatusHistory.orderId, orders.id))
+      .where(
+        and(
+          eq(orderStatusHistory.restaurantId, restaurantId),
+          eq(orderStatusHistory.toStatus, "completed"),
+          isNotNull(orders.tableId),
+          gte(orders.placedAt, dayStart),
+          lt(orders.placedAt, dayAfterEnd),
+          ...branchFilter,
+        ),
+      ),
+    // Per-staff throughput: who actually clicked "completed," how many
+    // times, and what revenue those orders represent. changedByUserId is
+    // nullable (a completion with no attributable actor, e.g. a very old
+    // pre-audit row) — excluded via the inner join to users rather than
+    // shown as a misleading "unknown staff" bucket.
+    dbOrTx
+      .select({
+        userId: orderStatusHistory.changedByUserId,
+        staffName: users.fullName,
+        completedOrders: sql<string>`count(*)`,
+        revenueInPaisa: sql<string>`coalesce(sum(${orders.totalInPaisa}), 0)`,
+      })
+      .from(orderStatusHistory)
+      .innerJoin(orders, eq(orderStatusHistory.orderId, orders.id))
+      .innerJoin(users, eq(orderStatusHistory.changedByUserId, users.id))
+      .where(
+        and(
+          eq(orderStatusHistory.restaurantId, restaurantId),
+          eq(orderStatusHistory.toStatus, "completed"),
+          gte(orders.placedAt, dayStart),
+          lt(orders.placedAt, dayAfterEnd),
+          ...branchFilter,
+        ),
+      )
+      .groupBy(orderStatusHistory.changedByUserId, users.fullName)
+      .orderBy(desc(sql`count(*)`))
+      .limit(STAFF_THROUGHPUT_LIMIT),
   ]);
 
   const total = Number(totalRow?.count ?? 0);
@@ -684,6 +758,15 @@ export async function getOrderPerformanceStats(
     cancellationRatePercent: total > 0 ? Math.round((cancelledCount / total) * 10000) / 100 : 0,
     avgMinutesBeforeCancellation: minutesOrNull(cancelledAvgRow?.avgMinutes),
     cancellationReasons: reasonRows.map((r) => ({ reason: r.reason, count: Number(r.count) })),
+    avgTableTurnMinutes: minutesOrNull(tableTurnRow?.avgMinutes),
+    staffThroughput: staffRows
+      .filter((r): r is typeof r & { userId: string } => r.userId !== null)
+      .map((r) => ({
+        userId: r.userId,
+        staffName: r.staffName,
+        completedOrders: Number(r.completedOrders),
+        revenueInPaisa: Number(r.revenueInPaisa),
+      })),
   };
 }
 

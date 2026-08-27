@@ -30,6 +30,8 @@ describe.skipIf(!hasDb)("Order status history + performance (integration)", () =
   let branchId: string;
   let branchBId: string;
   let userId: string;
+  let userId2: string;
+  let tableId: string;
   let generateOrderNumber: (timezone: string) => string;
 
   const RANGE = { from: "2026-07-01", to: "2026-07-07" };
@@ -73,6 +75,18 @@ describe.skipIf(!hasDb)("Order status history + performance (integration)", () =
       .values({ fullName: "TEST Order Perf User", phone: `976${suffix}`, passwordHash: "x" })
       .returning({ id: schema.users.id });
     userId = user.id;
+
+    const [user2] = await db
+      .insert(schema.users)
+      .values({ fullName: "TEST Order Perf User Two", phone: `977${suffix}`, passwordHash: "x" })
+      .returning({ id: schema.users.id });
+    userId2 = user2.id;
+
+    const [table] = await db
+      .insert(schema.restaurantTables)
+      .values({ restaurantId, branchId, name: "T1", qrToken: `test-table-token-${suffix}` })
+      .returning({ id: schema.restaurantTables.id });
+    tableId = table.id;
   });
 
   afterAll(async () => {
@@ -84,18 +98,26 @@ describe.skipIf(!hasDb)("Order status history + performance (integration)", () =
     await db.delete(schema.restaurants).where(eq(schema.restaurants.id, otherRestaurantId));
   });
 
-  async function createOrder(params: { targetRestaurantId: string; targetBranchId: string; placedAt: Date; status?: string }) {
+  async function createOrder(params: {
+    targetRestaurantId: string;
+    targetBranchId: string;
+    placedAt: Date;
+    status?: string;
+    tableId?: string | null;
+    totalInPaisa?: number;
+  }) {
     const [order] = await db
       .insert(schema.orders)
       .values({
         restaurantId: params.targetRestaurantId,
         branchId: params.targetBranchId,
+        tableId: params.tableId ?? null,
         orderNumber: generateOrderNumber(TZ),
         source: "pos",
         status: (params.status ?? "pending") as typeof schema.orders.$inferInsert.status,
-        subtotalInPaisa: 10_000,
+        subtotalInPaisa: params.totalInPaisa ?? 10_000,
         taxInPaisa: 0,
-        totalInPaisa: 10_000,
+        totalInPaisa: params.totalInPaisa ?? 10_000,
         placedAt: params.placedAt,
       })
       .returning({ id: schema.orders.id });
@@ -109,13 +131,14 @@ describe.skipIf(!hasDb)("Order status history + performance (integration)", () =
     toStatus: string,
     changedAt: Date,
     reason?: string | null,
+    changedByUserId?: string | null,
   ) {
     await db.insert(schema.orderStatusHistory).values({
       restaurantId: targetRestaurantId,
       orderId,
       fromStatus: fromStatus as typeof schema.orderStatusHistory.$inferInsert.fromStatus,
       toStatus: toStatus as typeof schema.orderStatusHistory.$inferInsert.toStatus,
-      changedByUserId: userId,
+      changedByUserId: changedByUserId === undefined ? userId : changedByUserId,
       reason: reason ?? null,
       changedAt,
     });
@@ -246,5 +269,90 @@ describe.skipIf(!hasDb)("Order status history + performance (integration)", () =
     expect(stats.cancellationRatePercent).toBe(0);
     expect(stats.avgMinutesBeforeCancellation).toBeNull();
     expect(stats.cancellationReasons).toHaveLength(0);
+    expect(stats.avgTableTurnMinutes).toBeNull();
+    expect(stats.staffThroughput).toHaveLength(0);
+  });
+
+  // Commercial completion pass — Order Performance Analytics gap (P1
+  // verification found stage-duration/cancellation analytics already
+  // built, but no table-turn-time or per-staff throughput).
+  it("table turn time: averages placedAt->completed for dine-in orders only, takeout excluded", async () => {
+    const range = { from: "2026-07-08", to: "2026-07-08" };
+
+    // Dine-in, 20 min turn.
+    const dineIn1 = await createOrder({
+      targetRestaurantId: restaurantId,
+      targetBranchId: branchId,
+      placedAt: new Date("2026-07-08T12:00:00Z"),
+      tableId,
+    });
+    await insertHistory(dineIn1, restaurantId, "served", "completed", new Date("2026-07-08T12:20:00Z"));
+
+    // Dine-in, 40 min turn.
+    const dineIn2 = await createOrder({
+      targetRestaurantId: restaurantId,
+      targetBranchId: branchId,
+      placedAt: new Date("2026-07-08T13:00:00Z"),
+      tableId,
+    });
+    await insertHistory(dineIn2, restaurantId, "served", "completed", new Date("2026-07-08T13:40:00Z"));
+
+    // Takeout (no table) — must NOT count toward table-turn time even
+    // though it completed in 5 min, which would otherwise pull the
+    // average down.
+    const takeout = await createOrder({
+      targetRestaurantId: restaurantId,
+      targetBranchId: branchId,
+      placedAt: new Date("2026-07-08T14:00:00Z"),
+      tableId: null,
+    });
+    await insertHistory(takeout, restaurantId, "served", "completed", new Date("2026-07-08T14:05:00Z"));
+
+    const stats = await reports.getOrderPerformanceStats(restaurantId, range, TZ, branchId);
+    expect(stats.avgTableTurnMinutes).toBe(30); // (20+40)/2, takeout excluded
+  });
+
+  it("staff throughput: counts completed orders and revenue per staff member who completed them, most-active first", async () => {
+    const range = { from: "2026-07-09", to: "2026-07-09" };
+
+    const orderA = await createOrder({
+      targetRestaurantId: restaurantId,
+      targetBranchId: branchId,
+      placedAt: new Date("2026-07-09T10:00:00Z"),
+      totalInPaisa: 500_00,
+    });
+    await insertHistory(orderA, restaurantId, "served", "completed", new Date("2026-07-09T10:10:00Z"), null, userId);
+
+    const orderB = await createOrder({
+      targetRestaurantId: restaurantId,
+      targetBranchId: branchId,
+      placedAt: new Date("2026-07-09T11:00:00Z"),
+      totalInPaisa: 300_00,
+    });
+    await insertHistory(orderB, restaurantId, "served", "completed", new Date("2026-07-09T11:10:00Z"), null, userId);
+
+    const orderC = await createOrder({
+      targetRestaurantId: restaurantId,
+      targetBranchId: branchId,
+      placedAt: new Date("2026-07-09T12:00:00Z"),
+      totalInPaisa: 200_00,
+    });
+    await insertHistory(orderC, restaurantId, "served", "completed", new Date("2026-07-09T12:10:00Z"), null, userId2);
+
+    const stats = await reports.getOrderPerformanceStats(restaurantId, range, TZ, branchId);
+    expect(stats.staffThroughput).toHaveLength(2);
+    // Most-active first: userId completed 2 orders, userId2 completed 1.
+    expect(stats.staffThroughput[0]).toMatchObject({
+      userId,
+      staffName: "TEST Order Perf User",
+      completedOrders: 2,
+      revenueInPaisa: 800_00,
+    });
+    expect(stats.staffThroughput[1]).toMatchObject({
+      userId: userId2,
+      staffName: "TEST Order Perf User Two",
+      completedOrders: 1,
+      revenueInPaisa: 200_00,
+    });
   });
 });

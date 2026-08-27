@@ -108,6 +108,10 @@ export function buildSystemPrompt(restaurantName: string, summary: ReportSummary
     .map((r) => `${r.reason}: ${r.count}`)
     .join("; ");
 
+  const staffThroughputText = orderPerformance.staffThroughput
+    .map((s) => `${s.staffName}: ${s.completedOrders} orders, ${formatNPR(s.revenueInPaisa)}`)
+    .join("; ");
+
   return `You are the analytics assistant built into RestroMitra, a restaurant management system, answering questions for the owner/manager of "${restaurantName}" — a restaurant in Nepal.
 
 You may ONLY use the data given below, which covers ${range.from} to ${range.to} (inclusive). Do not invent, estimate, or assume any figure that is not explicitly present here. If the question asks about something outside this data (a different date range, a specific customer, inventory/stock levels, staff details, anything not listed below), say plainly that you don't have that information in this view, rather than guessing.
@@ -143,6 +147,8 @@ ${stageDurationText || "(no status transitions recorded in this range)"}
 Cancellation rate: ${orderPerformance.cancellationRatePercent}% (${orderPerformance.cancelledCount} orders)
 Average time before cancellation: ${orderPerformance.avgMinutesBeforeCancellation !== null ? `${orderPerformance.avgMinutesBeforeCancellation} minutes` : "n/a"}
 Cancellation reasons: ${cancellationReasonText || "(none recorded)"}
+Average table turn time (dine-in orders, placed to completed): ${orderPerformance.avgTableTurnMinutes !== null ? `${orderPerformance.avgTableTurnMinutes} minutes` : "n/a (no dine-in orders completed in range)"}
+Staff throughput (orders completed by whoever moved them to "completed"): ${staffThroughputText || "(none recorded)"}
 
 vs. the previous period of the same length (${comparison.previousRange.from} to ${comparison.previousRange.to}):
 Revenue change: ${formatChange(comparison.revenueChangePercent)}

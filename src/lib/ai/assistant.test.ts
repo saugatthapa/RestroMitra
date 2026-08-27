@@ -112,6 +112,8 @@ const sampleSummary: ReportSummary = {
     cancellationRatePercent: 6.98,
     avgMinutesBeforeCancellation: 5,
     cancellationReasons: [{ reason: "Customer changed mind", count: 2 }, { reason: "No reason given", count: 1 }],
+    avgTableTurnMinutes: 42,
+    staffThroughput: [{ userId: "user-1", staffName: "TEST Waiter", completedOrders: 20, revenueInPaisa: 2_000_00 }],
   },
 };
 
@@ -203,6 +205,8 @@ describe("buildSystemPrompt", () => {
         cancellationRatePercent: 0,
         avgMinutesBeforeCancellation: null,
         cancellationReasons: [],
+        avgTableTurnMinutes: null,
+        staffThroughput: [],
       },
     };
     const prompt = buildSystemPrompt("Restaurant", empty);
