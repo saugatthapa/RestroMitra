@@ -1,12 +1,13 @@
 import "server-only";
-import { eq, and, inArray, desc } from "drizzle-orm";
+import { eq, and, inArray, desc, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { userRoles, rolePermissions, restaurants, branches } from "@/db/schema";
+import { userRoles, rolePermissions, restaurants, branches, users } from "@/db/schema";
 import { getSession, type SessionContext } from "@/lib/auth/session";
 import { HttpError } from "@/lib/http-error";
 import { reconcileSubscriptionStatus } from "@/lib/subscription-db";
 import type { AccessReason } from "@/lib/subscription";
 import type { PermissionKey } from "./permissions";
+import { roleHasPlatformPermission, type PlatformPermissionKey } from "./platform-permissions";
 
 export class AuthError extends HttpError {
   constructor(message: string, status = 401) {
@@ -41,6 +42,18 @@ export async function requireAuth(): Promise<SessionContext> {
   return session;
 }
 
+/**
+ * True for either of the two full-access platform-role tiers
+ * (platform_admin, super_admin — see platform-permissions.ts's own doc
+ * comment on why there are two). Kept as a boolean, role-only check — no
+ * MFA condition here — because this function is also the tenant-access
+ * bypass inside requireRestaurantAccess() below, and mixing an MFA
+ * requirement into that would silently change every tenant-scoped route's
+ * behavior for platform admins, not just the platform console's own
+ * routes. MFA enforcement for platform access lives specifically in
+ * requirePlatformAdmin()/requirePlatformPermission() instead — the two
+ * entry points that actually gate the platform console and its API.
+ */
 export async function isPlatformAdmin(userId: string): Promise<boolean> {
   const rows = await db
     .select({ id: userRoles.id })
@@ -48,7 +61,7 @@ export async function isPlatformAdmin(userId: string): Promise<boolean> {
     .where(
       and(
         eq(userRoles.userId, userId),
-        eq(userRoles.role, "platform_admin"),
+        inArray(userRoles.role, ["platform_admin", "super_admin"]),
         eq(userRoles.isActive, true),
       ),
     )
@@ -57,17 +70,91 @@ export async function isPlatformAdmin(userId: string): Promise<boolean> {
 }
 
 /**
+ * Every ACTIVE platform-scoped role grant (restaurantId IS NULL) this user
+ * holds — a user can hold more than one concurrently (see schema.ts's
+ * user_roles_one_active_per_restaurant_unique index, which deliberately
+ * excludes restaurantId IS NULL rows), e.g. someone might be both
+ * billing_admin and support_admin. Returns role strings, not booleans, so
+ * callers can check them against roleHasPlatformPermission for a specific
+ * permission.
+ */
+export async function getActivePlatformRoles(userId: string): Promise<string[]> {
+  const rows = await db
+    .select({ role: userRoles.role })
+    .from(userRoles)
+    .where(
+      and(
+        eq(userRoles.userId, userId),
+        isNull(userRoles.restaurantId),
+        eq(userRoles.isActive, true),
+      ),
+    );
+  return rows.map((r) => r.role);
+}
+
+/**
+ * Platform Control Center (Phase 1) — every platform role requires MFA to
+ * actually be enabled, not just requested. The blast radius of any
+ * platform role (even the narrowest, platform_viewer, can read every
+ * tenant's data) is high enough that this is enforced at the point of
+ * access rather than left as a setting someone might not have turned on.
+ * Throws a distinct, actionable message rather than a generic 403 so the
+ * platform layout/routes can surface "go enable MFA" rather than a bare
+ * "access denied".
+ */
+async function requirePlatformMfaEnabled(userId: string): Promise<void> {
+  const [row] = await db
+    .select({ mfaEnabled: users.mfaEnabled })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!row?.mfaEnabled) {
+    throw new AuthError(
+      "MFA is required for platform access. Enable multi-factor authentication in your account settings, then retry.",
+      403,
+    );
+  }
+}
+
+/**
  * Fails closed for any endpoint that operates across every tenant (the
  * platform admin console) rather than within one restaurant's scope —
  * distinct from requireRestaurantAccess, which is about access to ONE
  * restaurant. Every route under /api/admin/ must call this before doing
- * anything.
+ * anything. Also enforces the platform-wide MFA requirement (see
+ * requirePlatformMfaEnabled) — unlike isPlatformAdmin(), which stays a pure
+ * role check for use inside requireRestaurantAccess.
  */
 export async function requirePlatformAdmin(): Promise<SessionContext> {
   const session = await requireAuth();
   const admin = await isPlatformAdmin(session.user.id);
   if (!admin) {
     throw new AuthError("Platform admin access required.", 403);
+  }
+  await requirePlatformMfaEnabled(session.user.id);
+  return session;
+}
+
+/**
+ * Fine-grained platform authorization: succeeds if the caller holds ANY
+ * active platform role that grants `permission` (see
+ * roleHasPlatformPermission), after confirming MFA is enabled. This is the
+ * primitive every new Platform Control Center route (tenant management,
+ * subscriptions, entitlements, AI provider config, impersonation, support
+ * tooling, ...) should call — requirePlatformAdmin() remains for routes
+ * that intentionally require full access regardless of the finer catalog
+ * (there are very few of these; prefer this function for anything new).
+ */
+export async function requirePlatformPermission(
+  permission: PlatformPermissionKey,
+): Promise<SessionContext> {
+  const session = await requireAuth();
+  await requirePlatformMfaEnabled(session.user.id);
+
+  const roles = await getActivePlatformRoles(session.user.id);
+  const allowed = roles.some((role) => roleHasPlatformPermission(role, permission));
+  if (!allowed) {
+    throw new AuthError(`Missing platform permission: ${permission}`, 403);
   }
   return session;
 }

@@ -32,4 +32,5 @@ export const apiPut = <T = unknown>(url: string, body: unknown) =>
   apiRequest<T>("PUT", url, body);
 export const apiPatch = <T = unknown>(url: string, body: unknown) =>
   apiRequest<T>("PATCH", url, body);
-export const apiDelete = <T = unknown>(url: string) => apiRequest<T>("DELETE", url);
+export const apiDelete = <T = unknown>(url: string, body?: unknown) =>
+  apiRequest<T>("DELETE", url, body);

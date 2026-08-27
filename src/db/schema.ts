@@ -89,6 +89,20 @@ export const systemRoleEnum = pgEnum("system_role", [
   // (no MANAGE_STAFF, MANAGE_INVENTORY, MANAGE_TABLES, etc.). See
   // DEFAULT_ROLE_PERMISSIONS for the exact grant.
   "accountant",
+  // Platform Control Center (Phase 1) — four new platform-scoped roles,
+  // same restaurantId=NULL shape as the existing platform_admin. Added
+  // rather than repurposing platform_admin so existing grants keep their
+  // exact current (full-access) behavior with zero migration risk.
+  // super_admin is a second full-access tier, distinguished from
+  // platform_admin only by holding MANAGE_PLATFORM_ADMINS (granting/
+  // revoking platform roles) — see PLATFORM_DEFAULT_ROLE_PERMISSIONS in
+  // src/lib/rbac/platform-permissions.ts for the exact per-role grants,
+  // and guard.ts's requirePlatformPermission for how they're enforced
+  // (MFA hard-required for all five platform roles).
+  "super_admin",
+  "support_admin",
+  "billing_admin",
+  "platform_viewer",
 ]);
 
 // Phase 3 — an order's lifecycle. Deliberately small/linear for now: the
