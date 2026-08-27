@@ -386,6 +386,13 @@
       "when": 1787856466320,
       "tag": "0054_platform_control_center_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1787858486175,
+      "tag": "0055_subscription_paused_status",
+      "breakpoints": true
     }
   ]
 }

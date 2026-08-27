@@ -72,6 +72,19 @@ export async function PATCH(
         eventType = "trial_extended";
         break;
       }
+      case "shorten_trial": {
+        // Floors at "now" rather than going negative — see the schema's
+        // own comment on the discriminated union variant. Shortening a
+        // trial that's already expired (or has no end date at all) is a
+        // no-op on the date itself; still recorded as an event either way
+        // so the intent is on the record.
+        const base = existing.trialEndsAt ?? new Date();
+        const shortened = new Date(base.getTime() - body.days * 24 * 60 * 60 * 1000);
+        const now = new Date();
+        newTrialEndsAt = shortened.getTime() > now.getTime() ? shortened : now;
+        eventType = "trial_shortened";
+        break;
+      }
       case "assign_plan": {
         newPlanKey = body.planKey;
         newLockedMonthlyPriceInPaisa = null;
@@ -82,6 +95,11 @@ export async function PATCH(
       case "mark_past_due": {
         toStatus = "past_due";
         eventType = "past_due_marked";
+        break;
+      }
+      case "pause": {
+        toStatus = "paused";
+        eventType = "paused";
         break;
       }
       case "cancel": {

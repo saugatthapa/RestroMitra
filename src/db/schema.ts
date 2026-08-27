@@ -42,10 +42,26 @@ export const restaurantTypeEnum = pgEnum("restaurant_type", [
   "other",
 ]);
 
+// Platform Control Center (Phase 3) — "paused" added: a reversible,
+// admin-initiated temporary halt distinct in INTENT from "cancelled" (e.g.
+// the owner is closed for renovation and asked to pause billing/access
+// rather than cancel outright), even though it shares cancelled's access
+// math (blocked) — same "distinct states can share access semantics" this
+// enum already had between cancelled/expired. Deliberately NOT adding a
+// separate "grace_period" state: computeSubscriptionAccess's own existing
+// comment already documents past_due AS the grace period ("access stays
+// on so a restaurant doesn't get locked out the moment a payment fails")
+// — a second state meaning the same thing would just be a confusing
+// synonym, not a real addition. "suspended" (the platform-ops block) is
+// deliberately NOT here either — see restaurants.isActive/guard.ts's
+// requireRestaurantActive: it's orthogonal to billing state on purpose (a
+// restaurant can be actively paying and still platform-suspended), so
+// folding it into this billing-lifecycle enum would misrepresent it.
 export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "trialing",
   "active",
   "past_due",
+  "paused",
   "cancelled",
   "expired",
 ]);
@@ -73,6 +89,10 @@ export const subscriptionEventTypeEnum = pgEnum("subscription_event_type", [
   "past_due_marked",
   "cancelled",
   "reactivated",
+  // Phase 3 — trial management (shorten, alongside the existing extend)
+  // and the new "paused" status.
+  "trial_shortened",
+  "paused",
 ]);
 
 export const systemRoleEnum = pgEnum("system_role", [

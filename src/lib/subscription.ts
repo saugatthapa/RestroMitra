@@ -6,10 +6,15 @@
  * decision, and the billing UI.
  */
 
+// Phase 3 — "paused" added: a reversible, admin-initiated temporary halt,
+// distinct in intent from "cancelled" (see schema.ts's subscriptionStatusEnum
+// comment for the full reasoning on why this — and not a separate
+// "grace_period" — is the one new status this phase adds).
 export const SUBSCRIPTION_STATUSES = [
   "trialing",
   "active",
   "past_due",
+  "paused",
   "cancelled",
   "expired",
 ] as const;
@@ -20,6 +25,7 @@ export type AccessReason =
   | "trialing"
   | "past_due"
   | "trial_expired"
+  | "paused"
   | "cancelled"
   | "expired";
 
@@ -32,6 +38,7 @@ export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
   trialing: "Free trial",
   active: "Active",
   past_due: "Past due",
+  paused: "Paused",
   cancelled: "Cancelled",
   expired: "Expired",
 };
@@ -66,6 +73,8 @@ export function computeSubscriptionAccess(params: {
       }
       return { allowed: true, reason: "trialing" };
     }
+    case "paused":
+      return { allowed: false, reason: "paused" };
     case "cancelled":
       return { allowed: false, reason: "cancelled" };
     case "expired":

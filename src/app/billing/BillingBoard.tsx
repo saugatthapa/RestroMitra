@@ -155,14 +155,26 @@ export function BillingBoard({ slug }: { slug: string }) {
             {data.subscriptionStatus === "cancelled" && (
               <p className="mt-1 text-sm text-neutral-600">Your subscription was cancelled.</p>
             )}
+            {data.subscriptionStatus === "paused" && (
+              <p className="mt-1 text-sm text-neutral-600">
+                Your subscription was paused by RestroMitra. Contact support to resume it.
+              </p>
+            )}
           </div>
         </div>
         {blocked && (
           <p className="mt-3 border-t border-neutral-200/60 pt-3 text-sm font-medium text-neutral-800">
-            Access to your dashboard is paused.{" "}
-            {data.canManageSubscription
-              ? "Choose a plan below to keep going."
-              : "Ask your restaurant owner to choose a plan below."}
+            {/* Renamed from "is paused" — now that "paused" is also a real,
+                distinct subscription status (see subscription.ts), reusing
+                the word here as generic filler for ANY blocked reason
+                (expired, cancelled, ...) would read as though that specific
+                status applied even when it doesn't. */}
+            Access to your dashboard is currently blocked.{" "}
+            {data.subscriptionStatus === "paused"
+              ? "Contact RestroMitra support to resume."
+              : data.canManageSubscription
+                ? "Choose a plan below to keep going."
+                : "Ask your restaurant owner to choose a plan below."}
           </p>
         )}
       </div>

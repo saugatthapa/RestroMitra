@@ -29,6 +29,8 @@ function statusBadgeClass(status: SubscriptionStatus) {
       return "bg-orange-50 text-orange-700";
     case "past_due":
       return "bg-amber-50 text-amber-700";
+    case "paused":
+      return "bg-neutral-100 text-neutral-700";
     default:
       return "bg-red-50 text-red-700";
   }
@@ -81,11 +83,12 @@ export function AdminOverview() {
 
   return (
     <div>
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-6">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-7">
         <StatTile label="Total" value={restaurants.length} />
         <StatTile label="Trialing" value={stats.byStatus.trialing ?? 0} />
         <StatTile label="Active" value={stats.byStatus.active ?? 0} />
         <StatTile label="Past due" value={stats.byStatus.past_due ?? 0} />
+        <StatTile label="Paused" value={stats.byStatus.paused ?? 0} />
         <StatTile label="Expired / cancelled" value={(stats.byStatus.expired ?? 0) + (stats.byStatus.cancelled ?? 0)} />
         <StatTile label="Suspended" value={stats.suspended} />
       </div>

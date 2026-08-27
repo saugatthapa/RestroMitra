@@ -61,6 +61,16 @@ describe("computeSubscriptionAccess", () => {
     });
   });
 
+  // Phase 3 — "paused" (see schema.ts's subscriptionStatusEnum comment):
+  // a reversible, admin-initiated halt distinct in intent from cancelled,
+  // even though (like cancelled) it blocks access.
+  it("blocks access when paused", () => {
+    expect(computeSubscriptionAccess({ subscriptionStatus: "paused", trialEndsAt: null, now: NOW })).toEqual({
+      allowed: false,
+      reason: "paused",
+    });
+  });
+
   it("fails closed for an unrecognized status rather than defaulting open", () => {
     expect(
       computeSubscriptionAccess({ subscriptionStatus: "something_new", trialEndsAt: null, now: NOW }),

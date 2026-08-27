@@ -219,11 +219,18 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
               >
                 Extend
               </button>
+              <button
+                disabled={busy}
+                onClick={() => runAction({ action: "shorten_trial", days: extendDays, note: note || undefined })}
+                className="btn-secondary"
+              >
+                Shorten
+              </button>
             </div>
 
             <div className="mb-4 flex items-end gap-2">
               <label className="flex-1 text-xs text-neutral-500">
-                Assign plan
+                {restaurant.subscriptionStatus === "trialing" ? "Convert trial to plan" : "Assign plan"}
                 <select
                   value={assignPlanKey}
                   onChange={(e) => setAssignPlanKey(e.target.value as PlanKey)}
@@ -248,7 +255,7 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
                 }
                 className="btn-primary"
               >
-                Assign
+                {restaurant.subscriptionStatus === "trialing" && activateOnAssign ? "Convert" : "Assign"}
               </button>
             </div>
             <label className="mb-4 flex items-center gap-2 text-xs text-neutral-600">
@@ -274,6 +281,13 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
                 className="btn-secondary"
               >
                 Reactivate
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => runAction({ action: "pause", note: note || undefined })}
+                className="btn-secondary"
+              >
+                Pause
               </button>
               <button
                 disabled={busy}
