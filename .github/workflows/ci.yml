@@ -123,3 +123,65 @@ jobs:
 
       - name: E2E tests
         run: npx playwright test
+
+  # QA hardening (P2 backlog) — "no CI-gated production deploy (manual
+  # SSH/Hostinger deploy decoupled from CI green status — a process/
+  # runbook decision, not a code fix)". This job is that gate: `needs:
+  # verify` means it only starts once lint/typecheck/test/build/e2e have
+  # ALL passed, and the `if:` below further restricts it to real pushes to
+  # main (never a PR, never a failed verify run).
+  #
+  # OFF BY DEFAULT — see CI_GATED_DEPLOY_SETUP.md for what to configure.
+  # `vars.DEPLOY_ENABLED` is a plain repository Variable (Settings ->
+  # Secrets and variables -> Actions -> Variables), not a Secret, checked
+  # here specifically so it's readable in this `if:` condition. Until it's
+  # set to the literal string "true", this job is skipped entirely on
+  # every run — merging this workflow change is a zero-risk no-op; nothing
+  # attempts to reach any server until a human deliberately flips this on
+  # AFTER configuring the SSH secrets below and reading that setup doc
+  # (in particular, confirming the restart command actually matches how
+  # THIS account's Hostinger app is run — that varies by hosting plan and
+  # isn't something this workflow can know on its own).
+  deploy:
+    name: Deploy to Hostinger
+    needs: verify
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.HOSTINGER_SSH_PORT }}" -H "${{ secrets.HOSTINGER_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          DEPLOY_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          DEPLOY_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+          DEPLOY_PATH: ${{ secrets.HOSTINGER_APP_PATH }}
+        run: |
+          # Mirrors DEPLOY_PHASE25.md's documented manual steps exactly
+          # (git pull, npm install, db:migrate, build, restart) — this
+          # automates that same sequence, it doesn't invent a new one.
+          # `git reset --hard` (not `pull`) deliberately assumes the
+          # server's checkout is never hand-edited — exactly the
+          # assumption the existing manual runbook already makes.
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            DEPLOY_PATH="$DEPLOY_PATH" bash -s <<'REMOTE_SCRIPT'
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            git fetch origin main
+            git reset --hard origin/main
+            npm ci
+            npm run db:migrate
+            npm run build
+            # CONFIRM THIS matches your actual Hostinger setup before
+            # enabling DEPLOY_ENABLED — see CI_GATED_DEPLOY_SETUP.md.
+            # Passenger-based Node.js hosting (Hostinger's default)
+            # restarts on this file's mtime changing; if your account
+            # uses a different process manager, replace this line with
+            # its restart command instead.
+            mkdir -p tmp && touch tmp/restart.txt
+          REMOTE_SCRIPT
