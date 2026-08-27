@@ -7,6 +7,7 @@ import {
   requirePermission,
   requireRestaurantBySlug,
   requireActiveSubscription,
+  requireRestaurantActive,
 } from "@/lib/rbac/guard";
 import { HttpError } from "@/lib/http-error";
 import type { PermissionKey } from "@/lib/rbac/permissions";
@@ -69,7 +70,12 @@ export type RestaurantContext = {
  *
  * platform_admin always bypasses the subscription check regardless of
  * `opts` — support/ops access to a tenant must never depend on that
- * tenant's own billing state.
+ * tenant's own billing state. platform_admin also bypasses the newer
+ * suspension check below (Phase 2) — support/ops must still be able to
+ * reach a suspended tenant to investigate it — but that one has no
+ * `opts` escape hatch for anyone else: unlike a billing lapse, suspension
+ * is never something a tenant-scoped route should be allowed to work
+ * around.
  */
 export async function resolveRestaurantContext(
   slug: string,
@@ -81,6 +87,9 @@ export async function resolveRestaurantContext(
     session.user.id,
     slug,
   );
+  if (role !== "platform_admin") {
+    await requireRestaurantActive(restaurantId);
+  }
   if (role !== "platform_admin" && !opts?.allowInactiveSubscription) {
     await requireActiveSubscription(restaurantId);
   }

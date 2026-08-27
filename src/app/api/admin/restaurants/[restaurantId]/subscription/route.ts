@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { restaurants } from "@/db/schema";
-import { requirePlatformAdmin } from "@/lib/rbac/guard";
+import { requirePlatformPermission } from "@/lib/rbac/guard";
+import { PLATFORM_PERMISSIONS } from "@/lib/rbac/platform-permissions";
 import { parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { adminSubscriptionActionSchema } from "@/lib/validation/subscription";
 import { recordSubscriptionEvent } from "@/lib/subscription-db";
@@ -27,7 +28,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
   try {
-    const session = await requirePlatformAdmin();
+    const session = await requirePlatformPermission(PLATFORM_PERMISSIONS.MANAGE_SUBSCRIPTIONS);
     const { restaurantId } = await ctx.params;
 
     const [existing] = await db

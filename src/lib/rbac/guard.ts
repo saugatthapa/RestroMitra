@@ -183,6 +183,42 @@ export async function requireActiveSubscription(restaurantId: string): Promise<v
 }
 
 /**
+ * Platform Control Center (Phase 2) — thrown when a restaurant has been
+ * suspended by a platform admin. Deliberately a distinct error class from
+ * SubscriptionRequiredError: suspension is a platform-ops decision
+ * (abuse/fraud investigation, policy violation, ...) orthogonal to
+ * billing state — a restaurant can be suspended while its subscription is
+ * perfectly current, and reactivating it is never a self-service billing
+ * action the owner can take from /billing.
+ */
+export class TenantSuspendedError extends HttpError {
+  constructor(message = "This restaurant's access has been suspended.") {
+    super(message, 403);
+  }
+}
+
+/**
+ * Platform Control Center (Phase 2) — restaurants.isActive already existed
+ * in the schema (defaulting true) and already gated the public-facing QR
+ * ordering/website surfaces, but nothing ever set it to false and no
+ * staff-facing route checked it: a "suspended" restaurant's own staff
+ * could log into /dashboard exactly as normal. This closes that gap, using
+ * the same column rather than adding a new one — see the suspension route
+ * (src/app/api/admin/restaurants/[restaurantId]/suspension) for the only
+ * place that flips it.
+ */
+export async function requireRestaurantActive(restaurantId: string): Promise<void> {
+  const [row] = await db
+    .select({ isActive: restaurants.isActive })
+    .from(restaurants)
+    .where(eq(restaurants.id, restaurantId))
+    .limit(1);
+  if (row && !row.isActive) {
+    throw new TenantSuspendedError();
+  }
+}
+
+/**
  * The core tenant-isolation choke point.
  *
  * `restaurantId` here MUST come from a trusted server-side source — a URL

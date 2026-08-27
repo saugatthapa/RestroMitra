@@ -2,18 +2,20 @@ import { NextResponse } from "next/server";
 import { and, count, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { restaurants, userRoles, users, subscriptionEvents } from "@/db/schema";
-import { requirePlatformAdmin } from "@/lib/rbac/guard";
+import { requirePlatformPermission } from "@/lib/rbac/guard";
+import { PLATFORM_PERMISSIONS } from "@/lib/rbac/platform-permissions";
 import { toErrorResponse } from "@/lib/api-route-helpers";
 import { getEffectivePlan } from "@/lib/plans";
 
 const EVENT_HISTORY_LIMIT = 50;
 
+// Phase 2 — gated on VIEW_TENANTS, same reasoning as the list route.
 export async function GET(
   _request: Request,
   ctx: { params: Promise<{ restaurantId: string }> },
 ) {
   try {
-    await requirePlatformAdmin();
+    await requirePlatformPermission(PLATFORM_PERMISSIONS.VIEW_TENANTS);
     const { restaurantId } = await ctx.params;
 
     const [restaurant] = await db

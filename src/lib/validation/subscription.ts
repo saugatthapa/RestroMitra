@@ -40,3 +40,14 @@ export const adminSubscriptionActionSchema = z.discriminatedUnion("action", [
 ]);
 
 export type AdminSubscriptionAction = z.infer<typeof adminSubscriptionActionSchema>;
+
+/**
+ * Platform Control Center (Phase 2) — deliberately a separate schema/route
+ * from the subscription action above: suspension is an ops/policy
+ * decision, not a billing state, and always needs a stated reason (a
+ * subscription action's `note` is optional; this isn't).
+ */
+export const adminTenantSuspensionSchema = z.object({
+  action: z.enum(["suspend", "reactivate"]),
+  reason: z.string().trim().min(3, "Enter a reason.").max(500),
+});

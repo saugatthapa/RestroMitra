@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { db } from "@/db";
 import { restaurants, userRoles, users } from "@/db/schema";
-import { requirePlatformAdmin } from "@/lib/rbac/guard";
+import { requirePlatformPermission } from "@/lib/rbac/guard";
+import { PLATFORM_PERMISSIONS } from "@/lib/rbac/platform-permissions";
 import { toErrorResponse } from "@/lib/api-route-helpers";
 import { SUBSCRIPTION_STATUSES } from "@/lib/subscription";
 
@@ -13,10 +14,14 @@ const LIST_LIMIT = 200;
  * platform, not scoped to any one of them (that's the whole point of this
  * route living under /api/admin/ rather than /api/restaurants/[slug]/).
  * `?status=` filters by subscription status; `?q=` searches name/slug.
+ *
+ * Phase 2 — gated on VIEW_TENANTS (not the coarser requirePlatformAdmin)
+ * so every platform role, including platform_viewer, can actually use the
+ * console's read side.
  */
 export async function GET(request: Request) {
   try {
-    await requirePlatformAdmin();
+    await requirePlatformPermission(PLATFORM_PERMISSIONS.VIEW_TENANTS);
 
     const url = new URL(request.url);
     const statusParam = url.searchParams.get("status");

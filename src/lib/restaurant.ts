@@ -17,6 +17,11 @@ export type OwnedRestaurant = {
   trialEndsAt: Date | null;
   planKey: string | null;
   onboardingCompletedAt: Date | null;
+  // Phase 2 — Platform Control Center suspension flag (see guard.ts's
+  // requireRestaurantActive). Surfaced here so the dashboard layout can
+  // redirect a suspended restaurant's staff to /suspended the same way it
+  // already redirects an inactive subscription to /billing.
+  isActive: boolean;
 };
 
 async function getUserRestaurantsUncached(
@@ -34,6 +39,7 @@ async function getUserRestaurantsUncached(
       trialEndsAt: restaurants.trialEndsAt,
       planKey: restaurants.planKey,
       onboardingCompletedAt: restaurants.onboardingCompletedAt,
+      isActive: restaurants.isActive,
     })
     .from(userRoles)
     .innerJoin(restaurants, eq(userRoles.restaurantId, restaurants.id))

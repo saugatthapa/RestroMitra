@@ -25,6 +25,19 @@ export default async function DashboardLayout({
     restaurants.find((r) => r.id === session.activeRestaurantId) ??
     restaurants[0];
 
+  // Phase 2 (Platform Control Center) — a restaurant a platform admin has
+  // suspended (see guard.ts's requireRestaurantActive) is blocked from
+  // /dashboard entirely, except for platform_admin (support/ops must
+  // still be able to reach it). Checked BEFORE the subscription check
+  // below, and matching the API layer's resolveRestaurantContext ordering
+  // exactly: suspension is the more deliberate, ops-driven block, so a
+  // restaurant that happens to be both suspended and billing-inactive
+  // lands on /suspended, not /billing — and critically, this keeps the
+  // two conditions from ever fighting over which redirect wins.
+  if (active.role !== "platform_admin" && !active.isActive) {
+    redirect("/suspended");
+  }
+
   // Phase 10: every /dashboard/* page is gated on the restaurant's
   // subscription being currently active — except for platform_admin, who
   // must always be able to reach a tenant's dashboard for support/ops
