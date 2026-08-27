@@ -6,6 +6,14 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
 import { toCsv } from "@/lib/csv";
 
+// Security audit (commercial completion pass) — the other three new
+// export routes all cap at 20,000 rows (matching the pre-existing ledger/
+// reconciliation exports); this one was missing that cap. Roster size is
+// already bounded in practice by maxStaffForRestaurant (see the staff POST
+// route), but an unbounded query on a bulk endpoint is worth closing for
+// consistency and defense in depth.
+const EXPORT_ROW_LIMIT = 20_000;
+
 /**
  * Commercial completion pass — Data Export gap. Same branch-scoping rule
  * and permission (MANAGE_STAFF) as GET /staff. Deliberately roster fields
@@ -41,7 +49,8 @@ export async function GET(_request: Request, ctx: { params: Promise<{ slug: stri
               eq(userRoles.restaurantId, restaurantId),
               or(isNull(userRoles.branchId), eq(userRoles.branchId, grantedBranchId)),
             ),
-      );
+      )
+      .limit(EXPORT_ROW_LIMIT);
 
     const csv = toCsv(rows, [
       { header: "Name", value: (r) => r.fullName },

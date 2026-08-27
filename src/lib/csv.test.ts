@@ -54,4 +54,47 @@ describe("toCsv", () => {
     const csv = toCsv<Row>([], [{ header: "Amount, Rs", value: (r) => r.amount }]);
     expect(csv).toBe('"Amount, Rs"\r\n');
   });
+
+  describe("CSV/formula injection neutralization (security audit, commercial completion pass)", () => {
+    function nameCsv(name: string): string {
+      return toCsv([{ name }], [{ header: "Name", value: (r: { name: string }) => r.name }]);
+    }
+
+    it("prefixes a string field starting with =", () => {
+      expect(nameCsv("=SUM(A1:A9)")).toBe("Name\r\n'=SUM(A1:A9)\r\n");
+    });
+
+    it("prefixes a string field starting with +", () => {
+      expect(nameCsv("+1+1")).toBe("Name\r\n'+1+1\r\n");
+    });
+
+    it("prefixes a string field starting with -", () => {
+      expect(nameCsv("-2+3")).toBe("Name\r\n'-2+3\r\n");
+    });
+
+    it("prefixes a string field starting with @", () => {
+      expect(nameCsv("@SUM(A1:A9)")).toBe("Name\r\n'@SUM(A1:A9)\r\n");
+    });
+
+    it("prefixes a string field starting with a tab", () => {
+      expect(nameCsv("\tsneaky")).toBe("Name\r\n'\tsneaky\r\n");
+    });
+
+    it("a formula-triggering value that also needs RFC-4180 quoting is both neutralized and quoted", () => {
+      expect(nameCsv('=HYPERLINK("http://evil")')).toBe('Name\r\n"\'=HYPERLINK(""http://evil"")"\r\n');
+    });
+
+    it("does not touch an ordinary string that happens to contain a hyphen mid-value", () => {
+      expect(nameCsv("Ram-Shyam")).toBe("Name\r\nRam-Shyam\r\n");
+    });
+
+    it("never mangles a legitimate negative number (only string-typed values are neutralized)", () => {
+      const csv = toCsv([{ amount: -500 }], [{ header: "Amount", value: (r: { amount: number }) => r.amount }]);
+      expect(csv).toBe("Amount\r\n-500\r\n");
+    });
+
+    it("leaves a plain value alone", () => {
+      expect(nameCsv("Cafe")).toBe("Name\r\nCafe\r\n");
+    });
+  });
 });
