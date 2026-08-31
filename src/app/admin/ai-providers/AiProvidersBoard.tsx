@@ -5,6 +5,17 @@ import { apiGet, apiPost, apiPatch, apiDelete, ApiError } from "@/lib/api-client
 
 const KNOWN_AI_PROVIDERS = ["groq", "anthropic"] as const;
 
+// Each known provider has exactly one canonical chat-completions endpoint —
+// mirrors src/lib/ai/config.ts's own GROQ_API_URL/ANTHROPIC config (kept as
+// a small duplicated constant here rather than importing that server-only
+// module into this client component). An admin picking a provider should
+// never need to know or type its API URL; this is what makes that field
+// auto-fill instead of asking for it.
+const DEFAULT_API_URLS: Record<(typeof KNOWN_AI_PROVIDERS)[number], string> = {
+  groq: "https://api.groq.com/openai/v1/chat/completions",
+  anthropic: "https://api.anthropic.com/v1/messages",
+};
+
 type AiProviderConfig = {
   id: string;
   provider: string;
@@ -52,7 +63,7 @@ const EMPTY_FORM: FormState = {
   provider: "groq",
   apiKey: "",
   model: "",
-  apiUrl: "",
+  apiUrl: DEFAULT_API_URLS.groq,
   isEnabled: true,
   priority: "0",
 };
@@ -411,7 +422,12 @@ function ProviderFormFields({
         <select
           value={form.provider}
           disabled={lockProvider}
-          onChange={(e) => onChange({ ...form, provider: e.target.value as FormState["provider"] })}
+          onChange={(e) => {
+            // Picking a provider also picks its API URL — never something
+            // an admin should have to know or type by hand.
+            const provider = e.target.value as FormState["provider"];
+            onChange({ ...form, provider, apiUrl: DEFAULT_API_URLS[provider] });
+          }}
           className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none disabled:bg-neutral-50 disabled:text-neutral-500"
         >
           {KNOWN_AI_PROVIDERS.map((p) => (
@@ -445,13 +461,12 @@ function ProviderFormFields({
         />
       </label>
       <label className="block text-sm">
-        <span className="mb-1 block text-neutral-700">API URL</span>
+        <span className="mb-1 block text-neutral-700">API URL (auto-set for the provider)</span>
         <input
           value={form.apiUrl}
-          onChange={(e) => onChange({ ...form, apiUrl: e.target.value })}
-          required
-          placeholder="https://api.groq.com/openai/v1/chat/completions"
-          className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+          readOnly
+          disabled
+          className="w-full rounded-md border border-neutral-300 bg-neutral-50 px-3 py-1.5 text-sm text-neutral-500 focus:outline-none"
         />
       </label>
       <label className="block text-sm">
