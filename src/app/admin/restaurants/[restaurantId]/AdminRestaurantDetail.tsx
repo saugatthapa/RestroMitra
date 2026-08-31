@@ -5,6 +5,7 @@ import Link from "next/link";
 import { apiGet, apiPatch, apiPost, ApiError } from "@/lib/api-client";
 import { type Plan, type PlanKey } from "@/lib/plans";
 import { SUBSCRIPTION_STATUS_LABELS, type SubscriptionStatus } from "@/lib/subscription";
+import { EntitlementsPanel } from "./EntitlementsPanel";
 
 type Detail = {
   restaurant: {
@@ -341,6 +342,8 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
           </div>
         </div>
       </div>
+
+      <EntitlementsPanel restaurantId={restaurantId} />
     </div>
   );
 }

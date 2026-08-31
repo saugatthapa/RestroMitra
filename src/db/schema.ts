@@ -3381,6 +3381,91 @@ export const auditLogs = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Platform Control Center (Phase 5) — entitlement engine
+//
+// Two tables, two independent purposes, one resolution engine
+// (src/lib/entitlements.ts):
+//
+//  - `feature_flags` is a GLOBAL default for a feature key that isn't (or
+//    isn't only) tied to a plan — an experimental rollout, a kill switch —
+//    e.g. shipping a beta capability to everyone before it's ever added to
+//    any plan's featureKeys.
+//  - `entitlement_overrides` is a PER-TENANT exception — a platform admin
+//    force-granting a feature to one restaurant that its plan wouldn't
+//    normally include (a sales concession, a pilot), or force-revoking one
+//    its plan WOULD normally include (an abuse case, a broken integration).
+//    Always wins over both the plan and the flag default — see
+//    resolveFeatureAccess()'s own doc comment for the full priority order.
+//
+// Neither table FKs into src/lib/feature-catalog.ts's FEATURES — that
+// catalog is code-defined (see its own doc comment), so there's nothing in
+// the DB to foreign-key against; a stale key here just resolves as "not a
+// known feature" rather than referencing anything invalid.
+// ---------------------------------------------------------------------------
+
+export const featureFlags = pgTable("feature_flags", {
+  key: varchar("key", { length: 60 }).primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description").notNull(),
+  // The value every restaurant gets when it has no per-tenant override —
+  // NOT consulted for a key that's already granted via the restaurant's
+  // plan.featureKeys (see resolveFeatureAccess: PLAN is checked before
+  // FLAG). This column is what actually changes when a flag is "rolled
+  // out" — flip default_enabled, no code deploy needed.
+  defaultEnabled: boolean("default_enabled").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * One row = one tenant's forced yes/no on one feature key, overriding
+ * whatever the plan/flag default would otherwise say. Deliberately holds
+ * CURRENT state only (unique on restaurantId+featureKey, updated in place)
+ * — same "state lives here, history lives in audit_logs" convention as
+ * restaurants.isActive (see tenant-suspension) rather than an append-only
+ * table, since "what's the override right now" is the only question the
+ * entitlement engine ever needs answered at request time.
+ */
+export const entitlementOverrides = pgTable(
+  "entitlement_overrides",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    featureKey: varchar("feature_key", { length: 60 }).notNull(),
+    granted: boolean("granted").notNull(),
+    // Required, not optional — every override is a deliberate exception to
+    // the normal plan-based rule, same "must justify the sensitive action"
+    // convention as platform role grants/revokes and tenant suspension.
+    reason: text("reason").notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("entitlement_overrides_restaurant_feature_unique").on(
+      table.restaurantId,
+      table.featureKey,
+    ),
+    index("entitlement_overrides_restaurant_id_idx").on(table.restaurantId),
+  ],
+);
+
+export const entitlementOverridesRelations = relations(entitlementOverrides, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [entitlementOverrides.restaurantId],
+    references: [restaurants.id],
+  }),
+  createdBy: one(users, {
+    fields: [entitlementOverrides.createdByUserId],
+    references: [users.id],
+  }),
+}));
+
+// ---------------------------------------------------------------------------
 // Relations (for query ergonomics)
 // ---------------------------------------------------------------------------
 
@@ -3408,6 +3493,7 @@ export const restaurantsRelations = relations(restaurants, ({ many }) => ({
   branches: many(branches),
   userRoles: many(userRoles),
   subscriptionEvents: many(subscriptionEvents),
+  entitlementOverrides: many(entitlementOverrides),
 }));
 
 export const subscriptionEventsRelations = relations(subscriptionEvents, ({ one }) => ({
