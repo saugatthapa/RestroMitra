@@ -3,6 +3,7 @@ import { and, desc, eq, gte, isNull, lt, like } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLogs, restaurants, users } from "@/db/schema";
 import { getImpersonationContext } from "@/lib/auth/impersonation";
+import { getMaintenanceMode } from "@/lib/system/maintenance-mode-db";
 
 export async function recordAuditLog(entry: {
   restaurantId?: string | null;
@@ -42,6 +43,20 @@ export async function recordAuditLog(entry: {
         impersonationReason: impersonation.reason,
       };
     }
+  }
+
+  // Platform Control Center (Phase 10) — break-glass traceability. While
+  // maintenance mode is on, only a platform admin/impersonation session
+  // can act at all (see guard.ts's requireNotInMaintenanceMode) — so ANY
+  // audit entry recorded during that window represents an action taken
+  // under that emergency-access exemption, worth flagging without relying
+  // on a human to remember which incidents happened during which outage.
+  // Unlike the impersonation tag above, this isn't scoped to one
+  // restaurant — maintenance mode is a platform-wide state, so every
+  // entry (tenant-scoped or platform-level) gets it.
+  const maintenanceMode = await getMaintenanceMode();
+  if (maintenanceMode.enabled) {
+    metadata = { ...metadata, duringMaintenanceMode: true };
   }
 
   await db.insert(auditLogs).values({

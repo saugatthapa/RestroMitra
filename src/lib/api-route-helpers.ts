@@ -8,6 +8,7 @@ import {
   requireRestaurantBySlug,
   requireActiveSubscription,
   requireRestaurantActive,
+  requireNotInMaintenanceMode,
   isPlatformOrImpersonatedRole,
 } from "@/lib/rbac/guard";
 import { HttpError } from "@/lib/http-error";
@@ -99,6 +100,11 @@ export async function resolveRestaurantContext(
   if (!isPlatformOrImpersonatedRole(role) && !opts?.allowInactiveSubscription) {
     await requireActiveSubscription(restaurantId);
   }
+  // Phase 10 — platform-wide maintenance mode blocks every tenant-scoped
+  // route the same way suspension does, with the same platform-admin/
+  // impersonation exemption (see requireNotInMaintenanceMode's own
+  // comment for why that exemption is this phase's break-glass access).
+  await requireNotInMaintenanceMode(role);
   if (permission) {
     // Perf: `role` was already resolved by requireRestaurantBySlug above
     // (which itself calls requireRestaurantAccess) — passing it through

@@ -9,6 +9,7 @@ import { reconcileSubscriptionStatus } from "@/lib/subscription-db";
 import type { AccessReason } from "@/lib/subscription";
 import { isReadOnlyPermission, type PermissionKey } from "./permissions";
 import { roleHasPlatformPermission, type PlatformPermissionKey } from "./platform-permissions";
+import { getMaintenanceMode } from "@/lib/system/maintenance-mode-db";
 
 /**
  * Platform Control Center (Phase 8) — true for platform_admin (the
@@ -232,6 +233,41 @@ export async function requireRestaurantActive(restaurantId: string): Promise<voi
     .limit(1);
   if (row && !row.isActive) {
     throw new TenantSuspendedError();
+  }
+}
+
+/**
+ * Platform Control Center (Phase 10) — thrown when platform-wide
+ * maintenance mode is on and the caller isn't a platform admin or an
+ * active impersonation session. Deliberately its own error class/status
+ * (503, "temporarily unavailable" — not a permission problem, a
+ * scheduled-downtime one) rather than reusing TenantSuspendedError, which
+ * means something ops-decided about ONE tenant specifically.
+ */
+export class MaintenanceModeActiveError extends HttpError {
+  constructor(message = "The platform is temporarily down for maintenance.") {
+    super(message, 503);
+  }
+}
+
+/**
+ * Platform Control Center (Phase 10) — the maintenance-mode gate.
+ * Deliberately takes the already-resolved `role` (same pattern as
+ * requireActiveSubscription's caller in resolveRestaurantContext) rather
+ * than re-deriving it, and skips the check entirely for
+ * platform_admin/impersonated roles — see isPlatformOrImpersonatedRole's
+ * own comment: that exemption IS this phase's "break-glass access," and
+ * every audit_logs entry recorded while maintenance is active is
+ * separately auto-tagged `duringMaintenanceMode: true` (see audit.ts) for
+ * traceability of what was done under it.
+ */
+export async function requireNotInMaintenanceMode(role: string): Promise<void> {
+  if (isPlatformOrImpersonatedRole(role)) return;
+  const state = await getMaintenanceMode();
+  if (state.enabled) {
+    throw new MaintenanceModeActiveError(
+      state.message ?? "The platform is temporarily down for maintenance.",
+    );
   }
 }
 

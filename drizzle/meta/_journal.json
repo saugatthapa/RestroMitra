@@ -428,6 +428,13 @@
       "when": 1788188245359,
       "tag": "0060_support_tooling",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1788189188133,
+      "tag": "0061_announcements_and_maintenance_mode",
+      "breakpoints": true
     }
   ]
 }

@@ -103,6 +103,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             AI providers
           </Link>
           <Link
+            href="/admin/announcements"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
+          >
+            Announcements
+          </Link>
+          <Link
+            href="/admin/system"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
+          >
+            System
+          </Link>
+          <Link
             href="/admin/audit-log"
             className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
           >

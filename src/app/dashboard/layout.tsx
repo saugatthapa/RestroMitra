@@ -9,8 +9,11 @@ import {
 import { getImpersonationContext } from "@/lib/auth/impersonation";
 import { isPlatformOrImpersonatedRole } from "@/lib/rbac/guard";
 import { computeSubscriptionAccess } from "@/lib/subscription";
+import { getMaintenanceMode } from "@/lib/system/maintenance-mode-db";
+import { getActiveAnnouncements } from "@/lib/system/announcements-db";
 import { DashboardShell } from "./DashboardShell";
 import { ImpersonationBanner } from "./ImpersonationBanner";
+import { AnnouncementBanner } from "./AnnouncementBanner";
 
 export default async function DashboardLayout({
   children,
@@ -101,12 +104,26 @@ export default async function DashboardLayout({
     if (!access.allowed) redirect("/billing");
   }
 
+  // Platform Control Center (Phase 10) — platform-wide maintenance mode
+  // blocks every /dashboard/* page the same way suspension does, with the
+  // same platform-admin/impersonation exemption. See
+  // guard.ts's requireNotInMaintenanceMode (the API-layer equivalent) for
+  // why that exemption is this phase's break-glass access, and
+  // /maintenance for the page this redirects to.
+  if (!isPlatformOrImpersonatedRole(active.role)) {
+    const maintenanceMode = await getMaintenanceMode();
+    if (maintenanceMode.enabled) redirect("/maintenance");
+  }
+
   // Header branch switcher (Reports filtering) — platform_admin and an
   // impersonating admin both have no userRoles row on a tenant they're
   // viewing for support/ops (see requireRestaurantAccess's bypass), so
   // neither ever gets a branch lock and this simply returns every active
   // branch for them, same as an unrestricted owner/manager would see.
-  const selectableBranches = await getSelectableBranches(session.user.id, active.id);
+  const [selectableBranches, announcements] = await Promise.all([
+    getSelectableBranches(session.user.id, active.id),
+    getActiveAnnouncements(),
+  ]);
 
   return (
     <>
@@ -117,6 +134,16 @@ export default async function DashboardLayout({
           mode={impersonation.mode}
           startedAt={impersonation.startedAt.toISOString()}
           expiresAt={impersonation.expiresAt.toISOString()}
+        />
+      )}
+      {announcements.length > 0 && (
+        <AnnouncementBanner
+          announcements={announcements.map((a) => ({
+            id: a.id,
+            title: a.title,
+            body: a.body,
+            severity: a.severity,
+          }))}
         />
       )}
       <DashboardShell

@@ -3747,6 +3747,91 @@ export const restaurantSupportTagsRelations = relations(restaurantSupportTags, (
   addedBy: one(users, { fields: [restaurantSupportTags.addedByUserId], references: [users.id] }),
 }));
 
+// Platform Control Center (Phase 10) — a small, closed severity set so
+// the dashboard banner can pick a consistent color/icon per announcement
+// without inspecting free text (same "small enum, not free text"
+// reasoning as everywhere else this schema uses pgEnum for a closed set).
+export const announcementSeverityEnum = pgEnum("announcement_severity", [
+  "info",
+  "warning",
+  "critical",
+]);
+
+/**
+ * Platform Control Center (Phase 10) — platform-wide announcements shown
+ * to every restaurant's dashboard (e.g. "Scheduled maintenance Sunday
+ * 2-4am NPT"), NOT the internal support notes from Phase 9 (those are
+ * admin-only and never reach a tenant). `startsAt`/`endsAt` are optional
+ * scheduling bounds — an announcement with neither is simply "active now,
+ * until turned off" via `isActive`; one with both lets an admin queue a
+ * maintenance notice ahead of time without it appearing early. Whether an
+ * announcement is CURRENTLY showable is `isActive && (no startsAt or
+ * startsAt <= now) && (no endsAt or endsAt >= now)` — computed at read
+ * time (see announcements-db.ts's getActiveAnnouncements), never a
+ * separately-maintained "is it showing right now" flag that could drift.
+ */
+export const platformAnnouncements = pgTable(
+  "platform_announcements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: varchar("title", { length: 200 }).notNull(),
+    body: text("body").notNull(),
+    severity: announcementSeverityEnum("severity").notNull().default("info"),
+    isActive: boolean("is_active").notNull().default(true),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("platform_announcements_is_active_idx").on(table.isActive),
+  ],
+);
+
+/**
+ * Platform Control Center (Phase 10) — maintenance mode, as a genuine
+ * Postgres singleton table: `id` is a boolean primary key that is always
+ * inserted as `true`, so the type system itself makes a second row
+ * impossible (there is no other value `id` could hold). Every
+ * read/write goes through getMaintenanceMode()/setMaintenanceMode() in
+ * maintenance-mode-db.ts, which upsert-on-write and lazily create the
+ * single row on first read — there is no separate seed migration to keep
+ * in sync.
+ *
+ * `enabled` blocks tenant-facing dashboard/API traffic platform-wide
+ * (see resolveRestaurantContext/dashboard layout's maintenance check) —
+ * platform admins are never blocked by their own bypass, which is what
+ * makes this phase's "break-glass access" real: acting while maintenance
+ * is on is exactly the scenario an admin needs uninterrupted access for,
+ * and every audit_logs entry recorded during that window is
+ * auto-tagged `duringMaintenanceMode: true` (see audit.ts) for full
+ * after-the-fact traceability of what was done under emergency access.
+ */
+export const platformMaintenanceMode = pgTable("platform_maintenance_mode", {
+  id: boolean("id").primaryKey().default(true),
+  enabled: boolean("enabled").notNull().default(false),
+  message: text("message"),
+  reason: text("reason"),
+  enabledByUserId: uuid("enabled_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  enabledAt: timestamp("enabled_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const platformAnnouncementsRelations = relations(platformAnnouncements, ({ one }) => ({
+  createdBy: one(users, {
+    fields: [platformAnnouncements.createdByUserId],
+    references: [users.id],
+  }),
+}));
+
+export const platformMaintenanceModeRelations = relations(platformMaintenanceMode, ({ one }) => ({
+  enabledBy: one(users, {
+    fields: [platformMaintenanceMode.enabledByUserId],
+    references: [users.id],
+  }),
+}));
+
 // ---------------------------------------------------------------------------
 // Relations (for query ergonomics)
 // ---------------------------------------------------------------------------
