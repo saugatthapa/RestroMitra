@@ -2774,6 +2774,94 @@ export const attendancePhotoConsents = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Phase 14 (Attendance overhaul, Track B) — restaurant-declared non-working
+// days: a public/festival holiday, or an owner-declared closure. Purely
+// informational at this phase (surfaced on the Leave tab so staff/managers
+// can see it when picking leave dates) — it does NOT block clock-in/out or
+// auto-generate leave; that coupling is left for a later phase if the
+// product actually needs it, same "don't build the interaction two features
+// haven't asked for yet" restraint as attendance_corrections not handling
+// shift-reopening. branchId is nullable: null means "applies to every
+// branch of this restaurant" (the common case — Dashain, a citywide
+// holiday), set means one branch's own closure (e.g. that branch is shut
+// for renovation). No DB uniqueness constraint on (restaurantId, branchId,
+// date) — Postgres treats NULLs as distinct, so it couldn't stop two
+// restaurant-wide holidays on the same date anyway; the POST route does a
+// simple pre-check instead, since an accidental duplicate here is harmless
+// clutter, not a correctness bug the way a double payment would be.
+// ---------------------------------------------------------------------------
+export const holidays = pgTable(
+  "holidays",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    name: varchar("name", { length: 200 }).notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("holidays_restaurant_id_idx").on(table.restaurantId),
+    index("holidays_date_idx").on(table.date),
+  ],
+);
+
+export const leaveTypeEnum = pgEnum("leave_type", ["sick", "casual", "unpaid", "other"]);
+export const leaveStatusEnum = pgEnum("leave_status", [
+  "pending",
+  "approved",
+  "rejected",
+  "cancelled",
+]);
+
+// ---------------------------------------------------------------------------
+// Phase 14 (Attendance overhaul, Track B) — staff leave requests. Self-
+// service creation (any staff member requests their OWN leave, same
+// "about the caller's own record, no extra permission" trust tier as
+// attendance clock-in/out), MANAGE_STAFF-gated review (approve/reject,
+// mirroring attendance's status-review route — same reviewNote-required-
+// on-reject rule). startDate/endDate are plain calendar dates (like
+// cash_register_shifts.businessDate / daily_closings.businessDate), not
+// timestamps — a leave request is "off work on these calendar days," not
+// tied to a specific instant, so no timezone conversion is needed at
+// creation. Deliberately does NOT track a leave balance/accrual — this
+// phase covers request → review → record; entitlement/quota tracking is
+// left for a later phase if the product needs it (payroll integration,
+// Phase 16, is the more natural home for "how many paid sick days does
+// this person have left").
+// ---------------------------------------------------------------------------
+export const leaveRequests = pgTable(
+  "leave_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "cascade" }),
+    leaveType: leaveTypeEnum("leave_type").notNull(),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+    reason: text("reason"),
+    status: leaveStatusEnum("status").notNull().default("pending"),
+    reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewNote: text("review_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("leave_requests_restaurant_id_idx").on(table.restaurantId),
+    index("leave_requests_user_id_idx").on(table.userId),
+    index("leave_requests_status_idx").on(table.status),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Expenses (Phase 8c, workflow added Phase 21) — operational spending
 // tracking: rent, utilities, salaries paid in cash, supply runs, and the
 // like. isVoided remains the soft-delete flag (an expense may need
