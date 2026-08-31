@@ -184,6 +184,71 @@ describe.skipIf(!hasDb)("Subscription access + platform admin (integration)", ()
     ).rejects.toMatchObject({ status: 403 });
   });
 
+  // Phase 11 security pass — the audit flagged that entitlements-db.ts's
+  // hasFeature() has zero subscription-state awareness by design: it only
+  // ever consults the restaurant's plan/overrides/flags, never
+  // subscriptionStatus. That's safe only because every tenant-scoped route
+  // funnels through resolveRestaurantContext (see api-route-helpers.ts),
+  // which calls requireActiveSubscription BEFORE any permission or
+  // feature check runs — so an expired tenant is rejected with 402 long
+  // before a feature-gated route would ever get to ask hasFeature whether
+  // the plan includes the feature. This test locks in that half of the
+  // guarantee (requireActiveSubscription blocks the expired tenant) side
+  // by side with the fact that hasFeature would otherwise happily grant
+  // it, since the no-session-mocking limitation documented throughout
+  // this project (see this file's own module comment) rules out
+  // exercising resolveRestaurantContext's actual call ordering end to end.
+  it("an expired tenant is blocked by requireActiveSubscription even on a plan that grants the feature — hasFeature alone would not have caught this", async () => {
+    const { hasFeature } = await import("@/lib/entitlements-db");
+    const { FEATURES } = await import("@/lib/feature-catalog");
+
+    // Assign restaurantExpiredId (already reconciled to "expired" by the
+    // earlier test in this file) a plan that genuinely carries
+    // ai_assistant, so hasFeature has something real to grant — otherwise
+    // this test would trivially pass for the wrong reason (no plan means
+    // no features either way).
+    const planKey = `test-sub-expired-plan-${Math.random().toString(36).slice(2, 8)}`;
+    await db.insert(schema.plans).values({
+      key: planKey,
+      name: "TEST Expired-Tenant Plan",
+      tagline: "Carries ai_assistant, to prove hasFeature alone is subscription-blind.",
+      priceInPaisaMonthly: 100_000,
+      maxStaff: 5,
+      maxBranches: 1,
+      highlight: false,
+      features: [],
+      featureKeys: [FEATURES.AI_ASSISTANT],
+      sortOrder: 999,
+      isActive: true,
+    });
+    await db
+      .update(schema.restaurants)
+      .set({ planKey })
+      .where(eq(schema.restaurants.id, restaurantExpiredId));
+
+    try {
+      // hasFeature is subscription-blind by design (see entitlements-db.ts's
+      // own doc comment) — it grants purely off the plan, so on its own it
+      // says yes even though this tenant's subscription has lapsed.
+      expect(await hasFeature(restaurantExpiredId, FEATURES.AI_ASSISTANT)).toBe(true);
+
+      // requireActiveSubscription is what actually stands between this
+      // tenant and any feature-gated route — resolveRestaurantContext
+      // calls it before any permission or feature check runs (see
+      // api-route-helpers.ts), so the hasFeature grant above never gets a
+      // chance to matter for an expired tenant.
+      await expect(guard.requireActiveSubscription(restaurantExpiredId)).rejects.toMatchObject({
+        status: 402,
+      });
+    } finally {
+      await db
+        .update(schema.restaurants)
+        .set({ planKey: null })
+        .where(eq(schema.restaurants.id, restaurantExpiredId));
+      await db.delete(schema.plans).where(eq(schema.plans.key, planKey));
+    }
+  });
+
   it("reconcileSubscriptionStatus returns allowed:true for an active restaurant without touching the DB", async () => {
     const [activeRestaurant] = await db
       .insert(schema.restaurants)

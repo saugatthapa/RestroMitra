@@ -8,6 +8,7 @@ import { createBranchSchema } from "@/lib/validation/branches";
 import { maxBranchesForRestaurant } from "@/lib/plans-db";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { HttpError } from "@/lib/http-error";
 
 /**
  * Lists every branch for the restaurant — open to any active staff member
@@ -62,38 +63,50 @@ export async function POST(
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
 
-    const [restaurantRow] = await db
-      .select({ planKey: restaurants.planKey })
-      .from(restaurants)
-      .where(eq(restaurants.id, restaurantId))
-      .limit(1);
-    const maxBranches = await maxBranchesForRestaurant(restaurantRow ?? { planKey: null });
-    if (maxBranches !== null) {
-      const [branchCountRow] = await db
-        .select({ n: count() })
-        .from(branches)
-        .where(and(eq(branches.restaurantId, restaurantId), eq(branches.isActive, true)));
-      if ((branchCountRow?.n ?? 0) >= maxBranches) {
-        return NextResponse.json(
-          {
-            error: `You've reached your plan's branch limit (${maxBranches}). Upgrade your plan from the Billing page to add more.`,
-          },
-          { status: 403 },
-        );
+    // Phase 11 security pass — the count-then-insert plan-limit check below
+    // used to run against the plain `db` handle with no lock, so two POSTs
+    // racing for the last branch slot could both read the same pre-insert
+    // count and both pass, letting a restaurant exceed its plan's branch
+    // limit by one (a real TOCTOU gap the security audit flagged). Locking
+    // the restaurant row with SELECT...FOR UPDATE for the duration of the
+    // count-check-then-insert serializes concurrent requests — the second
+    // transaction blocks on the lock until the first commits, then
+    // re-counts and correctly sees the just-inserted row. Same tx-scoped
+    // .for("update") pattern the order-mutation routes already use (see
+    // orders/[orderId]/payments/route.ts and friends).
+    const branch = await db.transaction(async (tx) => {
+      const [restaurantRow] = await tx
+        .select({ planKey: restaurants.planKey })
+        .from(restaurants)
+        .where(eq(restaurants.id, restaurantId))
+        .for("update");
+      const maxBranches = await maxBranchesForRestaurant(restaurantRow ?? { planKey: null });
+      if (maxBranches !== null) {
+        const [branchCountRow] = await tx
+          .select({ n: count() })
+          .from(branches)
+          .where(and(eq(branches.restaurantId, restaurantId), eq(branches.isActive, true)));
+        if ((branchCountRow?.n ?? 0) >= maxBranches) {
+          throw new HttpError(
+            `You've reached your plan's branch limit (${maxBranches}). Upgrade your plan from the Billing page to add more.`,
+            403,
+          );
+        }
       }
-    }
 
-    const [branch] = await db
-      .insert(branches)
-      .values({
-        restaurantId,
-        name: data.name,
-        address: data.address && data.address.length > 0 ? data.address : null,
-        city: data.city && data.city.length > 0 ? data.city : null,
-        phone: data.phone && data.phone.length > 0 ? data.phone : null,
-        isMain: false, // isMain is set once, at onboarding, and never reassigned here
-      })
-      .returning();
+      const [inserted] = await tx
+        .insert(branches)
+        .values({
+          restaurantId,
+          name: data.name,
+          address: data.address && data.address.length > 0 ? data.address : null,
+          city: data.city && data.city.length > 0 ? data.city : null,
+          phone: data.phone && data.phone.length > 0 ? data.phone : null,
+          isMain: false, // isMain is set once, at onboarding, and never reassigned here
+        })
+        .returning();
+      return inserted;
+    });
 
     await recordAuditLog({
       restaurantId,

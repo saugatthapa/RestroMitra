@@ -137,4 +137,91 @@ describe.skipIf(!hasDb)("entitlements-db (integration)", () => {
     const reservations = explained.find((e) => e.featureKey === "reservations");
     expect(reservations).toMatchObject({ granted: false, source: "none" });
   });
+
+  // Phase 11 security pass — the audit flagged that no test proved an
+  // override set for one restaurant can't leak onto a different one, even
+  // though a reading of setEntitlementOverride/getEntitlementOverridesFor
+  // Restaurant/hasFeature (all scoped by a restaurantId column/parameter,
+  // no shared cache keyed only by featureKey) suggested it was already
+  // correctly isolated. This locks that in as a regression test rather
+  // than an unverified reading of the code.
+  describe("cross-tenant override isolation", () => {
+    let restaurantBId: string;
+    let ownerBUserId: string;
+
+    beforeAll(async () => {
+      const suffixB = Math.random().toString(36).slice(2, 8);
+      const [userB] = await db
+        .insert(schema.users)
+        .values({
+          fullName: "TEST Entitlement Admin B",
+          phone: `9749${suffixB.slice(0, 6)}`,
+          passwordHash: "x",
+        })
+        .returning({ id: schema.users.id });
+      ownerBUserId = userB.id;
+
+      const [restaurantB] = await db
+        .insert(schema.restaurants)
+        .values({
+          slug: `test-ent-b-${suffixB}`,
+          name: "TEST Entitlement Restaurant B",
+          subscriptionStatus: "active",
+          planKey, // same plan as restaurant A — proves isolation isn't just "different plan"
+          isActive: true,
+        })
+        .returning({ id: schema.restaurants.id });
+      restaurantBId = restaurantB.id;
+    });
+
+    afterAll(async () => {
+      await db.delete(schema.entitlementOverrides).where(eq(schema.entitlementOverrides.restaurantId, restaurantBId));
+      await db.delete(schema.restaurants).where(eq(schema.restaurants.id, restaurantBId));
+      await db.delete(schema.users).where(eq(schema.users.id, ownerBUserId));
+    });
+
+    it("a deny override on restaurant A does not affect restaurant B's access to the same feature", async () => {
+      // pos_billing is in the shared plan's featureKeys, so both start granted.
+      expect(await entitlementsDb.hasFeature(restaurantId, "pos_billing")).toBe(true);
+      expect(await entitlementsDb.hasFeature(restaurantBId, "pos_billing")).toBe(true);
+
+      await entitlementsDb.setEntitlementOverride({
+        restaurantId,
+        featureKey: "pos_billing",
+        granted: false,
+        reason: "Cross-tenant isolation test — deny A only.",
+        createdByUserId: ownerUserId,
+      });
+
+      expect(await entitlementsDb.hasFeature(restaurantId, "pos_billing")).toBe(false);
+      expect(await entitlementsDb.hasFeature(restaurantBId, "pos_billing")).toBe(true); // unaffected
+
+      const explainedB = await entitlementsDb.explainTenantAccess(restaurantBId);
+      const posBillingB = explainedB.find((e) => e.featureKey === "pos_billing");
+      expect(posBillingB).toMatchObject({ granted: true, source: "plan" }); // still "plan", not "override"
+
+      // Restore A for cleanliness (afterAll on the outer describe also
+      // deletes A's override rows, but explicit is cheap and self-documenting).
+      await entitlementsDb.clearEntitlementOverride(restaurantId, "pos_billing");
+    });
+
+    it("a grant override on restaurant B for a key neither plan carries does not leak a grant onto A", async () => {
+      expect(await entitlementsDb.hasFeature(restaurantId, "reservations")).toBe(false);
+      expect(await entitlementsDb.hasFeature(restaurantBId, "reservations")).toBe(false);
+
+      await entitlementsDb.setEntitlementOverride({
+        restaurantId: restaurantBId,
+        featureKey: "reservations",
+        granted: true,
+        reason: "Cross-tenant isolation test — grant B only.",
+        createdByUserId: ownerBUserId,
+      });
+
+      expect(await entitlementsDb.hasFeature(restaurantBId, "reservations")).toBe(true);
+      expect(await entitlementsDb.hasFeature(restaurantId, "reservations")).toBe(false); // unaffected
+
+      const overridesForA = await entitlementsDb.getEntitlementOverridesForRestaurant(restaurantId);
+      expect(overridesForA.find((o) => o.featureKey === "reservations")).toBeUndefined();
+    });
+  });
 });

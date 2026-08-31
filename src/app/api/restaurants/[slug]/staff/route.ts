@@ -10,6 +10,7 @@ import { hashPassword, validatePasswordStrength } from "@/lib/auth/password";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { maxStaffForRestaurant } from "@/lib/plans-db";
+import { HttpError } from "@/lib/http-error";
 
 /**
  * Lists everyone with an active role at this restaurant — owner included
@@ -99,37 +100,6 @@ export async function POST(
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
 
-    // Phase 10 — plan-limited staff seats. Owner doesn't count against
-    // their own restaurant's limit (see maxStaffForRestaurant's own
-    // comment); a trial with no plan assigned yet gets the generous
-    // TRIAL_MAX_STAFF default rather than blocking evaluation.
-    const [restaurantRow] = await db
-      .select({ planKey: restaurants.planKey })
-      .from(restaurants)
-      .where(eq(restaurants.id, restaurantId))
-      .limit(1);
-    const maxStaff = await maxStaffForRestaurant(restaurantRow ?? { planKey: null });
-    if (maxStaff !== null) {
-      const [staffCountRow] = await db
-        .select({ n: count() })
-        .from(userRoles)
-        .where(
-          and(
-            eq(userRoles.restaurantId, restaurantId),
-            eq(userRoles.isActive, true),
-            ne(userRoles.role, "owner"),
-          ),
-        );
-      if ((staffCountRow?.n ?? 0) >= maxStaff) {
-        return NextResponse.json(
-          {
-            error: `You've reached your plan's staff limit (${maxStaff}). Upgrade your plan from the Billing page to add more.`,
-          },
-          { status: 403 },
-        );
-      }
-    }
-
     const existingUserRows = await db
       .select({ id: users.id })
       .from(users)
@@ -190,16 +160,64 @@ export async function POST(
       branchId = branchRows[0].id;
     }
 
-    const [grant] = await db
-      .insert(userRoles)
-      .values({
-        userId,
-        restaurantId,
-        branchId,
-        role: data.role,
-        invitedBy: session.user.id,
-      })
-      .returning();
+    // Phase 10 — plan-limited staff seats. Owner doesn't count against
+    // their own restaurant's limit (see maxStaffForRestaurant's own
+    // comment); a trial with no plan assigned yet gets the generous
+    // TRIAL_MAX_STAFF default rather than blocking evaluation.
+    //
+    // Phase 11 security pass — this count-then-insert used to run against
+    // the plain `db` handle with no lock, so two POSTs racing for the last
+    // staff seat could both read the same pre-insert count and both pass,
+    // letting a restaurant exceed its plan's seat limit by one (a real
+    // TOCTOU gap the security audit flagged). Locking the restaurant row
+    // with SELECT...FOR UPDATE for the duration of the count-check-then-
+    // insert serializes concurrent requests — the second transaction
+    // blocks on the lock until the first commits, then re-counts and
+    // correctly sees the just-inserted row. Same tx-scoped .for("update")
+    // pattern the order-mutation routes already use (see orders/[orderId]/
+    // payments/route.ts and friends). Everything above this point (find-
+    // or-create user, existing-grant check, branch resolution) is plain
+    // reads/writes outside the lock — none of it participates in the seat
+    // race, and the separate active-grant race is already closed by the
+    // user_roles_one_active_per_restaurant_unique partial index.
+    const grant = await db.transaction(async (tx) => {
+      const [restaurantRow] = await tx
+        .select({ planKey: restaurants.planKey })
+        .from(restaurants)
+        .where(eq(restaurants.id, restaurantId))
+        .for("update");
+      const maxStaff = await maxStaffForRestaurant(restaurantRow ?? { planKey: null });
+      if (maxStaff !== null) {
+        const [staffCountRow] = await tx
+          .select({ n: count() })
+          .from(userRoles)
+          .where(
+            and(
+              eq(userRoles.restaurantId, restaurantId),
+              eq(userRoles.isActive, true),
+              ne(userRoles.role, "owner"),
+            ),
+          );
+        if ((staffCountRow?.n ?? 0) >= maxStaff) {
+          throw new HttpError(
+            `You've reached your plan's staff limit (${maxStaff}). Upgrade your plan from the Billing page to add more.`,
+            403,
+          );
+        }
+      }
+
+      const [inserted] = await tx
+        .insert(userRoles)
+        .values({
+          userId,
+          restaurantId,
+          branchId,
+          role: data.role,
+          invitedBy: session.user.id,
+        })
+        .returning();
+      return inserted;
+    });
 
     await recordAuditLog({
       restaurantId,
