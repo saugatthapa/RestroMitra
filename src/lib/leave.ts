@@ -65,3 +65,27 @@ export function leaveRangesOverlap(
 ): boolean {
   return aStart <= bEnd && bStart <= aEnd;
 }
+
+/**
+ * Phase 16 (Attendance overhaul, Track B — Analytics & payroll integration)
+ * — how many days of a [leaveStart, leaveEnd] request fall inside
+ * [periodStart, periodEnd] (all inclusive "YYYY-MM-DD"). Used both by
+ * payroll.ts (a daily-rate staff member's approved paid leave days still
+ * count toward that period's pay) and attendance-analytics-db.ts (a leave
+ * breakdown scoped to the reporting period) — a leave request spanning
+ * three months shouldn't have all its days attributed to just the one
+ * period a manager happens to be looking at. Returns 0 when the ranges
+ * don't overlap at all (mirrors leaveRangesOverlap's boundary logic,
+ * clipped rather than boolean).
+ */
+export function leaveDaysWithinPeriod(
+  leaveStart: string,
+  leaveEnd: string,
+  periodStart: string,
+  periodEnd: string,
+): number {
+  const clippedStart = leaveStart > periodStart ? leaveStart : periodStart;
+  const clippedEnd = leaveEnd < periodEnd ? leaveEnd : periodEnd;
+  if (clippedStart > clippedEnd) return 0;
+  return leaveDayCount(clippedStart, clippedEnd);
+}

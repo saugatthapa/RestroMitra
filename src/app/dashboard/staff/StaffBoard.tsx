@@ -81,6 +81,10 @@ type PayrollComputation = {
   standingAmountInPaisa: number;
   attendanceMinutes: number;
   attendanceDays: number;
+  // Phase 16 (Attendance overhaul, Track B) — approved, non-unpaid leave
+  // days within the period; folded into owedAmountInPaisa for "daily" pay
+  // only, merely informational for hourly/monthly (see payroll.ts).
+  paidLeaveDays: number;
   owedAmountInPaisa: number;
 };
 
@@ -1000,6 +1004,26 @@ function AttendanceTab({
 // Payroll tab (Phase 22)
 // ---------------------------------------------------------------------------
 
+/**
+ * Phase 16 (Attendance overhaul, Track B) — the "(5 days)" / "(3h 30m)"
+ * parenthetical next to an owed amount, extended with a paid-leave note
+ * when the period has any. For "daily" pay the leave days are already
+ * folded into owedAmountInPaisa (see payroll.ts), so it reads as "+ N paid
+ * leave" appended to the days count. For "hourly" (where leave is
+ * deliberately NOT folded into pay — no spec for how many hours a leave
+ * day is worth) it's called out separately so it doesn't look like part of
+ * the worked-hours figure.
+ */
+function formatComputationDetail(computation: PayrollComputation): string {
+  const worked =
+    computation.salaryType === "hourly"
+      ? formatDuration(computation.attendanceMinutes)
+      : `${computation.attendanceDays} day${computation.attendanceDays === 1 ? "" : "s"}`;
+  if (computation.paidLeaveDays <= 0) return worked;
+  const leaveLabel = `${computation.paidLeaveDays} paid leave day${computation.paidLeaveDays === 1 ? "" : "s"}`;
+  return computation.salaryType === "daily" ? `${worked} + ${leaveLabel}` : `${worked}, ${leaveLabel} (not included)`;
+}
+
 function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll: boolean }) {
   const [staff, setStaff] = useState<PayrollStaffMember[]>([]);
   const [payments, setPayments] = useState<PayrollPayment[]>([]);
@@ -1117,9 +1141,7 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
                       {formatNPR(s.computation.owedAmountInPaisa)}
                       {s.computation.salaryType !== "monthly" && (
                         <span className="ml-1 text-xs text-neutral-400">
-                          ({s.computation.salaryType === "hourly"
-                            ? formatDuration(s.computation.attendanceMinutes)
-                            : `${s.computation.attendanceDays} day${s.computation.attendanceDays === 1 ? "" : "s"}`})
+                          ({formatComputationDetail(s.computation)})
                         </span>
                       )}
                     </>
@@ -1317,7 +1339,14 @@ function PaySalaryModal({
               ? formatDuration(staff.computation.attendanceMinutes)
               : staff.computation.salaryType === "daily"
                 ? `${staff.computation.attendanceDays} day${staff.computation.attendanceDays === 1 ? "" : "s"} worked`
-                : "monthly salary, not prorated by attendance"} — computed{" "}
+                : "monthly salary, not prorated by attendance"}
+            {staff.computation.paidLeaveDays > 0 &&
+              (staff.computation.salaryType === "daily"
+                ? ` + ${staff.computation.paidLeaveDays} paid leave day${staff.computation.paidLeaveDays === 1 ? "" : "s"}`
+                : staff.computation.salaryType === "hourly"
+                  ? `, ${staff.computation.paidLeaveDays} paid leave day${staff.computation.paidLeaveDays === 1 ? "" : "s"} not included above`
+                  : "")}
+            {" "}— computed{" "}
             {formatNPR(staff.computation.owedAmountInPaisa)}.
           </p>
         )}

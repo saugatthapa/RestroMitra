@@ -1,8 +1,9 @@
 import "server-only";
-import { and, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, lte, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { attendanceRecords, staffSalaryConfigs, userRoles } from "@/db/schema";
+import { attendanceRecords, leaveRequests, staffSalaryConfigs, userRoles } from "@/db/schema";
 import { summarizeAttendance } from "@/lib/attendance";
+import { leaveDaysWithinPeriod } from "@/lib/leave";
 import { restaurantDate, restaurantStartOfDay } from "@/lib/restaurant-date";
 import type { SalaryType } from "@/lib/finance/salary-type";
 
@@ -26,20 +27,33 @@ import type { SalaryType } from "@/lib/finance/salary-type";
  *    it so a manager can SEE the days/hours worked and decide for
  *    themselves whether an adjustment is warranted — the system just
  *    doesn't auto-deduct for them.
- *  - daily: amountInPaisa (the daily rate) × distinct calendar days present.
+ *  - daily: amountInPaisa (the daily rate) × (distinct calendar days present
+ *    + paid leave days). Phase 16 (Attendance overhaul, Track B — Analytics
+ *    & payroll integration) extends this: an approved, non-unpaid leave day
+ *    inside the period is a day the staff member was OWED pay for without
+ *    physically clocking in, so it counts toward the daily rate exactly
+ *    like an attended day. paidLeaveDays defaults to 0, so existing callers
+ *    that don't pass it behave exactly as before.
  *  - hourly: amountInPaisa (the hourly rate) × hours worked, rounded to
- *    the nearest paisa (not the nearest hour).
+ *    the nearest paisa (not the nearest hour). Deliberately NOT extended
+ *    with paid leave — there's no spec for how many "hours" an approved
+ *    leave day is worth for an hourly worker, so paidLeaveDays is merely
+ *    surfaced on the result for a manager to see and act on manually,
+ *    same "no invented policy" restraint as monthly's non-proration above.
+ *  - monthly: unaffected by paidLeaveDays for the same reason — the whole
+ *    standing amount is already unprorated by attendance, so there's
+ *    nothing for a leave day to add or subtract.
  */
 export function computeOwedAmountInPaisa(
   salaryType: SalaryType,
   amountInPaisa: number,
-  attendance: { totalMinutes: number; daysPresent: number },
+  attendance: { totalMinutes: number; daysPresent: number; paidLeaveDays?: number },
 ): number {
   switch (salaryType) {
     case "monthly":
       return amountInPaisa;
     case "daily":
-      return amountInPaisa * attendance.daysPresent;
+      return amountInPaisa * (attendance.daysPresent + (attendance.paidLeaveDays ?? 0));
     case "hourly":
       return Math.round((amountInPaisa * attendance.totalMinutes) / 60);
     default:
@@ -52,6 +66,15 @@ export type PayrollComputation = {
   standingAmountInPaisa: number;
   attendanceMinutes: number;
   attendanceDays: number;
+  /**
+   * Phase 16 — approved, non-unpaid leave days within [periodStart,
+   * periodEnd], clipped via leaveDaysWithinPeriod. Folded into
+   * owedAmountInPaisa for "daily" salaryType only (see
+   * computeOwedAmountInPaisa's own comment); surfaced unconditionally here
+   * so the UI can show it for hourly/monthly too, where it's informational
+   * only.
+   */
+  paidLeaveDays: number;
   owedAmountInPaisa: number;
 };
 
@@ -92,7 +115,11 @@ export async function getPayrollComputation(
   const dayAfterEnd = new Date(restaurantStartOfDay(timezone, periodEnd).getTime() + 24 * 60 * 60 * 1000);
 
   const records = await db
-    .select({ clockInAt: attendanceRecords.clockInAt, clockOutAt: attendanceRecords.clockOutAt })
+    .select({
+      clockInAt: attendanceRecords.clockInAt,
+      clockOutAt: attendanceRecords.clockOutAt,
+      status: attendanceRecords.status,
+    })
     .from(attendanceRecords)
     .where(
       and(
@@ -103,14 +130,43 @@ export async function getPayrollComputation(
       ),
     );
 
-  const summary = summarizeAttendance(records, (d) => restaurantDate(timezone, d));
-  const owedAmountInPaisa = computeOwedAmountInPaisa(roleRow.salaryType, roleRow.amountInPaisa, summary);
+  // Phase 16 — a "rejected" shift means a manager looked at its selfie
+  // evidence and decided it doesn't hold up, so it shouldn't count toward
+  // pay (same trust boundary the review status already enforces for the
+  // Attendance tab). "needs_review"/"verified" both still count, exactly
+  // as before Phase 13 introduced the status column at all.
+  const countedRecords = records.filter((r) => r.status !== "rejected");
+  const summary = summarizeAttendance(countedRecords, (d) => restaurantDate(timezone, d));
+
+  const leaveRows = await db
+    .select({ startDate: leaveRequests.startDate, endDate: leaveRequests.endDate })
+    .from(leaveRequests)
+    .where(
+      and(
+        eq(leaveRequests.restaurantId, restaurantId),
+        eq(leaveRequests.userId, roleRow.userId),
+        eq(leaveRequests.status, "approved"),
+        ne(leaveRequests.leaveType, "unpaid"),
+        lte(leaveRequests.startDate, periodEnd),
+        gte(leaveRequests.endDate, periodStart),
+      ),
+    );
+  const paidLeaveDays = leaveRows.reduce(
+    (sum, r) => sum + leaveDaysWithinPeriod(r.startDate, r.endDate, periodStart, periodEnd),
+    0,
+  );
+
+  const owedAmountInPaisa = computeOwedAmountInPaisa(roleRow.salaryType, roleRow.amountInPaisa, {
+    ...summary,
+    paidLeaveDays,
+  });
 
   return {
     salaryType: roleRow.salaryType,
     standingAmountInPaisa: roleRow.amountInPaisa,
     attendanceMinutes: summary.totalMinutes,
     attendanceDays: summary.daysPresent,
+    paidLeaveDays,
     owedAmountInPaisa,
   };
 }
@@ -168,6 +224,7 @@ export async function getPayrollComputationsBatch(
       userId: attendanceRecords.userId,
       clockInAt: attendanceRecords.clockInAt,
       clockOutAt: attendanceRecords.clockOutAt,
+      status: attendanceRecords.status,
     })
     .from(attendanceRecords)
     .where(
@@ -179,21 +236,55 @@ export async function getPayrollComputationsBatch(
       ),
     );
 
+  // Phase 16 — same rejected-shift exclusion as getPayrollComputation,
+  // applied before bucketing by user so both functions stay in lockstep
+  // (the batch tests assert they produce IDENTICAL results per person).
   const recordsByUserId = new Map<string, { clockInAt: Date; clockOutAt: Date | null }[]>();
   for (const r of records) {
+    if (r.status === "rejected") continue;
     const list = recordsByUserId.get(r.userId);
     if (list) list.push(r);
     else recordsByUserId.set(r.userId, [r]);
   }
 
+  // Phase 16 — one leaveRequests query for the whole batch, same "1 query
+  // instead of N" shape as the attendance query above.
+  const leaveRows = await db
+    .select({
+      userId: leaveRequests.userId,
+      startDate: leaveRequests.startDate,
+      endDate: leaveRequests.endDate,
+    })
+    .from(leaveRequests)
+    .where(
+      and(
+        eq(leaveRequests.restaurantId, restaurantId),
+        inArray(leaveRequests.userId, userIds),
+        eq(leaveRequests.status, "approved"),
+        ne(leaveRequests.leaveType, "unpaid"),
+        lte(leaveRequests.startDate, periodEnd),
+        gte(leaveRequests.endDate, periodStart),
+      ),
+    );
+  const paidLeaveDaysByUserId = new Map<string, number>();
+  for (const r of leaveRows) {
+    const days = leaveDaysWithinPeriod(r.startDate, r.endDate, periodStart, periodEnd);
+    paidLeaveDaysByUserId.set(r.userId, (paidLeaveDaysByUserId.get(r.userId) ?? 0) + days);
+  }
+
   for (const s of staff) {
     const summary = summarizeAttendance(recordsByUserId.get(s.userId) ?? [], (d) => restaurantDate(timezone, d));
-    const owedAmountInPaisa = computeOwedAmountInPaisa(s.salaryType, s.amountInPaisa, summary);
+    const paidLeaveDays = paidLeaveDaysByUserId.get(s.userId) ?? 0;
+    const owedAmountInPaisa = computeOwedAmountInPaisa(s.salaryType, s.amountInPaisa, {
+      ...summary,
+      paidLeaveDays,
+    });
     result.set(s.userRoleId, {
       salaryType: s.salaryType,
       standingAmountInPaisa: s.amountInPaisa,
       attendanceMinutes: summary.totalMinutes,
       attendanceDays: summary.daysPresent,
+      paidLeaveDays,
       owedAmountInPaisa,
     });
   }

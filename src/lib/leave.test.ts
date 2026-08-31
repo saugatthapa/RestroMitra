@@ -5,6 +5,7 @@ import {
   canCancelLeaveRequest,
   canReviewLeaveRequest,
   leaveRangesOverlap,
+  leaveDaysWithinPeriod,
 } from "./leave";
 
 describe("isValidLeaveRange", () => {
@@ -65,5 +66,39 @@ describe("leaveRangesOverlap", () => {
 
   it("returns false for ranges far apart", () => {
     expect(leaveRangesOverlap("2026-08-01", "2026-08-05", "2026-09-01", "2026-09-05")).toBe(false);
+  });
+});
+
+describe("leaveDaysWithinPeriod", () => {
+  it("counts every day when the leave range sits fully inside the period", () => {
+    expect(leaveDaysWithinPeriod("2026-08-10", "2026-08-12", "2026-08-01", "2026-08-31")).toBe(3);
+  });
+
+  it("counts every day when the period sits fully inside the leave range", () => {
+    expect(leaveDaysWithinPeriod("2026-08-01", "2026-09-30", "2026-08-10", "2026-08-12")).toBe(3);
+  });
+
+  it("clips a leave range that starts before the period", () => {
+    expect(leaveDaysWithinPeriod("2026-07-28", "2026-08-03", "2026-08-01", "2026-08-31")).toBe(3);
+  });
+
+  it("clips a leave range that ends after the period", () => {
+    expect(leaveDaysWithinPeriod("2026-08-29", "2026-09-05", "2026-08-01", "2026-08-31")).toBe(3);
+  });
+
+  it("counts a leave range spanning three months, clipped to the middle period", () => {
+    expect(leaveDaysWithinPeriod("2026-07-01", "2026-09-30", "2026-08-01", "2026-08-31")).toBe(31);
+  });
+
+  it("returns 0 when the ranges don't overlap at all", () => {
+    expect(leaveDaysWithinPeriod("2026-06-01", "2026-06-05", "2026-08-01", "2026-08-31")).toBe(0);
+  });
+
+  it("returns 0 for adjacent, non-overlapping ranges", () => {
+    expect(leaveDaysWithinPeriod("2026-07-25", "2026-07-31", "2026-08-01", "2026-08-31")).toBe(0);
+  });
+
+  it("handles an exact single-day overlap at the period boundary", () => {
+    expect(leaveDaysWithinPeriod("2026-07-28", "2026-08-01", "2026-08-01", "2026-08-31")).toBe(1);
   });
 });
