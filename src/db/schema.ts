@@ -3670,6 +3670,83 @@ export const platformImpersonationSessionsRelations = relations(
   }),
 );
 
+/**
+ * Platform Control Center (Phase 9) — Support tooling. Internal, admin-only
+ * notes on a tenant ("owner mentioned they're switching POS in June",
+ * "escalated to billing team 3x this month") — never surfaced anywhere in
+ * the tenant's own dashboard, purely a support-team memory aid attached to
+ * /admin's restaurant detail view. `authorUserId` is `set null` (not
+ * cascade) on the author being removed — the note itself is still useful
+ * support history even once its author is gone, same reasoning as
+ * subscription_events.performed_by_user_id above.
+ */
+export const restaurantSupportNotes = pgTable(
+  "restaurant_support_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    authorUserId: uuid("author_user_id").references(() => users.id, { onDelete: "set null" }),
+    note: text("note").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("restaurant_support_notes_restaurant_id_idx").on(table.restaurantId),
+    index("restaurant_support_notes_created_at_idx").on(table.createdAt),
+  ],
+);
+
+/**
+ * Platform Control Center (Phase 9) — a small, fixed catalog of
+ * support-status labels (see SUPPORT_TAGS in src/lib/support/tags.ts) a
+ * support agent can attach to a tenant for their own triage/handoff
+ * purposes ("VIP", "at risk of churn", "escalated"...). Deliberately a
+ * relational table (one row per tag, with who added it and when) rather
+ * than a Postgres array column on `restaurants` — this project has no
+ * existing array-column convention, and a row-per-tag gives each tag its
+ * own audit trail for free, consistent with every other "who did this and
+ * when" table in this schema.
+ */
+export const restaurantSupportTags = pgTable(
+  "restaurant_support_tags",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    tag: varchar("tag", { length: 40 }).notNull(),
+    addedByUserId: uuid("added_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("restaurant_support_tags_restaurant_id_idx").on(table.restaurantId),
+    // A tenant can't be tagged "vip" twice — the UI treats tags as a set,
+    // not a list; re-adding an existing tag should be a no-op, not a
+    // second row.
+    uniqueIndex("restaurant_support_tags_restaurant_id_tag_unique").on(
+      table.restaurantId,
+      table.tag,
+    ),
+  ],
+);
+
+export const restaurantSupportNotesRelations = relations(restaurantSupportNotes, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [restaurantSupportNotes.restaurantId],
+    references: [restaurants.id],
+  }),
+  author: one(users, { fields: [restaurantSupportNotes.authorUserId], references: [users.id] }),
+}));
+
+export const restaurantSupportTagsRelations = relations(restaurantSupportTags, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [restaurantSupportTags.restaurantId],
+    references: [restaurants.id],
+  }),
+  addedBy: one(users, { fields: [restaurantSupportTags.addedByUserId], references: [users.id] }),
+}));
+
 // ---------------------------------------------------------------------------
 // Relations (for query ergonomics)
 // ---------------------------------------------------------------------------
@@ -3707,6 +3784,8 @@ export const restaurantsRelations = relations(restaurants, ({ many }) => ({
   entitlementOverrides: many(entitlementOverrides),
   aiUsageLogs: many(aiUsageLogs),
   impersonationSessions: many(platformImpersonationSessions),
+  supportNotes: many(restaurantSupportNotes),
+  supportTags: many(restaurantSupportTags),
 }));
 
 export const subscriptionEventsRelations = relations(subscriptionEvents, ({ one }) => ({

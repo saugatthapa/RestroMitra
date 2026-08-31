@@ -2,11 +2,14 @@ import { NextResponse } from "next/server";
 import { and, count, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { restaurants, userRoles, users, subscriptionEvents } from "@/db/schema";
-import { requirePlatformPermission } from "@/lib/rbac/guard";
-import { PLATFORM_PERMISSIONS } from "@/lib/rbac/platform-permissions";
+import { requirePlatformPermission, getActivePlatformRoles } from "@/lib/rbac/guard";
+import { PLATFORM_PERMISSIONS, roleHasPlatformPermission } from "@/lib/rbac/platform-permissions";
 import { toErrorResponse } from "@/lib/api-route-helpers";
 import { getEffectivePlan, getAllPlansForAdmin, aiMonthlyRequestLimitForRestaurant } from "@/lib/plans-db";
 import { countAiRequestsThisMonth } from "@/lib/ai/usage-db";
+import { listSupportNotes } from "@/lib/support/notes-db";
+import { listSupportTags } from "@/lib/support/tags-db";
+import { getRestaurantHealthScore } from "@/lib/support/health-score-db";
 
 const EVENT_HISTORY_LIMIT = 50;
 
@@ -16,7 +19,7 @@ export async function GET(
   ctx: { params: Promise<{ restaurantId: string }> },
 ) {
   try {
-    await requirePlatformPermission(PLATFORM_PERMISSIONS.VIEW_TENANTS);
+    const session = await requirePlatformPermission(PLATFORM_PERMISSIONS.VIEW_TENANTS);
     const { restaurantId } = await ctx.params;
 
     const [restaurant] = await db
@@ -44,6 +47,38 @@ export async function GET(
           eq(userRoles.isActive, true),
         ),
       );
+
+    // Phase 9 (Support tooling) — the staff list, internal notes, status
+    // tags, and health score are all support-team-facing, so they're only
+    // included for a caller who actually holds MANAGE_SUPPORT — a
+    // platform_viewer (VIEW_TENANTS only, which is all this route
+    // otherwise requires) sees the tenant detail page without any of the
+    // support-specific panels rather than getting a 403 for the whole
+    // route.
+    const platformRoles = await getActivePlatformRoles(session.user.id);
+    const canManageSupport = platformRoles.some((role) =>
+      roleHasPlatformPermission(role, PLATFORM_PERMISSIONS.MANAGE_SUPPORT),
+    );
+
+    const [staff, supportNotes, supportTags, healthScore] = canManageSupport
+      ? await Promise.all([
+          db
+            .select({
+              userRoleId: userRoles.id,
+              userId: userRoles.userId,
+              fullName: users.fullName,
+              phone: users.phone,
+              role: userRoles.role,
+              isActive: userRoles.isActive,
+            })
+            .from(userRoles)
+            .innerJoin(users, eq(userRoles.userId, users.id))
+            .where(and(eq(userRoles.restaurantId, restaurantId), eq(userRoles.isActive, true))),
+          listSupportNotes(restaurantId),
+          listSupportTags(restaurantId),
+          getRestaurantHealthScore(restaurantId),
+        ])
+      : [[], [], [], null];
 
     const events = await db
       .select({
@@ -101,6 +136,12 @@ export async function GET(
       staffCount: staffCountRow?.n ?? 0,
       events,
       plans: allPlans,
+      // Phase 9 — null/empty when the caller lacks MANAGE_SUPPORT (see
+      // above); the UI treats a null healthScore as "hidden", not "0".
+      staff,
+      supportNotes,
+      supportTags,
+      healthScore,
     });
   } catch (err) {
     return toErrorResponse(err);

@@ -8,6 +8,7 @@ import { SUBSCRIPTION_STATUS_LABELS, type SubscriptionStatus } from "@/lib/subsc
 import { EntitlementsPanel } from "./EntitlementsPanel";
 import { AiUsagePanel } from "./AiUsagePanel";
 import { ImpersonationPanel } from "./ImpersonationPanel";
+import { SupportPanel, type SupportPanelData } from "./SupportPanel";
 
 type Detail = {
   restaurant: {
@@ -45,7 +46,7 @@ type Detail = {
   // Phase 4 — every plan, including retired ones, for the "Assign plan"
   // dropdown; see getAllPlansForAdmin() in lib/plans-db.ts.
   plans: Plan[];
-};
+} & SupportPanelData;
 
 function formatEventType(eventType: string) {
   return eventType.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
@@ -357,6 +358,15 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
         aiMonthlyRequestLimit={restaurant.aiMonthlyRequestLimit}
         aiRequestsThisMonth={restaurant.aiRequestsThisMonth}
         onSaved={load}
+      />
+
+      <SupportPanel
+        restaurantId={restaurantId}
+        healthScore={data.healthScore}
+        supportTags={data.supportTags}
+        supportNotes={data.supportNotes}
+        staff={data.staff}
+        onChanged={load}
       />
 
       <EntitlementsPanel restaurantId={restaurantId} />

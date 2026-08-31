@@ -32,6 +32,30 @@ export async function GET(request: Request) {
         : null;
     const q = url.searchParams.get("q")?.trim();
 
+    // Phase 9 (Support tooling) — "global search": a support agent
+    // usually has the OWNER's name or phone number in hand, not the
+    // restaurant's own name/slug, so `q` also matches against the
+    // restaurant's owner. Resolved as a separate id lookup (rather than
+    // joining users into the main select below) to avoid duplicating a
+    // restaurant row if it ever had more than one active "owner" grant —
+    // the main select stays a clean one-row-per-restaurant query either way.
+    let ownerMatchIds: string[] = [];
+    if (q) {
+      const ownerMatches = await db
+        .select({ restaurantId: userRoles.restaurantId })
+        .from(userRoles)
+        .innerJoin(users, eq(userRoles.userId, users.id))
+        .where(
+          and(
+            eq(userRoles.role, "owner"),
+            or(ilike(users.fullName, `%${q}%`), ilike(users.phone, `%${q}%`)),
+          ),
+        );
+      ownerMatchIds = ownerMatches
+        .map((r) => r.restaurantId)
+        .filter((id): id is string => id !== null);
+    }
+
     const rows = await db
       .select({
         id: restaurants.id,
@@ -48,7 +72,13 @@ export async function GET(request: Request) {
       .where(
         and(
           status ? eq(restaurants.subscriptionStatus, status) : undefined,
-          q ? or(ilike(restaurants.name, `%${q}%`), ilike(restaurants.slug, `%${q}%`)) : undefined,
+          q
+            ? or(
+                ilike(restaurants.name, `%${q}%`),
+                ilike(restaurants.slug, `%${q}%`),
+                ownerMatchIds.length > 0 ? inArray(restaurants.id, ownerMatchIds) : undefined,
+              )
+            : undefined,
         ),
       )
       .orderBy(desc(restaurants.createdAt))
