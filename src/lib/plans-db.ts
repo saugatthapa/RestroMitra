@@ -3,7 +3,13 @@ import { cache } from "react";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { plans } from "@/db/schema";
-import { TRIAL_MAX_STAFF, TRIAL_MAX_BRANCHES, applyPriceLock, type Plan } from "./plans";
+import {
+  TRIAL_MAX_STAFF,
+  TRIAL_MAX_BRANCHES,
+  TRIAL_AI_MONTHLY_REQUEST_LIMIT,
+  applyPriceLock,
+  type Plan,
+} from "./plans";
 
 /**
  * Platform Control Center (Phase 4) — DB-backed counterpart to plans.ts's
@@ -25,6 +31,7 @@ function rowToPlan(row: typeof plans.$inferSelect): Plan {
     highlight: row.highlight,
     features: row.features,
     featureKeys: row.featureKeys,
+    aiMonthlyRequestLimit: row.aiMonthlyRequestLimit,
     sortOrder: row.sortOrder,
     isActive: row.isActive,
   };
@@ -105,4 +112,25 @@ export async function maxBranchesForRestaurant(restaurant: { planKey: string | n
   const plan = await getPlanByKey(restaurant.planKey);
   if (!plan) return TRIAL_MAX_BRANCHES;
   return plan.maxBranches;
+}
+
+/**
+ * Phase 7 — the monthly AI-assistant request ceiling that currently applies
+ * to a restaurant: an explicit per-restaurant override when a platform
+ * admin has set one (restaurants.aiMonthlyRequestLimitOverride — see its
+ * schema comment), otherwise its assigned plan's limit, otherwise the trial
+ * default. Returns null for "unlimited". Same override-then-plan-then-trial
+ * precedence as maxStaffForRestaurant/maxBranchesForRestaurant, plus the
+ * one extra step (override) that those two don't have.
+ */
+export async function aiMonthlyRequestLimitForRestaurant(restaurant: {
+  planKey: string | null;
+  aiMonthlyRequestLimitOverride?: number | null;
+}): Promise<number | null> {
+  if (restaurant.aiMonthlyRequestLimitOverride != null) {
+    return restaurant.aiMonthlyRequestLimitOverride;
+  }
+  const plan = await getPlanByKey(restaurant.planKey);
+  if (!plan) return TRIAL_AI_MONTHLY_REQUEST_LIMIT;
+  return plan.aiMonthlyRequestLimit;
 }

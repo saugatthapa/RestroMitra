@@ -79,6 +79,8 @@ export type Plan = {
   features: string[];
   /** Machine-checkable references into src/lib/feature-catalog.ts's FEATURES — what Phase 5's entitlement engine actually gates on. */
   featureKeys: string[];
+  /** Phase 7 — null = unlimited. Monthly AI assistant request quota (see aiMonthlyRequestLimitForRestaurant in plans-db.ts, which applies restaurants.aiMonthlyRequestLimitOverride first when one is set). */
+  aiMonthlyRequestLimit: number | null;
   /** Catalog display order (ascending) — see getActivePlans()/getAllPlansForAdmin() in plans-db.ts. */
   sortOrder: number;
   isActive: boolean;
@@ -126,3 +128,14 @@ export const TRIAL_MAX_STAFF = 10;
  * branches are a much bigger structural commitment than a staff seat.)
  */
 export const TRIAL_MAX_BRANCHES = 2;
+
+/**
+ * Phase 7 — generous default monthly AI-assistant request quota while a
+ * restaurant is still on its free trial and hasn't been assigned a plan
+ * yet, same "don't gate evaluation" spirit as TRIAL_MAX_STAFF/
+ * TRIAL_MAX_BRANCHES above. 100 requests/month is comfortably more than a
+ * single owner/manager checking their numbers a few times a day would use
+ * during a trial, while still being a real ceiling (not unlimited) so a
+ * misconfigured/abusive trial signup can't run up provider costs.
+ */
+export const TRIAL_AI_MONTHLY_REQUEST_LIMIT = 100;

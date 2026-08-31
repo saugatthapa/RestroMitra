@@ -6,7 +6,12 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { askAssistantSchema } from "@/lib/validation/assistant";
 import { getReportSummary } from "@/lib/reports";
-import { buildSystemPrompt, askAssistant, AssistantApiError } from "@/lib/ai/assistant";
+import { buildSystemPrompt, AssistantApiError, AssistantAllProvidersFailedError } from "@/lib/ai/assistant";
+import {
+  askAssistantForRestaurant,
+  AiAssistantNotEntitledError,
+  AiAssistantQuotaExceededError,
+} from "@/lib/ai/ask-db";
 import { hasValidCsrfHeader } from "@/lib/request";
 import { rateLimit } from "@/lib/rate-limit";
 import { restaurantDate } from "@/lib/restaurant-date";
@@ -71,9 +76,27 @@ export async function POST(
     const systemPrompt = buildSystemPrompt(restaurant?.name ?? "your restaurant", summary);
 
     try {
-      const { answer } = await askAssistant({ systemPrompt, question });
+      const { answer } = await askAssistantForRestaurant(restaurantId, { systemPrompt, question });
       return NextResponse.json({ answer, range });
     } catch (err) {
+      // Phase 7 — entitlement/quota failures are distinct from provider
+      // failures: they're an expected, informative outcome for the user
+      // (upgrade your plan / wait until next month), not a 502.
+      if (err instanceof AiAssistantNotEntitledError) {
+        return NextResponse.json(
+          { error: "The AI assistant isn't included in your current plan." },
+          { status: 403 },
+        );
+      }
+      if (err instanceof AiAssistantQuotaExceededError) {
+        return NextResponse.json(
+          {
+            error: `This restaurant has reached its AI assistant quota for this month (${err.used}/${err.limit} requests). The quota resets on the 1st.`,
+          },
+          { status: 429 },
+        );
+      }
+
       // Phase 14: the "not configured" message now applies to either
       // provider — getAiConfig()/getGroqConfig()/getAnthropicConfig() all
       // throw a plain Error whose message contains this phrase when the
@@ -87,7 +110,11 @@ export async function POST(
           : "The AI assistant is temporarily unavailable. Please try again shortly.";
       console.error(
         "AI assistant request failed:",
-        err instanceof AssistantApiError ? { status: err.status, body: err.body } : err,
+        err instanceof AssistantApiError
+          ? { status: err.status, body: err.body }
+          : err instanceof AssistantAllProvidersFailedError
+            ? { attempts: err.attempts.map((a) => ({ provider: a.provider, model: a.model })) }
+            : err,
       );
       return NextResponse.json({ error: detail }, { status: 502 });
     }

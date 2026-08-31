@@ -43,6 +43,7 @@ describe.skipIf(!hasDb)("plans-db (integration)", () => {
         highlight: false,
         features: ["Feature A"],
         featureKeys: ["pos_billing"],
+        aiMonthlyRequestLimit: 50,
         sortOrder: 500,
         isActive: true,
       },
@@ -56,6 +57,7 @@ describe.skipIf(!hasDb)("plans-db (integration)", () => {
         highlight: false,
         features: ["Feature B"],
         featureKeys: [],
+        aiMonthlyRequestLimit: null,
         sortOrder: 501,
         isActive: false,
       },
@@ -133,5 +135,37 @@ describe.skipIf(!hasDb)("plans-db (integration)", () => {
 
   it("maxBranchesForRestaurant returns null (unlimited) for a null-maxBranches plan", async () => {
     expect(await plansDb.maxBranchesForRestaurant({ planKey: retiredKey })).toBeNull();
+  });
+
+  it("aiMonthlyRequestLimitForRestaurant returns the trial default when no plan is assigned", async () => {
+    expect(await plansDb.aiMonthlyRequestLimitForRestaurant({ planKey: null })).toBe(
+      plansPure.TRIAL_AI_MONTHLY_REQUEST_LIMIT,
+    );
+  });
+
+  it("aiMonthlyRequestLimitForRestaurant returns the assigned plan's own limit", async () => {
+    expect(await plansDb.aiMonthlyRequestLimitForRestaurant({ planKey: activeKey })).toBe(50);
+  });
+
+  it("aiMonthlyRequestLimitForRestaurant returns null (unlimited) for a null-limit plan", async () => {
+    expect(await plansDb.aiMonthlyRequestLimitForRestaurant({ planKey: retiredKey })).toBeNull();
+  });
+
+  it("aiMonthlyRequestLimitForRestaurant prefers an explicit override over the plan's own limit", async () => {
+    expect(
+      await plansDb.aiMonthlyRequestLimitForRestaurant({
+        planKey: activeKey,
+        aiMonthlyRequestLimitOverride: 5,
+      }),
+    ).toBe(5);
+  });
+
+  it("aiMonthlyRequestLimitForRestaurant treats an override of 0 as a real limit, not 'unset'", async () => {
+    expect(
+      await plansDb.aiMonthlyRequestLimitForRestaurant({
+        planKey: activeKey,
+        aiMonthlyRequestLimitOverride: 0,
+      }),
+    ).toBe(0);
   });
 });

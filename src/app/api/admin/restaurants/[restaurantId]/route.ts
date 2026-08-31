@@ -5,7 +5,8 @@ import { restaurants, userRoles, users, subscriptionEvents } from "@/db/schema";
 import { requirePlatformPermission } from "@/lib/rbac/guard";
 import { PLATFORM_PERMISSIONS } from "@/lib/rbac/platform-permissions";
 import { toErrorResponse } from "@/lib/api-route-helpers";
-import { getEffectivePlan, getAllPlansForAdmin } from "@/lib/plans-db";
+import { getEffectivePlan, getAllPlansForAdmin, aiMonthlyRequestLimitForRestaurant } from "@/lib/plans-db";
+import { countAiRequestsThisMonth } from "@/lib/ai/usage-db";
 
 const EVENT_HISTORY_LIMIT = 50;
 
@@ -66,7 +67,12 @@ export async function GET(
     // since-retired one this restaurant might already be on) replaces the
     // static PLANS array the detail page used to import client-side for
     // its "Assign plan" dropdown.
-    const [plan, allPlans] = await Promise.all([getEffectivePlan(restaurant), getAllPlansForAdmin()]);
+    const [plan, allPlans, aiMonthlyRequestLimit, aiRequestsThisMonth] = await Promise.all([
+      getEffectivePlan(restaurant),
+      getAllPlansForAdmin(),
+      aiMonthlyRequestLimitForRestaurant(restaurant),
+      countAiRequestsThisMonth(restaurant.id),
+    ]);
 
     return NextResponse.json({
       restaurant: {
@@ -81,6 +87,13 @@ export async function GET(
         planKey: restaurant.planKey,
         plan,
         lockedMonthlyPriceInPaisa: restaurant.lockedMonthlyPriceInPaisa,
+        // Phase 7 — the override itself (null = "use the plan's limit")
+        // plus the already-resolved effective limit/usage, so the admin UI
+        // doesn't need to re-derive the override-then-plan-then-trial
+        // precedence client-side.
+        aiMonthlyRequestLimitOverride: restaurant.aiMonthlyRequestLimitOverride,
+        aiMonthlyRequestLimit,
+        aiRequestsThisMonth,
         isActive: restaurant.isActive,
         createdAt: restaurant.createdAt,
       },

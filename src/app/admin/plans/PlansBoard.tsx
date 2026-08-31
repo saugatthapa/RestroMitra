@@ -17,6 +17,7 @@ type PlanFormState = {
   highlight: boolean;
   features: string; // newline-separated, converted to string[] on submit
   featureKeys: FeatureKey[];
+  aiMonthlyRequestLimit: string; // "" = unlimited
   sortOrder: string;
   isActive: boolean;
 };
@@ -32,6 +33,7 @@ function planToFormState(plan: Plan): PlanFormState {
     highlight: plan.highlight,
     features: plan.features.join("\n"),
     featureKeys: plan.featureKeys as FeatureKey[],
+    aiMonthlyRequestLimit: plan.aiMonthlyRequestLimit === null ? "" : String(plan.aiMonthlyRequestLimit),
     sortOrder: String(plan.sortOrder),
     isActive: plan.isActive,
   };
@@ -47,6 +49,7 @@ const EMPTY_FORM: PlanFormState = {
   highlight: false,
   features: "",
   featureKeys: [],
+  aiMonthlyRequestLimit: "",
   sortOrder: "0",
   isActive: true,
 };
@@ -99,6 +102,7 @@ export function PlansBoard() {
       highlight: form.highlight,
       features: form.features.split("\n").map((f) => f.trim()).filter(Boolean),
       featureKeys: form.featureKeys,
+      aiMonthlyRequestLimit: form.aiMonthlyRequestLimit === "" ? null : Number(form.aiMonthlyRequestLimit),
       sortOrder: Number(form.sortOrder),
       isActive: form.isActive,
     };
@@ -207,7 +211,8 @@ export function PlansBoard() {
                     <p className="mt-0.5 text-xs text-neutral-500">
                       {formatRupees(plan.priceInPaisaMonthly)}/mo · staff{" "}
                       {plan.maxStaff === null ? "unlimited" : plan.maxStaff} · branches{" "}
-                      {plan.maxBranches === null ? "unlimited" : plan.maxBranches} · {plan.tagline}
+                      {plan.maxBranches === null ? "unlimited" : plan.maxBranches} · AI reqs/mo{" "}
+                      {plan.aiMonthlyRequestLimit === null ? "unlimited" : plan.aiMonthlyRequestLimit} · {plan.tagline}
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-2">
@@ -338,7 +343,7 @@ function PlanFields({
           />
         </label>
       </div>
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-5">
         <label className="block text-sm">
           <span className="mb-1 block text-neutral-700">Price (Rs/mo)</span>
           <input
@@ -368,6 +373,16 @@ function PlanFields({
             min={0}
             value={form.maxBranches}
             onChange={(e) => onChange({ ...form, maxBranches: e.target.value })}
+            className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+          />
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block text-neutral-700">AI reqs/mo (blank = unlimited)</span>
+          <input
+            type="number"
+            min={0}
+            value={form.aiMonthlyRequestLimit}
+            onChange={(e) => onChange({ ...form, aiMonthlyRequestLimit: e.target.value })}
             className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
           />
         </label>

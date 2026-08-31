@@ -31,6 +31,9 @@ export const createPlanSchema = z.object({
   highlight: z.boolean(),
   features: z.array(z.string().trim().min(1).max(200)).max(30),
   featureKeys: z.array(z.enum(FEATURE_KEY_VALUES as [string, ...string[]])).max(FEATURE_KEY_VALUES.length),
+  // Phase 7 — null = unlimited, matches the DB column's own nullability
+  // (same shape as maxStaff/maxBranches above).
+  aiMonthlyRequestLimit: z.number().int().min(0).nullable(),
   sortOrder: z.number().int(),
   isActive: z.boolean(),
 });

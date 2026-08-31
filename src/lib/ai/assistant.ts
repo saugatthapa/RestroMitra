@@ -160,9 +160,17 @@ ${branchText ? `\nRevenue by branch:\n${branchText}\n` : ""}=== END DATA ===
 Answer concisely (a few sentences, or a short list when comparing multiple items) and always express money using the "Rs." format shown above. Be direct and factual — this is a working business owner checking their own numbers, not a general chat conversation.`;
 }
 
+export type AssistantUsage = {
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+};
+
 export type AssistantAnswer = {
   answer: string;
   stopReason: string | null;
+  /** Phase 7 — token counts as reported by the provider, for the AI usage ledger (src/lib/ai/usage-db.ts). Null fields when the provider's response didn't include usage data. */
+  usage: AssistantUsage;
 };
 
 export class AssistantApiError extends Error {
@@ -201,6 +209,58 @@ export async function askAssistant(
   return askAnthropic(params, config, fetchImpl);
 }
 
+export type AssistantFailoverAttempt = {
+  provider: string;
+  model: string;
+  error: unknown;
+};
+
+export type AssistantFailoverResult = AssistantAnswer & {
+  provider: string;
+  model: string;
+  /** Every provider tried before the one that finally succeeded — empty when the first provider in the chain succeeded. Lets the caller log a failure per attempted provider even though only the final success is returned. */
+  failedAttempts: AssistantFailoverAttempt[];
+};
+
+export class AssistantAllProvidersFailedError extends Error {
+  constructor(public readonly attempts: AssistantFailoverAttempt[]) {
+    super(`Every configured AI provider failed (${attempts.length} attempted).`);
+    this.name = "AssistantAllProvidersFailedError";
+  }
+}
+
+/**
+ * Platform Control Center (Phase 7) — tries each config in `chain`, in
+ * order, returning the first success. Pure orchestration over askAssistant
+ * (no DB, no env reads of its own) — the caller resolves the actual chain
+ * (src/lib/ai/provider-config-db.ts's resolveAiProviderChain()) and is
+ * responsible for persisting each attempt to the usage ledger; this
+ * function only reports what happened via the return value/thrown error so
+ * the caller can log every attempt without this module needing to know
+ * anything about ai_usage_logs.
+ *
+ * Throws AssistantAllProvidersFailedError (carrying every attempt) only if
+ * EVERY provider in the chain fails — a single provider's outage is
+ * invisible to the end user as long as at least one other configured
+ * provider succeeds.
+ */
+export async function askAssistantWithFailover(
+  params: { systemPrompt: string; question: string },
+  chain: AiConfig[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<AssistantFailoverResult> {
+  const failedAttempts: AssistantFailoverAttempt[] = [];
+  for (const config of chain) {
+    try {
+      const result = await askAssistant(params, config, fetchImpl);
+      return { ...result, provider: config.provider, model: config.model, failedAttempts };
+    } catch (error) {
+      failedAttempts.push({ provider: config.provider, model: config.model, error });
+    }
+  }
+  throw new AssistantAllProvidersFailedError(failedAttempts);
+}
+
 async function askAnthropic(
   params: { systemPrompt: string; question: string },
   config: AnthropicConfig,
@@ -234,7 +294,18 @@ async function askAnthropic(
     throw new AssistantApiError("Anthropic API response had no text content.", res.status, body);
   }
 
-  return { answer: textBlock.text, stopReason: body.stop_reason ?? null };
+  const inputTokens = typeof body.usage?.input_tokens === "number" ? body.usage.input_tokens : null;
+  const outputTokens = typeof body.usage?.output_tokens === "number" ? body.usage.output_tokens : null;
+
+  return {
+    answer: textBlock.text,
+    stopReason: body.stop_reason ?? null,
+    usage: {
+      promptTokens: inputTokens,
+      completionTokens: outputTokens,
+      totalTokens: inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null,
+    },
+  };
 }
 
 async function askGroq(
@@ -264,5 +335,13 @@ async function askGroq(
     throw new AssistantApiError("Groq API request failed.", res.status, body);
   }
 
-  return { answer: message.content, stopReason: body.choices[0].finish_reason ?? null };
+  const promptTokens = typeof body.usage?.prompt_tokens === "number" ? body.usage.prompt_tokens : null;
+  const completionTokens = typeof body.usage?.completion_tokens === "number" ? body.usage.completion_tokens : null;
+  const totalTokens = typeof body.usage?.total_tokens === "number" ? body.usage.total_tokens : null;
+
+  return {
+    answer: message.content,
+    stopReason: body.choices[0].finish_reason ?? null,
+    usage: { promptTokens, completionTokens, totalTokens },
+  };
 }

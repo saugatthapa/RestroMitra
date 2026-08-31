@@ -18,6 +18,7 @@ function mockPlan(overrides: Partial<Plan> = {}): Plan {
     highlight: false,
     features: ["Feature A", "Feature B"],
     featureKeys: ["pos_billing"],
+    aiMonthlyRequestLimit: 100,
     sortOrder: 0,
     isActive: true,
     ...overrides,

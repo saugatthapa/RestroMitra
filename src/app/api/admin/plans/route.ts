@@ -55,6 +55,7 @@ export async function POST(request: Request) {
         highlight: data.highlight,
         features: data.features,
         featureKeys: data.featureKeys,
+        aiMonthlyRequestLimit: data.aiMonthlyRequestLimit,
         sortOrder: data.sortOrder,
         isActive: data.isActive,
       })

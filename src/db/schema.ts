@@ -382,6 +382,13 @@ export const plans = pgTable("plans", {
   // engine (Phase 5) actually checks against.
   features: jsonb("features").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   featureKeys: jsonb("feature_keys").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  // Phase 7 — AI Provider Control Center. null = unlimited (same
+  // convention as maxStaff/maxBranches above). Counts successful AND
+  // failed AI assistant requests in the current calendar month — see
+  // src/lib/ai/usage-db.ts's countAiRequestsThisMonth() and
+  // aiMonthlyRequestLimitForRestaurant() in plans-db.ts, which applies
+  // restaurants.aiMonthlyRequestLimitOverride first when one is set.
+  aiMonthlyRequestLimit: integer("ai_monthly_request_limit"),
   sortOrder: integer("sort_order").notNull().default(0),
   // A platform admin retires a plan (stops offering it to new signups /
   // the assign-plan picker's default view) by turning this off — existing
@@ -449,6 +456,16 @@ export const restaurants = pgTable(
     // whatever the catalog says today," never "keep the old lock." See
     // src/lib/plans-db.ts's getEffectivePlan().
     lockedMonthlyPriceInPaisa: integer("locked_monthly_price_in_paisa"),
+    // Phase 7 — AI Provider Control Center. Same "explicit per-restaurant
+    // exception row, doesn't touch the base plan" shape as
+    // lockedMonthlyPriceInPaisa above, applied to the AI assistant's
+    // monthly request quota instead of price: null (the normal case) means
+    // "use whatever plans.aiMonthlyRequestLimit says for this restaurant's
+    // plan"; set only when a platform admin has explicitly granted this
+    // ONE tenant a different cap (a pilot needing more headroom, an abuse
+    // case needing less) than their plan would otherwise give them. See
+    // src/lib/plans-db.ts's aiMonthlyRequestLimitForRestaurant().
+    aiMonthlyRequestLimitOverride: integer("ai_monthly_request_limit_override"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -3466,6 +3483,84 @@ export const entitlementOverridesRelations = relations(entitlementOverrides, ({ 
 }));
 
 // ---------------------------------------------------------------------------
+// Platform Control Center (Phase 7) — AI Provider Control Center
+//
+// Today (Phase 11d/14) the AI assistant reads its single active provider
+// straight from env vars (see src/lib/ai/config.ts) — no DB config, no
+// failover if that provider has an outage, no record of what any call
+// actually cost. This adds a DB-backed, encrypted, ordered provider chain
+// plus a per-call usage/cost ledger, while keeping the env-var path as a
+// zero-config fallback (see resolveAiProviderChain() in
+// src/lib/ai/provider-config-db.ts) for any environment that hasn't
+// migrated its key into the DB yet.
+// ---------------------------------------------------------------------------
+
+export const aiProviderConfigs = pgTable(
+  "ai_provider_configs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // "groq" | "anthropic" today. Not a Postgres enum — the actual HTTP
+    // request/response handling for a provider still lives in code
+    // (src/lib/ai/assistant.ts), so a row here naming an unimplemented
+    // provider is caught at the validation layer
+    // (src/lib/validation/ai-provider.ts), not by a DB constraint.
+    provider: varchar("provider", { length: 40 }).notNull(),
+    // AES-256-GCM ciphertext, base64: iv(12 bytes) || authTag(16 bytes) ||
+    // ciphertext. See src/lib/ai/encryption.ts — the plaintext key is
+    // decrypted only at the moment of actually calling the provider, never
+    // logged, and never included in any API response (the admin list/edit
+    // routes return only whether a key is set, not its value).
+    apiKeyCiphertext: text("api_key_ciphertext").notNull(),
+    model: varchar("model", { length: 100 }).notNull(),
+    apiUrl: text("api_url").notNull(),
+    isEnabled: boolean("is_enabled").notNull().default(true),
+    // Failover order when more than one provider is enabled — lower tried
+    // first. See resolveAiProviderChain().
+    priority: integer("priority").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("ai_provider_configs_provider_unique").on(table.provider)],
+);
+
+/**
+ * One row per AI assistant call attempt — including a failed one, which is
+ * exactly what makes failover analysis possible ("how often does Groq fail
+ * before we fall back to Anthropic"). `estimatedCostInPaisa` is an
+ * estimate from src/lib/ai/cost.ts's per-model pricing table, not a
+ * figure pulled from the provider's own billing API — providers don't
+ * return exact cost per call, only token counts.
+ */
+export const aiUsageLogs = pgTable(
+  "ai_usage_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    provider: varchar("provider", { length: 40 }).notNull(),
+    model: varchar("model", { length: 100 }).notNull(),
+    promptTokens: integer("prompt_tokens"),
+    completionTokens: integer("completion_tokens"),
+    totalTokens: integer("total_tokens"),
+    estimatedCostInPaisa: integer("estimated_cost_in_paisa"),
+    success: boolean("success").notNull(),
+    errorMessage: text("error_message"),
+    latencyMs: integer("latency_ms"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("ai_usage_logs_restaurant_id_idx").on(table.restaurantId),
+    index("ai_usage_logs_created_at_idx").on(table.createdAt),
+    index("ai_usage_logs_restaurant_id_created_at_idx").on(table.restaurantId, table.createdAt),
+  ],
+);
+
+export const aiUsageLogsRelations = relations(aiUsageLogs, ({ one }) => ({
+  restaurant: one(restaurants, { fields: [aiUsageLogs.restaurantId], references: [restaurants.id] }),
+}));
+
+// ---------------------------------------------------------------------------
 // Relations (for query ergonomics)
 // ---------------------------------------------------------------------------
 
@@ -3494,6 +3589,7 @@ export const restaurantsRelations = relations(restaurants, ({ many }) => ({
   userRoles: many(userRoles),
   subscriptionEvents: many(subscriptionEvents),
   entitlementOverrides: many(entitlementOverrides),
+  aiUsageLogs: many(aiUsageLogs),
 }));
 
 export const subscriptionEventsRelations = relations(subscriptionEvents, ({ one }) => ({

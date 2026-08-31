@@ -6,6 +6,7 @@ import { apiGet, apiPatch, apiPost, ApiError } from "@/lib/api-client";
 import { type Plan, type PlanKey } from "@/lib/plans";
 import { SUBSCRIPTION_STATUS_LABELS, type SubscriptionStatus } from "@/lib/subscription";
 import { EntitlementsPanel } from "./EntitlementsPanel";
+import { AiUsagePanel } from "./AiUsagePanel";
 
 type Detail = {
   restaurant: {
@@ -21,6 +22,10 @@ type Detail = {
     // This restaurant's own effective plan (price-lock applied) — see
     // getEffectivePlan() in lib/plans-db.ts.
     plan: Plan | null;
+    // Phase 7 — AI Provider Control Center. See AiUsagePanel.
+    aiMonthlyRequestLimitOverride: number | null;
+    aiMonthlyRequestLimit: number | null;
+    aiRequestsThisMonth: number;
     isActive: boolean;
     createdAt: string;
   };
@@ -342,6 +347,14 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
           </div>
         </div>
       </div>
+
+      <AiUsagePanel
+        restaurantId={restaurantId}
+        aiMonthlyRequestLimitOverride={restaurant.aiMonthlyRequestLimitOverride}
+        aiMonthlyRequestLimit={restaurant.aiMonthlyRequestLimit}
+        aiRequestsThisMonth={restaurant.aiRequestsThisMonth}
+        onSaved={load}
+      />
 
       <EntitlementsPanel restaurantId={restaurantId} />
     </div>

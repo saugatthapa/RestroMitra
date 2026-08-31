@@ -11,8 +11,15 @@
  * wire format per provider.
  */
 import { describe, it, expect, vi } from "vitest";
-import { buildSystemPrompt, askAssistant, AssistantApiError, type ReportSummary } from "./assistant";
-import type { AnthropicConfig, GroqConfig } from "./config";
+import {
+  buildSystemPrompt,
+  askAssistant,
+  askAssistantWithFailover,
+  AssistantApiError,
+  AssistantAllProvidersFailedError,
+  type ReportSummary,
+} from "./assistant";
+import type { AiConfig, AnthropicConfig, GroqConfig } from "./config";
 
 const anthropicTestConfig: AnthropicConfig = {
   provider: "anthropic",
@@ -358,5 +365,79 @@ describe("askAssistant (Groq provider, default)", () => {
       if (prevAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY;
       else process.env.ANTHROPIC_API_KEY = prevAnthropicKey;
     }
+  });
+});
+
+describe("askAssistantWithFailover", () => {
+  const secondAnthropicConfig: AnthropicConfig = {
+    ...anthropicTestConfig,
+    apiUrl: "https://api.anthropic.com/v1/messages-backup",
+  };
+
+  it("returns the first provider's success immediately, with no failed attempts", async () => {
+    // groqTestConfig is first in the chain, so the mock must satisfy Groq's
+    // OpenAI-compatible response shape (choices[0].message.content) — an
+    // Anthropic-shaped body here would fail parsing and trigger a fallback,
+    // which is exactly what this test asserts does NOT happen.
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({
+        choices: [{ message: { content: "First provider answered." }, finish_reason: "stop" }],
+      }),
+    );
+
+    const result = await askAssistantWithFailover(
+      { systemPrompt: "S", question: "Q" },
+      [groqTestConfig, anthropicTestConfig],
+      fetchImpl,
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result.provider).toBe("groq");
+    expect(result.failedAttempts).toEqual([]);
+  });
+
+  it("falls back to the second provider when the first fails, recording the failure", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: { message: "rate limited" } }, false, 429))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          content: [{ type: "text", text: "Second provider answered." }],
+          stop_reason: "end_turn",
+        }),
+      );
+
+    const result = await askAssistantWithFailover(
+      { systemPrompt: "S", question: "Q" },
+      [groqTestConfig, anthropicTestConfig],
+      fetchImpl,
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result.answer).toBe("Second provider answered.");
+    expect(result.provider).toBe("anthropic");
+    expect(result.failedAttempts).toHaveLength(1);
+    expect(result.failedAttempts[0].provider).toBe("groq");
+    expect(result.failedAttempts[0].error).toBeInstanceOf(AssistantApiError);
+  });
+
+  it("throws AssistantAllProvidersFailedError with every attempt when the whole chain fails", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ error: { message: "down" } }, false, 500));
+    const chain: AiConfig[] = [groqTestConfig, anthropicTestConfig, secondAnthropicConfig];
+
+    const failure = await askAssistantWithFailover(
+      { systemPrompt: "S", question: "Q" },
+      chain,
+      fetchImpl,
+    ).catch((e) => e);
+
+    expect(failure).toBeInstanceOf(AssistantAllProvidersFailedError);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect((failure as AssistantAllProvidersFailedError).attempts).toHaveLength(3);
+    expect((failure as AssistantAllProvidersFailedError).attempts.map((a) => a.provider)).toEqual([
+      "groq",
+      "anthropic",
+      "anthropic",
+    ]);
   });
 });

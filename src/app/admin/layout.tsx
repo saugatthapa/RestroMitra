@@ -97,6 +97,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             Feature flags
           </Link>
           <Link
+            href="/admin/ai-providers"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
+          >
+            AI providers
+          </Link>
+          <Link
             href="/admin/audit-log"
             className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
           >
