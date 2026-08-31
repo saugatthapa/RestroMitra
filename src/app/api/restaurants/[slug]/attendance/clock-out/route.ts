@@ -6,6 +6,7 @@ import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/
 import { clockOutSchema } from "@/lib/validation/attendance";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { resolveAttendancePhotoForClock } from "@/lib/attendance-photos-db";
 
 export async function POST(
   request: Request,
@@ -20,6 +21,17 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, clockOutSchema);
     if (!parsed.ok) return parsed.response;
+
+    // Phase 12 — same photo verification/requirement as clock-in, for the
+    // clock-out side of the shift (see resolveAttendancePhotoForClock's
+    // own comment). Runs before the open-shift lookup so a rejected photo
+    // never has a shift-mutation side effect to undo.
+    const clockOutPhotoObjectKey = await resolveAttendancePhotoForClock({
+      restaurantId,
+      userId: session.user.id,
+      kind: "clock_out",
+      photoObjectKey: parsed.data.photoObjectKey,
+    });
 
     const openRows = await db
       .select()
@@ -51,6 +63,7 @@ export async function POST(
         clockOutAt: new Date(),
         // Appended, not overwritten — preserves any note left at clock-in.
         note: parsed.data.note ? [open.note, parsed.data.note].filter(Boolean).join(" / ") : open.note,
+        clockOutPhotoObjectKey,
       })
       .where(and(eq(attendanceRecords.id, open.id), isNull(attendanceRecords.clockOutAt)))
       .returning();

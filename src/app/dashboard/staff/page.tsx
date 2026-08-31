@@ -17,6 +17,11 @@ export default async function StaffPage() {
   const canManageStaff = roleHasPermission(active.role, PERMISSIONS.MANAGE_STAFF);
   const canViewPayroll = roleHasPermission(active.role, PERMISSIONS.VIEW_PAYROLL);
   const canManagePayroll = roleHasPermission(active.role, PERMISSIONS.MANAGE_PAYROLL);
+  // Phase 12 (Attendance overhaul, Track B) — the selfie-clock-in toggle
+  // lives behind MANAGE_RESTAURANT_SETTINGS, not MANAGE_STAFF (same
+  // "structural configuration" trust tier as kot-settings/branches), so a
+  // manager who can run the roster still can't flip this on/off.
+  const canManageAttendanceSettings = roleHasPermission(active.role, PERMISSIONS.MANAGE_RESTAURANT_SETTINGS);
 
   // Phase 22 — this page now serves two different, deliberately separate
   // permission grants: MANAGE_STAFF (Roster/Attendance) and VIEW_PAYROLL/
@@ -43,6 +48,7 @@ export default async function StaffPage() {
         canManageStaff={canManageStaff}
         canViewPayroll={canViewPayroll}
         canManagePayroll={canManagePayroll}
+        canManageAttendanceSettings={canManageAttendanceSettings}
       />
     </div>
   );

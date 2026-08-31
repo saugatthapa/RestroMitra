@@ -10,6 +10,7 @@ import { formatNPR } from "@/lib/money";
 import { localDateIso, firstOfMonthIso } from "@/lib/local-date";
 import { SALARY_TYPES, SALARY_TYPE_LABELS, type SalaryType } from "@/lib/finance/salary-type";
 import { PAYOUT_METHODS, PAYOUT_METHOD_LABELS, type PayoutMethod } from "@/lib/finance/payout-methods";
+import { SelfieClockModal } from "./SelfieClockModal";
 
 type StaffMember = {
   id: string; // user_roles id
@@ -32,6 +33,8 @@ type AttendanceRecord = {
   clockInAt: string;
   clockOutAt: string | null;
   note: string | null;
+  hasClockInPhoto: boolean;
+  hasClockOutPhoto: boolean;
 };
 
 type SalaryConfig = {
@@ -93,11 +96,13 @@ export function StaffBoard({
   canManageStaff,
   canViewPayroll,
   canManagePayroll,
+  canManageAttendanceSettings,
 }: {
   slug: string;
   canManageStaff: boolean;
   canViewPayroll: boolean;
   canManagePayroll: boolean;
+  canManageAttendanceSettings: boolean;
 }) {
   // A person with staff perms but no payroll perms (e.g. a manager) only
   // sees Roster/Attendance; one with payroll perms but no staff perms
@@ -134,7 +139,9 @@ export function StaffBoard({
       {tab === "Roster" && (
         <RosterTab slug={slug} canManageStaff={canManageStaff} canManagePayroll={canManagePayroll} />
       )}
-      {tab === "Attendance" && <AttendanceTab slug={slug} />}
+      {tab === "Attendance" && (
+        <AttendanceTab slug={slug} canManageAttendanceSettings={canManageAttendanceSettings} />
+      )}
       {tab === "Payroll" && (
         <PayrollTab slug={slug} canManagePayroll={canManagePayroll} />
       )}
@@ -675,27 +682,59 @@ function AddStaffForm({
 // Attendance tab
 // ---------------------------------------------------------------------------
 
-function AttendanceTab({ slug }: { slug: string }) {
+function AttendanceTab({
+  slug,
+  canManageAttendanceSettings,
+}: {
+  slug: string;
+  canManageAttendanceSettings: boolean;
+}) {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [canViewAll, setCanViewAll] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [selfieRequired, setSelfieRequired] = useState(false);
+  const [objectStorageConfigured, setObjectStorageConfigured] = useState(false);
+  const [selfieModalKind, setSelfieModalKind] = useState<"clock_in" | "clock_out" | null>(null);
+  const [photoLoadingId, setPhotoLoadingId] = useState<string | null>(null);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const dateSystem = useDateSystem();
 
   async function load() {
     try {
-      const res = await apiGet<{ records: AttendanceRecord[]; canViewAll: boolean }>(
-        `${base(slug)}/attendance`,
-      );
-      setRecords(res.records);
-      setCanViewAll(res.canViewAll);
+      const [attendanceRes, settingsRes] = await Promise.all([
+        apiGet<{ records: AttendanceRecord[]; canViewAll: boolean }>(`${base(slug)}/attendance`),
+        apiGet<{ selfieClockInRequired: boolean; objectStorageConfigured: boolean }>(
+          `${base(slug)}/attendance/settings`,
+        ),
+      ]);
+      setRecords(attendanceRes.records);
+      setCanViewAll(attendanceRes.canViewAll);
+      setSelfieRequired(settingsRes.selfieClockInRequired);
+      setObjectStorageConfigured(settingsRes.objectStorageConfigured);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not load attendance.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function toggleSelfieRequired(next: boolean) {
+    setSettingsBusy(true);
+    setSettingsError(null);
+    try {
+      const res = await apiPatch<{ selfieClockInRequired: boolean }>(`${base(slug)}/attendance/settings`, {
+        selfieClockInRequired: next,
+      });
+      setSelfieRequired(res.selfieClockInRequired);
+    } catch (err) {
+      setSettingsError(err instanceof ApiError ? err.message : "Could not update this setting.");
+    } finally {
+      setSettingsBusy(false);
     }
   }
 
@@ -709,29 +748,39 @@ function AttendanceTab({ slug }: { slug: string }) {
   // open one isn't necessarily mine. Both buttons are always shown; the
   // server enforces "already clocked in" / "not clocked in" and the alert
   // on failure tells the person which state they're actually in.
-  async function clockIn() {
+  async function submitClock(kind: "clock_in" | "clock_out", photoObjectKey?: string) {
     setBusy(true);
     try {
-      await apiPost(`${base(slug)}/attendance/clock-in`, { note: note || undefined });
+      await apiPost(`${base(slug)}/attendance/${kind === "clock_in" ? "clock-in" : "clock-out"}`, {
+        note: note || undefined,
+        photoObjectKey,
+      });
       setNote("");
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Could not clock in.");
+      alert(err instanceof ApiError ? err.message : `Could not ${kind === "clock_in" ? "clock in" : "clock out"}.`);
     } finally {
       setBusy(false);
     }
   }
 
-  async function clockOut() {
-    setBusy(true);
+  function startClock(kind: "clock_in" | "clock_out") {
+    if (selfieRequired) {
+      setSelfieModalKind(kind);
+      return;
+    }
+    submitClock(kind);
+  }
+
+  async function viewPhoto(recordId: string, kind: "clock_in" | "clock_out") {
+    setPhotoLoadingId(`${recordId}:${kind}`);
     try {
-      await apiPost(`${base(slug)}/attendance/clock-out`, { note: note || undefined });
-      setNote("");
-      await load();
+      const res = await apiGet<{ url: string }>(`${base(slug)}/attendance/${recordId}/photo?kind=${kind}`);
+      window.open(res.url, "_blank", "noopener,noreferrer");
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Could not clock out.");
+      alert(err instanceof ApiError ? err.message : "Could not open that photo.");
     } finally {
-      setBusy(false);
+      setPhotoLoadingId(null);
     }
   }
 
@@ -743,6 +792,11 @@ function AttendanceTab({ slug }: { slug: string }) {
 
       <div className="rounded-2xl border border-neutral-200 bg-white p-4">
         <p className="mb-2 text-sm font-semibold text-neutral-900">My shift</p>
+        {selfieRequired && (
+          <p className="mb-2 text-xs text-neutral-500">
+            This restaurant requires a selfie to clock in and out.
+          </p>
+        )}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             value={note}
@@ -751,15 +805,56 @@ function AttendanceTab({ slug }: { slug: string }) {
             className="input sm:max-w-xs"
           />
           <div className="flex gap-2">
-            <button disabled={busy} onClick={clockIn} className="btn-primary">
+            <button disabled={busy} onClick={() => startClock("clock_in")} className="btn-primary">
               Clock in
             </button>
-            <button disabled={busy} onClick={clockOut} className="btn-secondary">
+            <button disabled={busy} onClick={() => startClock("clock_out")} className="btn-secondary">
               Clock out
             </button>
           </div>
         </div>
       </div>
+
+      {canManageAttendanceSettings && (
+        <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+          <p className="mb-1 text-sm font-semibold text-neutral-900">Selfie-verified attendance</p>
+          {objectStorageConfigured ? (
+            <>
+              <p className="mb-2 text-xs text-neutral-500">
+                When on, every staff member (including you) must take a selfie to clock in and out. Staff
+                are shown a consent notice the first time this applies to them.
+              </p>
+              {settingsError && <p className="mb-2 text-sm text-red-600">{settingsError}</p>}
+              <label className="flex items-center gap-2 text-sm text-neutral-700">
+                <input
+                  type="checkbox"
+                  checked={selfieRequired}
+                  disabled={settingsBusy}
+                  onChange={(e) => toggleSelfieRequired(e.target.checked)}
+                />
+                Require a selfie to clock in/out
+              </label>
+            </>
+          ) : (
+            <p className="text-xs text-neutral-500">
+              Not available yet — this deployment hasn&apos;t configured photo storage.
+            </p>
+          )}
+        </div>
+      )}
+
+      {selfieModalKind && (
+        <SelfieClockModal
+          slug={slug}
+          kind={selfieModalKind}
+          onDone={(photoObjectKey) => {
+            const kind = selfieModalKind;
+            setSelfieModalKind(null);
+            submitClock(kind, photoObjectKey);
+          }}
+          onClose={() => setSelfieModalKind(null)}
+        />
+      )}
 
       <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
         <table className="w-full text-sm">
@@ -770,12 +865,13 @@ function AttendanceTab({ slug }: { slug: string }) {
               <th className="px-3 py-2">Clock out</th>
               <th className="px-3 py-2">Duration</th>
               <th className="px-3 py-2">Note</th>
+              <th className="px-3 py-2">Photos</th>
             </tr>
           </thead>
           <tbody>
             {records.length === 0 && (
               <tr>
-                <td colSpan={canViewAll ? 5 : 4} className="px-3 py-6 text-center text-neutral-400">
+                <td colSpan={canViewAll ? 6 : 5} className="px-3 py-6 text-center text-neutral-400">
                   No attendance records yet.
                 </td>
               </tr>
@@ -793,6 +889,31 @@ function AttendanceTab({ slug }: { slug: string }) {
                 </td>
                 <td className="px-3 py-2 text-neutral-500">{formatDuration(computeDurationMinutes(r))}</td>
                 <td className="px-3 py-2 text-neutral-500">{r.note || "—"}</td>
+                <td className="px-3 py-2">
+                  <div className="flex gap-2 text-xs">
+                    {r.hasClockInPhoto && (
+                      <button
+                        type="button"
+                        disabled={photoLoadingId === `${r.id}:clock_in`}
+                        onClick={() => viewPhoto(r.id, "clock_in")}
+                        className="text-orange-700 underline hover:text-orange-800"
+                      >
+                        In
+                      </button>
+                    )}
+                    {r.hasClockOutPhoto && (
+                      <button
+                        type="button"
+                        disabled={photoLoadingId === `${r.id}:clock_out`}
+                        onClick={() => viewPhoto(r.id, "clock_out")}
+                        className="text-orange-700 underline hover:text-orange-800"
+                      >
+                        Out
+                      </button>
+                    )}
+                    {!r.hasClockInPhoto && !r.hasClockOutPhoto && <span className="text-neutral-300">—</span>}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

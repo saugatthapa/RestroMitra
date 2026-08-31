@@ -45,6 +45,15 @@ export function SystemHealthPanel() {
   const [busy, setBusy] = useState(false);
   const [toggleError, setToggleError] = useState<string | null>(null);
 
+  const [purgeBusy, setPurgeBusy] = useState(false);
+  const [purgeError, setPurgeError] = useState<string | null>(null);
+  const [purgeResult, setPurgeResult] = useState<{
+    retentionDays: number;
+    recordsPurged: number;
+    photosDeleted: number;
+    failures: number;
+  } | null>(null);
+
   async function load() {
     try {
       const res = await apiGet<SystemData>("/api/admin/system");
@@ -94,6 +103,31 @@ export function SystemHealthPanel() {
       setToggleError(err instanceof ApiError ? err.message : "Could not disable maintenance mode.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function purgeAttendancePhotos() {
+    if (
+      !confirm(
+        "Permanently delete every attendance photo past its retention window? This can't be undone.",
+      )
+    ) {
+      return;
+    }
+    setPurgeBusy(true);
+    setPurgeError(null);
+    try {
+      const res = await apiPost<{
+        retentionDays: number;
+        recordsPurged: number;
+        photosDeleted: number;
+        failures: number;
+      }>("/api/admin/system/purge-attendance-photos", {});
+      setPurgeResult(res);
+    } catch (err) {
+      setPurgeError(err instanceof ApiError ? err.message : "Could not run the attendance photo purge.");
+    } finally {
+      setPurgeBusy(false);
     }
   }
 
@@ -184,6 +218,32 @@ export function SystemHealthPanel() {
             </button>
           </div>
         )}
+      </div>
+
+      <div className="rounded-xl border border-neutral-200 bg-white p-5">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Attendance photo retention</h2>
+        <p className="mb-4 text-xs text-neutral-500">
+          Permanently deletes every attendance selfie past its restaurant&apos;s retention window (set via
+          ATTENDANCE_PHOTO_RETENTION_DAYS — 90 days by default) and clears the DB record pointing to it.
+          This app has no built-in scheduler, so run this periodically from an external cron, or trigger it
+          manually here.
+        </p>
+        {purgeError && <p className="mb-2 text-sm text-red-600">{purgeError}</p>}
+        {purgeResult && (
+          <p className="mb-2 rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
+            Retention: {purgeResult.retentionDays} days · {purgeResult.recordsPurged} record(s) matched ·{" "}
+            {purgeResult.photosDeleted} photo(s) deleted
+            {purgeResult.failures > 0 && ` · ${purgeResult.failures} failure(s) — see server logs`}
+          </p>
+        )}
+        <button
+          type="button"
+          disabled={purgeBusy}
+          onClick={purgeAttendancePhotos}
+          className="rounded-md border border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
+        >
+          {purgeBusy ? "Purging…" : "Purge expired attendance photos now"}
+        </button>
       </div>
     </div>
   );

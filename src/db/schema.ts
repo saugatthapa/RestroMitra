@@ -466,6 +466,18 @@ export const restaurants = pgTable(
     // case needing less) than their plan would otherwise give them. See
     // src/lib/plans-db.ts's aiMonthlyRequestLimitForRestaurant().
     aiMonthlyRequestLimitOverride: integer("ai_monthly_request_limit_override"),
+    // Phase 12 (Attendance overhaul, Track B) — owner opt-in: when true,
+    // the clock-in/out routes REQUIRE a photoObjectKey (a selfie already
+    // uploaded to object storage and verified to exist — see
+    // src/lib/storage/object-storage-s3.ts and the attendance clock-in/out
+    // routes) before accepting the shift transition. Off by default so
+    // every existing restaurant keeps working exactly as before; an owner
+    // who wants selfie-verified attendance turns this on from Settings.
+    // Independent of whether object storage itself is configured
+    // (OBJECT_STORAGE_* env vars) — the Settings UI only offers the toggle
+    // when storage is actually available, but the column exists either way
+    // so flipping storage on/off later doesn't need a migration.
+    selfieClockInRequired: boolean("selfie_clock_in_required").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -2624,6 +2636,19 @@ export const attendanceRecords = pgTable(
     clockInAt: timestamp("clock_in_at", { withTimezone: true }).notNull().defaultNow(),
     clockOutAt: timestamp("clock_out_at", { withTimezone: true }),
     note: text("note"),
+    // Phase 12 (Attendance overhaul, Track B) — the object-storage KEY for
+    // this shift's selfie(s), never the photo itself and never a URL
+    // (signed URLs expire; a key is looked up fresh, short-TTL, on demand
+    // by the photo GET route — see object-storage-s3.ts). Null when
+    // selfieClockInRequired was off, storage wasn't configured, or (legacy)
+    // the shift predates this feature. The clock-in/out routes only ever
+    // accept a key that (a) matches this exact restaurant/user/kind in its
+    // path, so one person's key can never be replayed onto another's
+    // record, and (b) was verified via a HEAD request to actually exist in
+    // the bucket before being trusted — a client can't just make up a key
+    // string and have it accepted as proof a photo was taken.
+    clockInPhotoObjectKey: varchar("clock_in_photo_object_key", { length: 500 }),
+    clockOutPhotoObjectKey: varchar("clock_out_photo_object_key", { length: 500 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -2645,6 +2670,45 @@ export const attendanceRecords = pgTable(
     uniqueIndex("attendance_records_one_open_shift_per_user_unique")
       .on(table.userId, table.restaurantId)
       .where(sql`${table.clockOutAt} IS NULL`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Phase 12 (Attendance overhaul, Track B) — consent record for selfie
+// capture at clock-in/out. Nepal's Individual Privacy Act, 2075 (2018)
+// conditions lawful collection of personal information (biometric data
+// named explicitly) on the data subject's consent plus notice of the
+// collection's purpose — this table is that notice-and-consent record,
+// kept as an APPEND-ONLY ledger (never updated/overwritten) rather than a
+// single mutable "hasConsented" flag, same "ledger over mutable field"
+// reasoning as payments/stock_movements/attendance_records itself: consent
+// given under an earlier notice version must remain provable even after
+// the notice text changes and a person re-consents under a newer one. What
+// "currently consented" means is derived at read time — the latest row for
+// a (userId, restaurantId) pair whose consentVersion equals the app's
+// current CURRENT_CONSENT_VERSION constant (see
+// src/lib/attendance-consent.ts) — not stored as a boolean here.
+// ---------------------------------------------------------------------------
+export const attendancePhotoConsents = pgTable(
+  "attendance_photo_consents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    // The exact notice text version the person consented to — see
+    // CURRENT_CONSENT_VERSION in attendance-consent.ts. Kept as a string
+    // (not just a boolean) so a future notice-text change is itself
+    // auditable: which version did this person actually see and agree to.
+    consentVersion: varchar("consent_version", { length: 40 }).notNull(),
+    consentedAt: timestamp("consented_at", { withTimezone: true }).notNull().defaultNow(),
+    ipAddress: varchar("ip_address", { length: 64 }),
+  },
+  (table) => [
+    index("attendance_photo_consents_user_restaurant_idx").on(table.userId, table.restaurantId),
   ],
 );
 

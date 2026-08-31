@@ -435,6 +435,13 @@
       "when": 1788189188133,
       "tag": "0061_announcements_and_maintenance_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1788192151642,
+      "tag": "0062_attendance_photos_and_consent",
+      "breakpoints": true
     }
   ]
 }

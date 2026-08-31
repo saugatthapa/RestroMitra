@@ -7,6 +7,7 @@ import { clockInSchema } from "@/lib/validation/attendance";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { isUniqueViolation } from "@/lib/db-error";
+import { resolveAttendancePhotoForClock } from "@/lib/attendance-photos-db";
 
 /**
  * Self-service clock-in — any active staff member for this restaurant, no
@@ -38,6 +39,17 @@ export async function POST(
     const parsed = await parseJsonBody(request, clockInSchema);
     if (!parsed.ok) return parsed.response;
 
+    // Phase 12 — verifies (or requires, per this restaurant's own
+    // selfieClockInRequired toggle) a selfie before the shift opens. Runs
+    // before the open-shift check below so a rejected/unverifiable photo
+    // never has a side effect to undo — nothing has been written yet.
+    const clockInPhotoObjectKey = await resolveAttendancePhotoForClock({
+      restaurantId,
+      userId: session.user.id,
+      kind: "clock_in",
+      photoObjectKey: parsed.data.photoObjectKey,
+    });
+
     const open = await db
       .select({ id: attendanceRecords.id })
       .from(attendanceRecords)
@@ -68,6 +80,7 @@ export async function POST(
           // whose grant spans every branch.
           branchId,
           note: parsed.data.note || null,
+          clockInPhotoObjectKey,
         })
         .returning();
       record = inserted;

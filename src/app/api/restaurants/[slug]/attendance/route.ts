@@ -46,6 +46,8 @@ export async function GET(
         clockInAt: attendanceRecords.clockInAt,
         clockOutAt: attendanceRecords.clockOutAt,
         note: attendanceRecords.note,
+        clockInPhotoObjectKey: attendanceRecords.clockInPhotoObjectKey,
+        clockOutPhotoObjectKey: attendanceRecords.clockOutPhotoObjectKey,
       })
       .from(attendanceRecords)
       .innerJoin(users, eq(attendanceRecords.userId, users.id))
@@ -59,7 +61,20 @@ export async function GET(
       .orderBy(desc(attendanceRecords.clockInAt))
       .limit(200);
 
-    return NextResponse.json({ records: rows, canViewAll });
+    // Phase 12 — the client only ever needs to know WHETHER a photo
+    // exists (to decide whether to show a "view photo" button, which then
+    // calls the dedicated signed-URL route); the object key itself is an
+    // internal storage detail with no meaning to a client that can't sign
+    // requests, so it's collapsed to a boolean here rather than exposed.
+    const records = rows.map((r) => ({
+      ...r,
+      hasClockInPhoto: r.clockInPhotoObjectKey !== null,
+      hasClockOutPhoto: r.clockOutPhotoObjectKey !== null,
+      clockInPhotoObjectKey: undefined,
+      clockOutPhotoObjectKey: undefined,
+    }));
+
+    return NextResponse.json({ records, canViewAll });
   } catch (err) {
     return toErrorResponse(err);
   }
