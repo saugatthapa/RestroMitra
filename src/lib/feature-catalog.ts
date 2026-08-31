@@ -36,9 +36,18 @@ export const FEATURES = {
   AI_ASSISTANT: "ai_assistant",
   WEBSITE_BUILDER: "website_builder",
   MULTI_BRANCH: "multi_branch",
-  // Reserved for Track B (Phase 17 — plan-gated attendance tiers). Not
-  // referenced by any plan's featureKeys yet; listed now so the catalog
-  // doesn't need a second migration just to add it later.
+  // Phase 17 (Attendance overhaul, Track B — plan-gated attendance tiers).
+  // Gates only the ADVANCED attendance suite built in Phases 12-16: selfie
+  // photo verification + owner review, leave/holiday management, staff
+  // scheduling, and attendance analytics. Deliberately does NOT gate plain
+  // clock-in/clock-out (with an optional note, no photo) — that predates
+  // this feature key and every existing restaurant, on every plan, already
+  // has it; retroactively paywalling something customers already use
+  // wasn't part of this phase's scope. See drizzle/0066 for which plans
+  // carry this key (Growth + Pro, same tier as `payroll` — attendance's
+  // main integration point) and requireFeature()'s call sites in the
+  // attendance/leave-requests/holidays/schedule routes for exactly which
+  // endpoints check it.
   STAFF_ATTENDANCE: "staff_attendance",
 } as const;
 

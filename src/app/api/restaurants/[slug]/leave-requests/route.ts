@@ -6,6 +6,7 @@ import { leaveRequests, users } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { hasPermission, requireBranchAccess } from "@/lib/rbac/guard";
+import { FEATURES } from "@/lib/feature-catalog";
 import { createLeaveRequestSchema } from "@/lib/validation/leave";
 import { leaveRangesOverlap } from "@/lib/leave";
 import { recordAuditLog } from "@/lib/audit";
@@ -18,11 +19,17 @@ const reviewers = alias(users, "reviewers");
  * ordinary restaurant membership — everyone can see leave requests, but
  * only someone holding MANAGE_STAFF sees the whole restaurant's; anyone
  * else only sees their own.
+ *
+ * Phase 17 — the whole leave-requests feature is part of the advanced
+ * (gated) attendance suite, unlike plain attendance clock-in/clock-out
+ * itself, which stays free — see FEATURES.STAFF_ATTENDANCE's own comment.
  */
 export async function GET(request: Request, ctx: { params: Promise<{ slug: string }> }) {
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(slug);
+    const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(slug, undefined, {
+      requireFeature: FEATURES.STAFF_ATTENDANCE,
+    });
 
     const canViewAll = await hasPermission(session.user.id, restaurantId, PERMISSIONS.MANAGE_STAFF, role);
 
@@ -83,7 +90,9 @@ export async function POST(request: Request, ctx: { params: Promise<{ slug: stri
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId, branchId } = await resolveRestaurantContext(slug);
+    const { session, restaurantId, branchId } = await resolveRestaurantContext(slug, undefined, {
+      requireFeature: FEATURES.STAFF_ATTENDANCE,
+    });
 
     const parsed = await parseJsonBody(request, createLeaveRequestSchema);
     if (!parsed.ok) return parsed.response;

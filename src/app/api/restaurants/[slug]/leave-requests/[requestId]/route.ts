@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { leaveRequests } from "@/db/schema";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
+import { FEATURES } from "@/lib/feature-catalog";
 import { canCancelLeaveRequest } from "@/lib/leave";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
@@ -28,7 +29,9 @@ export async function PATCH(
   }
   try {
     const { slug, requestId } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(slug);
+    const { session, restaurantId } = await resolveRestaurantContext(slug, undefined, {
+      requireFeature: FEATURES.STAFF_ATTENDANCE,
+    });
 
     const [existing] = await db
       .select()

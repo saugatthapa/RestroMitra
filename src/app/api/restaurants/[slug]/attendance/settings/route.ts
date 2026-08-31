@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { restaurants } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
+import { FEATURES } from "@/lib/feature-catalog";
 import { updateAttendanceSettingsSchema } from "@/lib/validation/attendance-photo";
 import { isObjectStorageConfigured } from "@/lib/storage/object-storage-s3";
 import { recordAuditLog } from "@/lib/audit";
@@ -14,6 +15,14 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
  * requiring a selfie at clock-in/out. Its own tiny route, same "no general
  * restaurant-profile endpoint exists yet" reasoning as kot-settings/
  * route.ts, which this deliberately mirrors.
+ *
+ * Deliberately NOT feature-gated (unlike the PATCH below) — the
+ * AttendanceTab loads this in the same Promise.all as the basic (ungated)
+ * attendance list, and a 403 here would fail that whole load for every
+ * plan, hiding the free clock-in/clock-out UI along with it. Reading
+ * "is selfie capture on, and is it even available on this deployment" is
+ * harmless regardless of plan; only actually turning it on is the premium
+ * action (see Phase 17's own comment on the PATCH handler).
  */
 export async function GET(
   _request: Request,
@@ -44,6 +53,12 @@ export async function GET(
  * subscription. Refuses to turn the requirement ON when object storage
  * isn't configured on this deployment — there would be nowhere to
  * actually store the photos the toggle then demands.
+ *
+ * Phase 17 — also requires FEATURES.STAFF_ATTENDANCE: turning selfie
+ * capture ON is the entry point into the whole gated advanced-attendance
+ * suite (photo verification, review, the works), so this is where a
+ * Starter-plan restaurant hits the plan-gate wall, not the free
+ * clock-in/clock-out routes themselves.
  */
 export async function PATCH(
   request: Request,
@@ -57,6 +72,7 @@ export async function PATCH(
     const { session, restaurantId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_RESTAURANT_SETTINGS,
+      { requireFeature: FEATURES.STAFF_ATTENDANCE },
     );
 
     const parsed = await parseJsonBody(request, updateAttendanceSettingsSchema);

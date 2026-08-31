@@ -5,6 +5,7 @@ import { scheduledShifts } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
+import { FEATURES } from "@/lib/feature-catalog";
 import { updateScheduledShiftSchema } from "@/lib/validation/scheduling";
 import { restaurantWallClockToUtc, restaurantTimeOfDay } from "@/lib/restaurant-date";
 import { recordAuditLog } from "@/lib/audit";
@@ -35,7 +36,9 @@ export async function PATCH(
       role,
       branchId: grantedBranchId,
       timezone,
-    } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_STAFF);
+    } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_STAFF, {
+      requireFeature: FEATURES.STAFF_ATTENDANCE,
+    });
 
     const existing = await getOwnedShift(restaurantId, shiftId);
     if (!existing) {
@@ -115,6 +118,7 @@ export async function DELETE(
     const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_STAFF,
+      { requireFeature: FEATURES.STAFF_ATTENDANCE },
     );
 
     const existing = await getOwnedShift(restaurantId, shiftId);

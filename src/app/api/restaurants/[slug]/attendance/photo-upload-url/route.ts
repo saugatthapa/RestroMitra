@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
+import { FEATURES } from "@/lib/feature-catalog";
 import { requestPhotoUploadUrlSchema } from "@/lib/validation/attendance-photo";
 import { buildAttendancePhotoKey } from "@/lib/storage/attendance-photo-key";
 import { isObjectStorageConfigured, createAttendancePhotoUploadUrl } from "@/lib/storage/object-storage-s3";
@@ -24,6 +25,11 @@ import { rateLimit } from "@/lib/rate-limit";
  * but each one is a live invitation to write to the bucket; capping how
  * many a single account can request in a window bounds worst-case storage
  * abuse from a compromised or buggy client.
+ *
+ * Phase 17 — gated behind FEATURES.STAFF_ATTENDANCE, closing the API-level
+ * loophole even though the client never surfaces this flow to a
+ * non-entitled restaurant (selfieClockInRequired can never be turned on
+ * for them either — see the settings PATCH route).
  */
 export async function POST(
   request: Request,
@@ -34,7 +40,9 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(slug);
+    const { session, restaurantId } = await resolveRestaurantContext(slug, undefined, {
+      requireFeature: FEATURES.STAFF_ATTENDANCE,
+    });
 
     if (!isObjectStorageConfigured()) {
       return NextResponse.json(

@@ -5,6 +5,7 @@ import { holidays } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
 import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
+import { FEATURES } from "@/lib/feature-catalog";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 
@@ -20,6 +21,7 @@ export async function DELETE(
     const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_STAFF,
+      { requireFeature: FEATURES.STAFF_ATTENDANCE },
     );
 
     const [existing] = await db

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
+import { FEATURES } from "@/lib/feature-catalog";
 import { acceptAttendancePhotoConsentSchema } from "@/lib/validation/attendance-photo";
 import { CURRENT_CONSENT_VERSION, CONSENT_NOTICE_TITLE, CONSENT_NOTICE_TEXT } from "@/lib/attendance-consent";
 import { getLatestConsent, hasCurrentConsentForUser, recordConsent } from "@/lib/attendance-photos-db";
@@ -10,6 +11,9 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
  * Phase 12 (Attendance overhaul, Track B) — the calling user's own consent
  * status for selfie capture at THIS restaurant, plus the current notice
  * text/version to show. Self-service only, same scoping as clock-in/out.
+ *
+ * Phase 17 — gated behind FEATURES.STAFF_ATTENDANCE, part of the advanced
+ * (selfie-verification) suite, not the free clock-in/clock-out baseline.
  */
 export async function GET(
   _request: Request,
@@ -17,7 +21,9 @@ export async function GET(
 ) {
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(slug);
+    const { session, restaurantId } = await resolveRestaurantContext(slug, undefined, {
+      requireFeature: FEATURES.STAFF_ATTENDANCE,
+    });
 
     const latest = await getLatestConsent(session.user.id, restaurantId);
 
@@ -47,7 +53,9 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(slug);
+    const { session, restaurantId } = await resolveRestaurantContext(slug, undefined, {
+      requireFeature: FEATURES.STAFF_ATTENDANCE,
+    });
 
     const parsed = await parseJsonBody(request, acceptAttendancePhotoConsentSchema);
     if (!parsed.ok) return parsed.response;

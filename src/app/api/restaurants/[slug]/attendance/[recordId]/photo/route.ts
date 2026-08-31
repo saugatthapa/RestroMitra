@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { attendanceRecords } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
+import { FEATURES } from "@/lib/feature-catalog";
 import { hasPermission } from "@/lib/rbac/guard";
 import { createAttendancePhotoDownloadUrl, isObjectStorageConfigured } from "@/lib/storage/object-storage-s3";
 import { HttpError } from "@/lib/http-error";
@@ -21,6 +22,9 @@ import { HttpError } from "@/lib/http-error";
  * view anyone else's — deliberately not a stricter permission than what
  * already governs seeing someone else's clock-in/out timestamps, since a
  * photo is evidence for exactly that same timestamp.
+ *
+ * Phase 17 — gated behind FEATURES.STAFF_ATTENDANCE (part of the advanced
+ * selfie-verification suite, not the free clock-in/clock-out baseline).
  */
 export async function GET(
   request: Request,
@@ -28,7 +32,9 @@ export async function GET(
 ) {
   try {
     const { slug, recordId } = await ctx.params;
-    const { session, restaurantId, role } = await resolveRestaurantContext(slug);
+    const { session, restaurantId, role } = await resolveRestaurantContext(slug, undefined, {
+      requireFeature: FEATURES.STAFF_ATTENDANCE,
+    });
 
     if (!isObjectStorageConfigured()) {
       throw new HttpError("Selfie-verified attendance isn't available on this deployment yet.", 503);

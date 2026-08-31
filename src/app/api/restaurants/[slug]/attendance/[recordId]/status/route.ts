@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { attendanceRecords } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
+import { FEATURES } from "@/lib/feature-catalog";
 import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
 import { setAttendanceStatusSchema } from "@/lib/validation/attendance";
 import { recordAuditLog } from "@/lib/audit";
@@ -20,6 +21,13 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
  * about whether the shift's identity evidence is trustworthy, not about
  * what the shift's times/note say. Use the sibling correction route
  * (PATCH .../attendance/[recordId]) for that.
+ *
+ * Phase 17 — also requires FEATURES.STAFF_ATTENDANCE: a review call is
+ * only ever meaningful on a photo-bearing shift (a record with no photo
+ * auto-verifies and never reaches "needs_review" — see
+ * initialAttendanceStatus in attendance.ts), so this is part of the
+ * advanced (gated) suite, unlike the sibling correction route above which
+ * stays free on every plan.
  */
 export async function PATCH(
   request: Request,
@@ -33,6 +41,7 @@ export async function PATCH(
     const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_STAFF,
+      { requireFeature: FEATURES.STAFF_ATTENDANCE },
     );
 
     const [existing] = await db

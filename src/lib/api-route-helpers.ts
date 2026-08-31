@@ -14,6 +14,8 @@ import {
 import { HttpError } from "@/lib/http-error";
 import type { PermissionKey } from "@/lib/rbac/permissions";
 import type { SessionContext } from "@/lib/auth/session";
+import { requireFeature } from "@/lib/entitlements-db";
+import type { FeatureKey } from "@/lib/feature-catalog";
 
 /**
  * Converts a thrown HttpError (AuthError, OrderValidationError, ...) — or
@@ -78,11 +80,24 @@ export type RestaurantContext = {
  * `opts` escape hatch for anyone else: unlike a billing lapse, suspension
  * is never something a tenant-scoped route should be allowed to work
  * around.
+ *
+ * `opts.requireFeature` (Phase 17 — plan-gated attendance tiers) is the
+ * single place a route opts into the Phase 5 entitlement engine, the same
+ * way `permission` is the single place it opts into RBAC — pass a
+ * FEATURES key and this throws FeatureNotEntitledError (a plain 403) when
+ * the restaurant's current plan/override/flag combination doesn't grant
+ * it. Checked AFTER the permission check (a route that needs both a
+ * permission AND a feature should fail on the permission first — "you
+ * can't do this at all" is a more useful error than "your plan doesn't
+ * include this" for someone who was never allowed to try in the first
+ * place) and, like suspension/maintenance-mode above, skipped entirely
+ * for platform_admin/impersonated roles — support/ops investigating a
+ * tenant must see the same capabilities regardless of that tenant's plan.
  */
 export async function resolveRestaurantContext(
   slug: string,
   permission?: PermissionKey,
-  opts?: { allowInactiveSubscription?: boolean },
+  opts?: { allowInactiveSubscription?: boolean; requireFeature?: FeatureKey },
 ): Promise<RestaurantContext> {
   const session = await requireAuth();
   const { restaurantId, role, branchId, timezone } = await requireRestaurantBySlug(
@@ -112,6 +127,9 @@ export async function resolveRestaurantContext(
     // second isPlatformAdmin + userRoles round trip. See guard.ts's
     // requirePermission doc comment and PERFORMANCE_AUDIT.md.
     await requirePermission(session.user.id, restaurantId, permission, role);
+  }
+  if (opts?.requireFeature && !isPlatformOrImpersonatedRole(role)) {
+    await requireFeature(restaurantId, opts.requireFeature);
   }
   return { session, restaurantId, role, branchId, timezone };
 }

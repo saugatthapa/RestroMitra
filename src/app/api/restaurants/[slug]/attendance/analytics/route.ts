@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
 import { requireBranchAccess } from "@/lib/rbac/guard";
+import { FEATURES } from "@/lib/feature-catalog";
 import { getAttendanceAnalytics } from "@/lib/attendance-analytics-db";
 import { restaurantDate } from "@/lib/restaurant-date";
 
@@ -21,6 +22,10 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
  * localDateIso, mirrored here server-side via restaurantDate since a
  * device's own clock isn't relevant to a route handler). ?periodStart=&
  * periodEnd= (YYYY-MM-DD, both required together) overrides it.
+ *
+ * Phase 17 — also requires FEATURES.STAFF_ATTENDANCE: analytics is part of
+ * the advanced (gated) attendance suite, not the free clock-in/clock-out
+ * baseline.
  */
 export async function GET(request: Request, ctx: { params: Promise<{ slug: string }> }) {
   try {
@@ -31,7 +36,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
       role,
       timezone,
       branchId: grantedBranchId,
-    } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_STAFF);
+    } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_STAFF, {
+      requireFeature: FEATURES.STAFF_ATTENDANCE,
+    });
 
     const today = restaurantDate(timezone);
     const defaultPeriodStart = `${today.slice(0, 7)}-01`;

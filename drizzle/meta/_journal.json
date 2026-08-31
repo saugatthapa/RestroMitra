@@ -463,6 +463,13 @@
       "when": 1788195922633,
       "tag": "0065_phase15_scheduled_shifts",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1788198000000,
+      "tag": "0066_phase17_staff_attendance_plan_gating",
+      "breakpoints": true
     }
   ]
 }

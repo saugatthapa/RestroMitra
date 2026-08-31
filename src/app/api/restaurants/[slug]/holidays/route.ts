@@ -5,6 +5,7 @@ import { holidays, branches } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
+import { FEATURES } from "@/lib/feature-catalog";
 import { createHolidaySchema } from "@/lib/validation/leave";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
@@ -17,7 +18,9 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 export async function GET(request: Request, ctx: { params: Promise<{ slug: string }> }) {
   try {
     const { slug } = await ctx.params;
-    const { restaurantId } = await resolveRestaurantContext(slug);
+    const { restaurantId } = await resolveRestaurantContext(slug, undefined, {
+      requireFeature: FEATURES.STAFF_ATTENDANCE,
+    });
 
     const rows = await db
       .select({
@@ -54,6 +57,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ slug: stri
     const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_STAFF,
+      { requireFeature: FEATURES.STAFF_ATTENDANCE },
     );
 
     const parsed = await parseJsonBody(request, createHolidaySchema);

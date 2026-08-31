@@ -5,6 +5,7 @@ import { scheduledShifts, attendanceRecords, users, branches, userRoles } from "
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { hasPermission, requireBranchAccess, requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
+import { FEATURES } from "@/lib/feature-catalog";
 import { createScheduledShiftSchema } from "@/lib/validation/scheduling";
 import {
   restaurantDate,
@@ -33,7 +34,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
       role,
       branchId: grantedBranchId,
       timezone,
-    } = await resolveRestaurantContext(slug);
+    } = await resolveRestaurantContext(slug, undefined, { requireFeature: FEATURES.STAFF_ATTENDANCE });
 
     const canViewAll = await hasPermission(session.user.id, restaurantId, PERMISSIONS.MANAGE_STAFF, role);
 
@@ -130,7 +131,9 @@ export async function POST(request: Request, ctx: { params: Promise<{ slug: stri
       role,
       branchId: grantedBranchId,
       timezone,
-    } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_STAFF);
+    } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_STAFF, {
+      requireFeature: FEATURES.STAFF_ATTENDANCE,
+    });
 
     const parsed = await parseJsonBody(request, createScheduledShiftSchema);
     if (!parsed.ok) return parsed.response;

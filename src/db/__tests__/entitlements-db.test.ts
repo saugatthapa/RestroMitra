@@ -138,6 +138,84 @@ describe.skipIf(!hasDb)("entitlements-db (integration)", () => {
     expect(reservations).toMatchObject({ granted: false, source: "none" });
   });
 
+  // Phase 17 (Attendance overhaul, Track B — plan-gated attendance tiers)
+  // — requireFeature() is the assert-style sibling of hasFeature() that
+  // resolveRestaurantContext's opts.requireFeature actually calls (see
+  // api-route-helpers.ts). This restaurant's test plan only carries
+  // "pos_billing", so "staff_attendance" is a clean not-entitled case.
+  describe("requireFeature", () => {
+    it("resolves silently when the restaurant is entitled", async () => {
+      await expect(entitlementsDb.requireFeature(restaurantId, "pos_billing")).resolves.toBeUndefined();
+    });
+
+    it("throws FeatureNotEntitledError (a 403 HttpError) when the restaurant is not entitled", async () => {
+      await expect(entitlementsDb.requireFeature(restaurantId, "staff_attendance")).rejects.toThrow(
+        entitlementsDb.FeatureNotEntitledError,
+      );
+      try {
+        await entitlementsDb.requireFeature(restaurantId, "staff_attendance");
+        expect.unreachable("should have thrown");
+      } catch (err) {
+        expect(err).toBeInstanceOf(entitlementsDb.FeatureNotEntitledError);
+        const typed = err as InstanceType<typeof entitlementsDb.FeatureNotEntitledError>;
+        expect(typed.status).toBe(403);
+        expect(typed.featureKey).toBe("staff_attendance");
+      }
+    });
+
+    it("respects an entitlement override the same way hasFeature does", async () => {
+      await entitlementsDb.setEntitlementOverride({
+        restaurantId,
+        featureKey: "staff_attendance",
+        granted: true,
+        reason: "Phase 17 test — override grant.",
+        createdByUserId: ownerUserId,
+      });
+      await expect(entitlementsDb.requireFeature(restaurantId, "staff_attendance")).resolves.toBeUndefined();
+      await entitlementsDb.clearEntitlementOverride(restaurantId, "staff_attendance");
+    });
+  });
+
+  // Phase 17 — a regression test against the REAL seeded plan catalog
+  // (not a synthetic test plan), proving drizzle/0066's data migration
+  // actually landed: Growth and Pro carry the new staff_attendance key
+  // (same tier as payroll), Starter deliberately does not.
+  describe("staff_attendance plan gating (real catalog, Phase 17 / drizzle 0066)", () => {
+    it("Growth and Pro both include staff_attendance", async () => {
+      const plansDb = await import("@/lib/plans-db");
+      const growth = await plansDb.getPlanByKey("growth");
+      const pro = await plansDb.getPlanByKey("pro");
+      expect(growth?.featureKeys).toContain("staff_attendance");
+      expect(pro?.featureKeys).toContain("staff_attendance");
+    });
+
+    it("Starter does NOT include staff_attendance", async () => {
+      const plansDb = await import("@/lib/plans-db");
+      const starter = await plansDb.getPlanByKey("starter");
+      expect(starter?.featureKeys).not.toContain("staff_attendance");
+    });
+
+    it("a Starter-plan restaurant is not entitled to staff_attendance; a Growth-plan restaurant is", async () => {
+      const suffix = Math.random().toString(36).slice(2, 8);
+      const [starterRestaurant] = await db
+        .insert(schema.restaurants)
+        .values({ slug: `test-ent-starter-${suffix}`, name: "TEST Starter Restaurant", planKey: "starter", isActive: true })
+        .returning({ id: schema.restaurants.id });
+      const [growthRestaurant] = await db
+        .insert(schema.restaurants)
+        .values({ slug: `test-ent-growth-${suffix}`, name: "TEST Growth Restaurant", planKey: "growth", isActive: true })
+        .returning({ id: schema.restaurants.id });
+
+      try {
+        expect(await entitlementsDb.hasFeature(starterRestaurant.id, "staff_attendance")).toBe(false);
+        expect(await entitlementsDb.hasFeature(growthRestaurant.id, "staff_attendance")).toBe(true);
+      } finally {
+        await db.delete(schema.restaurants).where(eq(schema.restaurants.id, starterRestaurant.id));
+        await db.delete(schema.restaurants).where(eq(schema.restaurants.id, growthRestaurant.id));
+      }
+    });
+  });
+
   // Phase 11 security pass — the audit flagged that no test proved an
   // override set for one restaurant can't leak onto a different one, even
   // though a reading of setEntitlementOverride/getEntitlementOverridesFor

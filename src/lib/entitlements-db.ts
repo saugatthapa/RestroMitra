@@ -6,6 +6,7 @@ import { entitlementOverrides, featureFlags, restaurants } from "@/db/schema";
 import { getEffectivePlan } from "@/lib/plans-db";
 import { FEATURES } from "@/lib/feature-catalog";
 import { resolveFeatureAccess, type EntitlementResult } from "@/lib/entitlements";
+import { HttpError } from "@/lib/http-error";
 
 /**
  * Platform Control Center (Phase 5) — DB-backed half of the entitlement
@@ -106,6 +107,37 @@ export async function hasFeature(restaurantId: string, featureKey: string): Prom
     override: overrideRow?.granted,
     flagDefault: flag?.defaultEnabled,
   }).granted;
+}
+
+/**
+ * Phase 17 (Attendance overhaul, Track B — Plan-gated attendance tiers) —
+ * thrown by requireFeature() below. A distinct HttpError subclass (same
+ * "typed error → toErrorResponse() renders it" pattern as
+ * SubscriptionRequiredError/TenantSuspendedError in rbac/guard.ts) so a
+ * route can catch this one specifically if it ever needs a custom message,
+ * while resolveRestaurantContext's default handling (a plain 403) covers
+ * every ordinary call site without each route needing its own try/catch —
+ * unlike AI_ASSISTANT's own AiAssistantNotEntitledError (ask-db.ts), which
+ * predates this and is caught by hand in its one call site because it also
+ * needs to distinguish a quota error from an entitlement error there. A
+ * plain feature gate with no second failure mode to distinguish doesn't
+ * need that — see resolveRestaurantContext's own comment for why this one
+ * is wired centrally instead.
+ */
+export class FeatureNotEntitledError extends HttpError {
+  featureKey: string;
+  constructor(featureKey: string, message = "This feature isn't included in your current plan.") {
+    super(message, 403);
+    this.featureKey = featureKey;
+  }
+}
+
+/** Throws FeatureNotEntitledError when `restaurantId` doesn't currently have `featureKey` — the assert-style sibling of hasFeature() above, for a route gate that should fail closed. */
+export async function requireFeature(restaurantId: string, featureKey: string, message?: string): Promise<void> {
+  const entitled = await hasFeature(restaurantId, featureKey);
+  if (!entitled) {
+    throw new FeatureNotEntitledError(featureKey, message);
+  }
 }
 
 /**
