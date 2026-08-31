@@ -18,6 +18,7 @@ import { PAYOUT_METHODS, PAYOUT_METHOD_LABELS, type PayoutMethod } from "@/lib/f
 import { SelfieClockModal } from "./SelfieClockModal";
 import { AttendanceReviewModal } from "./AttendanceReviewModal";
 import { LeaveTab } from "./LeaveTab";
+import { ScheduleTab } from "./ScheduleTab";
 
 type StaffMember = {
   id: string; // user_roles id
@@ -115,7 +116,7 @@ function base(slug: string) {
   return `/api/restaurants/${slug}`;
 }
 
-const ALL_TABS = ["Roster", "Attendance", "Leave", "Payroll"] as const;
+const ALL_TABS = ["Roster", "Attendance", "Schedule", "Leave", "Payroll"] as const;
 type Tab = (typeof ALL_TABS)[number];
 
 export function StaffBoard({
@@ -169,6 +170,7 @@ export function StaffBoard({
       {tab === "Attendance" && (
         <AttendanceTab slug={slug} canManageAttendanceSettings={canManageAttendanceSettings} />
       )}
+      {tab === "Schedule" && <ScheduleTab slug={slug} canManageStaff={canManageStaff} />}
       {tab === "Leave" && <LeaveTab slug={slug} canManageStaff={canManageStaff} />}
       {tab === "Payroll" && (
         <PayrollTab slug={slug} canManagePayroll={canManagePayroll} />

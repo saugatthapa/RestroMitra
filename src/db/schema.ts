@@ -2862,6 +2862,48 @@ export const leaveRequests = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Phase 15 (Attendance overhaul, Track B — Scheduling) — a manager-planned
+// shift: this staff member is expected to work from plannedStartAt to
+// plannedEndAt. Deliberately NOT linked to attendance_records by a stored
+// foreign key — see scheduling-db.ts's matchScheduleWithAttendance for why
+// the match is computed at read time instead (grouping by user + the
+// restaurant-local calendar day both sides fall on), which avoids a stale
+// link ever surviving a later attendance correction. plannedStartAt/
+// plannedEndAt are real timestamptz instants (via restaurant-date.ts's
+// restaurantWallClockToUtc), not just a "HH:MM" pair, so they compare
+// directly against attendanceRecords.clockInAt/clockOutAt without a second
+// timezone conversion at read time. shiftDate is kept alongside them
+// (rather than derived from plannedStartAt on every read) as the same
+// explicit "restaurant calendar day" anchor businessDate/leaveRequests.
+// startDate already are elsewhere in this schema — matching is grouped by
+// it directly.
+// ---------------------------------------------------------------------------
+export const scheduledShifts = pgTable(
+  "scheduled_shifts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "cascade" }),
+    shiftDate: date("shift_date").notNull(),
+    plannedStartAt: timestamp("planned_start_at", { withTimezone: true }).notNull(),
+    plannedEndAt: timestamp("planned_end_at", { withTimezone: true }).notNull(),
+    note: text("note"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("scheduled_shifts_restaurant_id_idx").on(table.restaurantId),
+    index("scheduled_shifts_user_id_idx").on(table.userId),
+    index("scheduled_shifts_shift_date_idx").on(table.shiftDate),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Expenses (Phase 8c, workflow added Phase 21) — operational spending
 // tracking: rent, utilities, salaries paid in cash, supply runs, and the
 // like. isVoided remains the soft-delete flag (an expense may need

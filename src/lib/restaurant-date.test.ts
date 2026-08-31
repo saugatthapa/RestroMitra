@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { restaurantDate, restaurantHour, restaurantStartOfDay, restaurantEndOfDay } from "./restaurant-date";
+import {
+  restaurantDate,
+  restaurantHour,
+  restaurantStartOfDay,
+  restaurantEndOfDay,
+  restaurantWallClockToUtc,
+  restaurantTimeOfDay,
+} from "./restaurant-date";
 
 describe("restaurantDate", () => {
   it("returns the Nepal calendar day for a UTC instant that's still 'today' in UTC too", () => {
@@ -65,5 +72,58 @@ describe("restaurantStartOfDay / restaurantEndOfDay", () => {
     const now = new Date();
     const start = restaurantStartOfDay("Asia/Kathmandu");
     expect(restaurantDate("Asia/Kathmandu", start)).toBe(restaurantDate("Asia/Kathmandu", now));
+  });
+});
+
+describe("restaurantWallClockToUtc", () => {
+  it("converts a Nepal wall-clock time to the matching UTC instant — 9:00 AM Nepal is 03:15 UTC same day", () => {
+    const at = restaurantWallClockToUtc("Asia/Kathmandu", "2026-08-15", "09:00");
+    expect(at.toISOString()).toBe("2026-08-15T03:15:00.000Z");
+  });
+
+  it("round-trips back to the same local date/hour via restaurantDate/restaurantHour", () => {
+    const at = restaurantWallClockToUtc("Asia/Kathmandu", "2026-08-15", "22:30");
+    expect(restaurantDate("Asia/Kathmandu", at)).toBe("2026-08-15");
+    expect(restaurantHour("Asia/Kathmandu", at)).toBe(22);
+  });
+
+  it("a late-night wall-clock time still lands on the requested calendar date, not the UTC date it crosses into", () => {
+    // 23:30 Nepal on the 15th is already 17:45 UTC the SAME day here (Nepal
+    // is ahead of UTC), but the function must still report the 15th when
+    // asked, regardless of which side of a UTC day boundary that instant falls.
+    const at = restaurantWallClockToUtc("Asia/Kathmandu", "2026-08-15", "23:30");
+    expect(restaurantDate("Asia/Kathmandu", at)).toBe("2026-08-15");
+  });
+
+  it("falls back to Asia/Kathmandu for null/undefined/empty timezone", () => {
+    const withNull = restaurantWallClockToUtc(null, "2026-08-15", "09:00");
+    const withKathmandu = restaurantWallClockToUtc("Asia/Kathmandu", "2026-08-15", "09:00");
+    expect(withNull.getTime()).toBe(withKathmandu.getTime());
+  });
+
+  it("respects a different IANA zone (product expansion beyond Nepal)", () => {
+    // 9:00 AM in New York (UTC-4 in August) is 13:00 UTC.
+    const at = restaurantWallClockToUtc("America/New_York", "2026-08-15", "09:00");
+    expect(at.toISOString()).toBe("2026-08-15T13:00:00.000Z");
+  });
+});
+
+describe("restaurantTimeOfDay", () => {
+  it("is the inverse of restaurantWallClockToUtc — round-trips back to the same HH:MM", () => {
+    const at = restaurantWallClockToUtc("Asia/Kathmandu", "2026-08-15", "09:00");
+    expect(restaurantTimeOfDay("Asia/Kathmandu", at)).toBe("09:00");
+  });
+
+  it("returns the LOCAL time-of-day, never the instant's raw UTC hour/minute — the actual bug this prevents", () => {
+    // 03:15 UTC is 09:00 in Nepal (UTC+5:45) — reading the UTC hour/minute
+    // directly here (03:15) instead of converting would silently shift a
+    // rescheduled shift by the timezone offset.
+    const at = new Date("2026-08-15T03:15:00Z");
+    expect(restaurantTimeOfDay("Asia/Kathmandu", at)).toBe("09:00");
+  });
+
+  it("pads single-digit hour and minute", () => {
+    const at = restaurantWallClockToUtc("Asia/Kathmandu", "2026-08-15", "05:05");
+    expect(restaurantTimeOfDay("Asia/Kathmandu", at)).toBe("05:05");
   });
 });

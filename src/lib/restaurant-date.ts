@@ -81,6 +81,20 @@ export function restaurantHour(timezone: string | null | undefined, at: Date = n
 }
 
 /**
+ * "HH:MM" (24-hour) for `at` as seen on `timezone`'s wall clock — the
+ * inverse of restaurantWallClockToUtc, for re-deriving the time-of-day a
+ * stored instant (e.g. scheduledShifts.plannedStartAt) actually represents
+ * locally. Reading the instant's raw UTC hour/minute instead of going
+ * through this would silently shift by the zone's offset (03:15 UTC is
+ * 09:00 in Nepal, not 03:15) — exactly the class of bug restaurantDate()
+ * exists to prevent for calendar days, generalized to time-of-day.
+ */
+export function restaurantTimeOfDay(timezone: string | null | undefined, at: Date): string {
+  const p = formatPartsMap(safeTimeZone(timezone), at);
+  return `${p.hour}:${p.minute}`;
+}
+
+/**
  * The UTC instant corresponding to local midnight, in `timezone`, on
  * `dateStr` (YYYY-MM-DD; default: today in that timezone). This is the
  * inverse of restaurantDate() — turning a local calendar date back into
@@ -104,4 +118,28 @@ export function restaurantStartOfDay(timezone: string | null | undefined, dateSt
 export function restaurantEndOfDay(timezone: string | null | undefined, dateStr?: string): Date {
   const start = restaurantStartOfDay(timezone, dateStr);
   return new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
+}
+
+/**
+ * Phase 15 (Attendance overhaul, Track B — Scheduling) — the UTC instant
+ * corresponding to `hhmm` ("HH:MM", 24-hour) wall-clock time, in
+ * `timezone`, on `dateStr` (YYYY-MM-DD). Generalizes restaurantStartOfDay's
+ * offset-correction technique (same one-correction-pass reasoning) to an
+ * arbitrary time-of-day — turns a manager's "9:00 AM on the 20th" schedule
+ * entry into the same kind of absolute instant attendance_records'
+ * clockInAt already is, so a planned shift and an actual clock-in can be
+ * compared directly instead of needing a second timezone conversion at
+ * every comparison site.
+ */
+export function restaurantWallClockToUtc(
+  timezone: string | null | undefined,
+  dateStr: string,
+  hhmm: string,
+): Date {
+  const tz = safeTimeZone(timezone);
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const [h, min] = hhmm.split(":").map(Number);
+  const guessUtc = Date.UTC(y, m - 1, d, h, min, 0);
+  const offset = offsetMinutes(tz, new Date(guessUtc));
+  return new Date(guessUtc - offset * 60_000);
 }

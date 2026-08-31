@@ -456,6 +456,13 @@
       "when": 1788194971399,
       "tag": "0064_phase14_holidays_and_leave_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1788195922633,
+      "tag": "0065_phase15_scheduled_shifts",
+      "breakpoints": true
     }
   ]
 }
