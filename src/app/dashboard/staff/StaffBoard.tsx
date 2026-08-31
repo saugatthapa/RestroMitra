@@ -895,6 +895,8 @@ function AttendanceTab({
         />
       )}
 
+      {canViewAll && <AttendanceAnalyticsPanel slug={slug} />}
+
       {canViewAll && needsReviewCount > 0 && (
         <label className="flex items-center gap-2 text-sm text-neutral-700">
           <input
@@ -995,6 +997,170 @@ function AttendanceTab({
           onUpdated={load}
           onClose={() => setReviewingRecord(null)}
         />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Attendance analytics panel (Phase 16, Attendance overhaul Track B) — a
+// per-staff summary table for a chosen period, mounted inside the
+// Attendance tab and visible only to whoever already sees everyone's
+// records there (canViewAll — MANAGE_STAFF). Own period picker rather than
+// sharing the Payroll tab's, since the two live on different tabs and a
+// manager may well want to look at a different window for "who's been
+// late" than for "what am I paying this month."
+// ---------------------------------------------------------------------------
+
+type StaffAttendanceAnalyticsRow = {
+  userId: string;
+  fullName: string;
+  totalMinutes: number;
+  daysPresent: number;
+  rejectedShiftsCount: number;
+  paidLeaveDays: number;
+  scheduledShiftsCount: number;
+  completedShiftsCount: number;
+  noShowCount: number;
+  lateCount: number;
+  totalLateMinutes: number;
+  totalEarlyDepartureMinutes: number;
+};
+
+function AttendanceAnalyticsPanel({ slug }: { slug: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [staff, setStaff] = useState<StaffAttendanceAnalyticsRow[]>([]);
+  const [periodStart, setPeriodStart] = useState(firstOfMonthIso());
+  const [periodEnd, setPeriodEnd] = useState(localDateIso());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loadedOnce, setLoadedOnce] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ periodStart, periodEnd });
+      const res = await apiGet<{ staff: StaffAttendanceAnalyticsRow[]; periodStart: string; periodEnd: string }>(
+        `${base(slug)}/attendance/analytics?${params.toString()}`,
+      );
+      setStaff(res.staff);
+      setPeriodStart(res.periodStart);
+      setPeriodEnd(res.periodEnd);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load attendance analytics.");
+    } finally {
+      setLoading(false);
+      setLoadedOnce(true);
+    }
+  }
+
+  useEffect(() => {
+    if (expanded && !loadedOnce) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center justify-between text-left text-sm font-medium text-neutral-800"
+      >
+        <span>Attendance analytics</span>
+        <span className="text-xs text-neutral-400">{expanded ? "Hide" : "Show"}</span>
+      </button>
+
+      {expanded && (
+        <div className="mt-3 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 text-sm text-neutral-600">
+              From
+              <input
+                type="date"
+                value={periodStart}
+                max={periodEnd}
+                onChange={(e) => setPeriodStart(e.target.value)}
+                className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+              />
+            </label>
+            <label className="flex items-center gap-1.5 text-sm text-neutral-600">
+              To
+              <input
+                type="date"
+                value={periodEnd}
+                min={periodStart}
+                onChange={(e) => setPeriodEnd(e.target.value)}
+                className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={load}
+              disabled={loading}
+              className="rounded-md bg-neutral-900 px-3 py-1 text-sm text-white disabled:opacity-50"
+            >
+              {loading ? "Loading…" : "Refresh"}
+            </button>
+          </div>
+
+          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+          <div className="overflow-x-auto rounded-xl border border-neutral-100">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+                <tr>
+                  <th className="px-3 py-2">Staff</th>
+                  <th className="px-3 py-2">Worked</th>
+                  <th className="px-3 py-2">Days present</th>
+                  <th className="px-3 py-2">Paid leave</th>
+                  <th className="px-3 py-2">Rejected shifts</th>
+                  <th className="px-3 py-2">Scheduled</th>
+                  <th className="px-3 py-2">No-shows</th>
+                  <th className="px-3 py-2">Late</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!loading && staff.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-6 text-center text-neutral-400">
+                      No active staff to show for this period.
+                    </td>
+                  </tr>
+                )}
+                {staff.map((s) => (
+                  <tr key={s.userId} className="border-t border-neutral-100">
+                    <td className="px-3 py-2 font-medium text-neutral-900">{s.fullName}</td>
+                    <td className="px-3 py-2 text-neutral-600">{formatDuration(s.totalMinutes)}</td>
+                    <td className="px-3 py-2 text-neutral-600">{s.daysPresent}</td>
+                    <td className="px-3 py-2 text-neutral-600">{s.paidLeaveDays || "—"}</td>
+                    <td className="px-3 py-2 text-neutral-600">
+                      {s.rejectedShiftsCount > 0 ? (
+                        <span className="text-amber-600">{s.rejectedShiftsCount}</span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-neutral-600">{s.scheduledShiftsCount || "—"}</td>
+                    <td className="px-3 py-2 text-neutral-600">
+                      {s.noShowCount > 0 ? <span className="text-red-600">{s.noShowCount}</span> : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-neutral-600">
+                      {s.lateCount > 0 ? (
+                        <>
+                          {s.lateCount}{" "}
+                          <span className="text-xs text-neutral-400">({formatDuration(s.totalLateMinutes)})</span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );
