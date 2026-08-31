@@ -96,6 +96,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           >
             Feature flags
           </Link>
+          <Link
+            href="/admin/audit-log"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
+          >
+            Audit log
+          </Link>
         </div>
       </nav>
       <main className="mx-auto w-full max-w-6xl p-4 md:p-8">{children}</main>

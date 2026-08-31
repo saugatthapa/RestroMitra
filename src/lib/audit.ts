@@ -1,7 +1,7 @@
 import "server-only";
-import { and, desc, eq, gte, lt, like } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, like } from "drizzle-orm";
 import { db } from "@/db";
-import { auditLogs, users } from "@/db/schema";
+import { auditLogs, restaurants, users } from "@/db/schema";
 
 export async function recordAuditLog(entry: {
   restaurantId?: string | null;
@@ -75,6 +75,72 @@ export async function listAuditLogs(restaurantId: string, opts: AuditLogListOpti
     .from(auditLogs)
     .leftJoin(users, eq(auditLogs.userId, users.id))
     .where(and(...conditions))
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(limit + 1)
+    .offset(offset);
+
+  const hasMore = rows.length > limit;
+  return { logs: hasMore ? rows.slice(0, limit) : rows, hasMore, limit, offset };
+}
+
+export type PlatformAuditLogListOptions = Omit<AuditLogListOptions, "createdFrom" | "createdBefore"> & {
+  /**
+   * Narrows to one restaurant's events (a platform admin drilling into a
+   * single tenant's history), or explicitly `null` for platform-only
+   * events (restaurantId IS NULL — role grants, plan/flag edits, and every
+   * other action with no single tenant). Omit entirely for the default
+   * platform audit log view: every event, across every tenant AND the
+   * platform itself.
+   */
+  restaurantId?: string | null;
+  /** UTC calendar-day bounds (YYYY-MM-DD), inclusive `from`/exclusive `to`. Unlike listAuditLogs' restaurant-local createdFrom/createdBefore, there's no single tenant timezone to resolve against here — see the route's own comment. */
+  createdFrom?: Date;
+  createdBefore?: Date;
+};
+
+/**
+ * Platform Control Center (Phase 6) — the platform-wide counterpart to
+ * listAuditLogs(): no restaurantId is required, since a platform admin's
+ * audit view spans every tenant (and the platform's own restaurantId:
+ * null events — role grants, plan edits, feature flag changes) rather
+ * than being scoped to one. Kept as a separate function rather than making
+ * listAuditLogs' restaurantId parameter optional, so the tenant-scoped
+ * route (which must never accidentally see another tenant's log) can't be
+ * called without one.
+ */
+export async function listPlatformAuditLogs(opts: PlatformAuditLogListOptions = {}) {
+  const limit = Math.min(MAX_LIST_LIMIT, Math.max(1, opts.limit ?? DEFAULT_LIST_LIMIT));
+  const offset = Math.max(0, opts.offset ?? 0);
+
+  const conditions = [];
+  if (opts.restaurantId === null) {
+    conditions.push(isNull(auditLogs.restaurantId));
+  } else if (opts.restaurantId) {
+    conditions.push(eq(auditLogs.restaurantId, opts.restaurantId));
+  }
+  if (opts.actionPrefix) conditions.push(like(auditLogs.action, `${opts.actionPrefix}%`));
+  if (opts.resourceType) conditions.push(eq(auditLogs.resourceType, opts.resourceType));
+  if (opts.createdFrom) conditions.push(gte(auditLogs.createdAt, opts.createdFrom));
+  if (opts.createdBefore) conditions.push(lt(auditLogs.createdAt, opts.createdBefore));
+
+  const rows = await db
+    .select({
+      id: auditLogs.id,
+      action: auditLogs.action,
+      resourceType: auditLogs.resourceType,
+      resourceId: auditLogs.resourceId,
+      ipAddress: auditLogs.ipAddress,
+      metadata: auditLogs.metadata,
+      createdAt: auditLogs.createdAt,
+      userId: auditLogs.userId,
+      userFullName: users.fullName,
+      restaurantId: auditLogs.restaurantId,
+      restaurantName: restaurants.name,
+    })
+    .from(auditLogs)
+    .leftJoin(users, eq(auditLogs.userId, users.id))
+    .leftJoin(restaurants, eq(auditLogs.restaurantId, restaurants.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(auditLogs.createdAt))
     .limit(limit + 1)
     .offset(offset);
