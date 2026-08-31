@@ -273,10 +273,31 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
 };
 
 /**
+ * Platform Control Center (Phase 8) — a permission key that only VIEWS
+ * data ("view_..."), never mutates it. This project's own naming
+ * convention (every read-only permission is prefixed `view_`, every
+ * mutating one is `create_`/`edit_`/`manage_`/`cancel_`/`refund_`/etc. —
+ * see PERMISSIONS above) is what makes a single, centralized heuristic
+ * possible here rather than hand-maintaining a second allow-list that
+ * would silently drift out of sync with the catalog. Used to decide what
+ * a READ-ONLY impersonation session (role "impersonated_read" — see
+ * guard.ts's requireRestaurantAccess) may do: exactly the permissions
+ * this returns true for, nothing else.
+ */
+export function isReadOnlyPermission(permission: PermissionKey): boolean {
+  return permission.startsWith("view_");
+}
+
+/**
  * Checks whether `role` has `permission`, against the default role→
- * permission matrix above. Owner and platform_admin bypass the matrix
- * entirely (same rule as the API layer's `guard.ts`), since they operate
- * with full tenant/platform access regardless of what's in the table.
+ * permission matrix above. Owner, platform_admin, and a WRITE-mode
+ * impersonation session bypass the matrix entirely (same rule as the API
+ * layer's `guard.ts`), since they operate with full tenant/platform
+ * access regardless of what's in the table. A READ-ONLY impersonation
+ * session (role "impersonated_read") is deliberately NOT a bypass — it's
+ * granted only the view_* permissions, exactly matching what
+ * requireRestaurantAccess/requirePermission enforce server-side, so the
+ * dashboard UI never shows a control that would actually 403.
  *
  * This used to be redefined identically at the top of every
  * `/dashboard/*` page.tsx that needed a permission check — one shared copy
@@ -285,7 +306,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
  * just plain data + a pure function).
  */
 export function roleHasPermission(role: string, permission: PermissionKey): boolean {
-  if (role === "platform_admin" || role === "owner") return true;
+  if (role === "platform_admin" || role === "owner" || role === "impersonated_write") return true;
+  if (role === "impersonated_read") return isReadOnlyPermission(permission);
   const granted = DEFAULT_ROLE_PERMISSIONS[role as keyof typeof DEFAULT_ROLE_PERMISSIONS];
   return granted?.includes(permission) ?? false;
 }

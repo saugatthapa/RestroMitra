@@ -3,11 +3,28 @@ import { eq, and, inArray, desc, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { userRoles, rolePermissions, restaurants, branches, users } from "@/db/schema";
 import { getSession, type SessionContext } from "@/lib/auth/session";
+import { getImpersonationContext } from "@/lib/auth/impersonation";
 import { HttpError } from "@/lib/http-error";
 import { reconcileSubscriptionStatus } from "@/lib/subscription-db";
 import type { AccessReason } from "@/lib/subscription";
-import type { PermissionKey } from "./permissions";
+import { isReadOnlyPermission, type PermissionKey } from "./permissions";
 import { roleHasPlatformPermission, type PlatformPermissionKey } from "./platform-permissions";
+
+/**
+ * Platform Control Center (Phase 8) — true for platform_admin (the
+ * pre-existing blanket cross-tenant bypass) OR either impersonation-
+ * sourced role. Every place that already special-cases "platform_admin
+ * bypasses this check" (suspension, subscription-active gating) should
+ * bypass the same way for an active impersonation grant — the entire
+ * point of impersonation is support/ops investigation, which is exactly
+ * the same justification those bypasses already document for
+ * platform_admin itself. Kept as one shared predicate so the two
+ * call sites (resolveRestaurantContext, the dashboard layout) can't
+ * silently drift out of sync with each other.
+ */
+export function isPlatformOrImpersonatedRole(role: string): boolean {
+  return role === "platform_admin" || role === "impersonated_read" || role === "impersonated_write";
+}
 
 export class AuthError extends HttpError {
   constructor(message: string, status = 401) {
@@ -234,6 +251,30 @@ export async function requireRestaurantAccess(
   userId: string,
   restaurantId: string,
 ): Promise<{ role: string; branchId: string | null }> {
+  // Platform Control Center (Phase 8) — an ACTIVE impersonation session
+  // scoped to EXACTLY this restaurant takes precedence over everything
+  // below, including the platform_admin blanket bypass a few lines down.
+  // This is deliberate: once an admin has gone through the reasoned,
+  // audited, bannered impersonation flow, its own mode (read-only vs
+  // write) is what should actually govern what they can do here — a
+  // platform_admin/super_admin's separate always-on bypass must never
+  // silently make the impersonation banner's "read-only" promise
+  // meaningless. Scoped to targetRestaurantId only (never "any
+  // restaurant"), and to this exact adminUserId — see
+  // ImpersonationContext's own doc comment for why this never re-derives
+  // identity, only adds a capability grant on top of it.
+  const impersonation = await getImpersonationContext();
+  if (
+    impersonation &&
+    impersonation.adminUserId === userId &&
+    impersonation.targetRestaurantId === restaurantId
+  ) {
+    return {
+      role: impersonation.mode === "write" ? "impersonated_write" : "impersonated_read",
+      branchId: null,
+    };
+  }
+
   const admin = await isPlatformAdmin(userId);
   if (admin) {
     // Platform admins can act across tenants for support/ops purposes,
@@ -296,7 +337,21 @@ export async function requirePermission(
 ): Promise<void> {
   const role = knownRole ?? (await requireRestaurantAccess(userId, restaurantId)).role;
 
-  if (role === "platform_admin" || role === "owner") return;
+  if (role === "platform_admin" || role === "owner" || role === "impersonated_write") return;
+
+  // Platform Control Center (Phase 8) — a read-only impersonation session
+  // is never a bypass: it's granted exactly the view_* permissions
+  // (isReadOnlyPermission), nothing else, checked here rather than
+  // falling through to the rolePermissions table lookup below (that table
+  // only knows about the real staff-role enum — "impersonated_read" isn't
+  // a value in it, and was never meant to be).
+  if (role === "impersonated_read") {
+    if (isReadOnlyPermission(permission)) return;
+    throw new AuthError(
+      `Missing permission: ${permission} (read-only impersonation session)`,
+      403,
+    );
+  }
 
   const rows = await db
     .select({ permissionKey: rolePermissions.permissionKey })
@@ -338,7 +393,18 @@ export async function requireAnyPermission(
 
   const role = knownRole ?? (await requireRestaurantAccess(userId, restaurantId)).role;
 
-  if (role === "platform_admin" || role === "owner") return;
+  if (role === "platform_admin" || role === "owner" || role === "impersonated_write") return;
+
+  // See requirePermission's matching comment — read-only impersonation
+  // gets exactly the view_* permissions among the ones offered, never a
+  // rolePermissions table lookup for a role string that isn't a real one.
+  if (role === "impersonated_read") {
+    if (permissions.some((p) => isReadOnlyPermission(p))) return;
+    throw new AuthError(
+      `Missing permission: one of [${permissions.join(", ")}] (read-only impersonation session)`,
+      403,
+    );
+  }
 
   const rows = await db
     .select({ permissionKey: rolePermissions.permissionKey })

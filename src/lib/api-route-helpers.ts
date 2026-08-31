@@ -8,6 +8,7 @@ import {
   requireRestaurantBySlug,
   requireActiveSubscription,
   requireRestaurantActive,
+  isPlatformOrImpersonatedRole,
 } from "@/lib/rbac/guard";
 import { HttpError } from "@/lib/http-error";
 import type { PermissionKey } from "@/lib/rbac/permissions";
@@ -87,10 +88,15 @@ export async function resolveRestaurantContext(
     session.user.id,
     slug,
   );
-  if (role !== "platform_admin") {
+  // Phase 8 — an active impersonation session bypasses these two the same
+  // way platform_admin's blanket cross-tenant access always has (see
+  // isPlatformOrImpersonatedRole's own comment): investigating a
+  // suspended or billing-lapsed tenant is exactly the kind of support/ops
+  // task impersonation exists for.
+  if (!isPlatformOrImpersonatedRole(role)) {
     await requireRestaurantActive(restaurantId);
   }
-  if (role !== "platform_admin" && !opts?.allowInactiveSubscription) {
+  if (!isPlatformOrImpersonatedRole(role) && !opts?.allowInactiveSubscription) {
     await requireActiveSubscription(restaurantId);
   }
   if (permission) {

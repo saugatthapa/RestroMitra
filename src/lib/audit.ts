@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, eq, gte, isNull, lt, like } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLogs, restaurants, users } from "@/db/schema";
+import { getImpersonationContext } from "@/lib/auth/impersonation";
 
 export async function recordAuditLog(entry: {
   restaurantId?: string | null;
@@ -12,6 +13,37 @@ export async function recordAuditLog(entry: {
   ipAddress?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
+  let metadata = entry.metadata;
+
+  // Phase 8 (Platform Control Center) — Impersonation. Centralized here
+  // rather than touching any of this project's 150+ existing
+  // recordAuditLog() call sites: every one of them already passes
+  // `userId: session.user.id` (the REAL, authenticated admin —
+  // impersonation never invents a "logged in as the tenant" identity, see
+  // impersonation.ts's own header comment), so all that's missing is a
+  // flag saying "and this action was actually performed against a
+  // restaurant they don't have a real role at, under an active
+  // impersonation grant." Only applied when this entry's restaurantId
+  // actually matches the currently-active impersonation's target — an
+  // admin's own platform-level actions (restaurantId omitted) or actions
+  // against a DIFFERENT restaurant reached through the untouched
+  // isPlatformAdmin bypass are never mistagged as impersonated. Never
+  // overwrites the caller's own metadata keys other than these three, so
+  // this never silently changes the meaning of any existing audit entry
+  // for a non-impersonated action (getImpersonationContext() returns null
+  // whenever there's no active session, which is every call site today).
+  if (entry.restaurantId) {
+    const impersonation = await getImpersonationContext();
+    if (impersonation && impersonation.targetRestaurantId === entry.restaurantId) {
+      metadata = {
+        ...metadata,
+        isImpersonated: true,
+        impersonationSessionId: impersonation.impersonationSessionId,
+        impersonationReason: impersonation.reason,
+      };
+    }
+  }
+
   await db.insert(auditLogs).values({
     restaurantId: entry.restaurantId ?? null,
     userId: entry.userId ?? null,
@@ -19,7 +51,7 @@ export async function recordAuditLog(entry: {
     resourceType: entry.resourceType,
     resourceId: entry.resourceId,
     ipAddress: entry.ipAddress ?? null,
-    metadata: entry.metadata,
+    metadata,
   });
 }
 

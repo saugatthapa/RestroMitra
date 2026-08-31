@@ -414,6 +414,13 @@
       "when": 1788163589715,
       "tag": "0058_ai_provider_control_center",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1788186610514,
+      "tag": "0059_platform_impersonation_sessions",
+      "breakpoints": true
     }
   ]
 }

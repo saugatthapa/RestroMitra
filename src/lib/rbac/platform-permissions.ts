@@ -31,8 +31,14 @@ export const PLATFORM_PERMISSIONS = {
   // AI Provider Control Center (Phase 7)
   MANAGE_AI_PROVIDERS: "manage_ai_providers",
 
-  // Impersonation (Phase 8)
+  // Impersonation (Phase 8) — IMPERSONATE_TENANT alone grants read-only
+  // access (see the impersonation session's default `mode`); mutating
+  // while impersonating additionally requires IMPERSONATE_TENANT_WRITE,
+  // deliberately not bundled into the base permission so a role can see a
+  // tenant's dashboard for support purposes without also being able to
+  // change it.
   IMPERSONATE_TENANT: "impersonate_tenant",
+  IMPERSONATE_TENANT_WRITE: "impersonate_tenant_write",
 
   // Support tooling (Phase 9)
   MANAGE_SUPPORT: "manage_support", // internal notes, session revocation, status tags, search
@@ -62,7 +68,10 @@ export const PLATFORM_PERMISSION_DESCRIPTIONS: Record<PlatformPermissionKey, str
   [PLATFORM_PERMISSIONS.VIEW_PLATFORM_AUDIT_LOG]: "View the platform-level audit log",
   [PLATFORM_PERMISSIONS.MANAGE_AI_PROVIDERS]:
     "Configure AI provider credentials, failover, and usage limits",
-  [PLATFORM_PERMISSIONS.IMPERSONATE_TENANT]: "Start an audited impersonation session for a tenant",
+  [PLATFORM_PERMISSIONS.IMPERSONATE_TENANT]:
+    "Start an audited, read-only impersonation session for a tenant",
+  [PLATFORM_PERMISSIONS.IMPERSONATE_TENANT_WRITE]:
+    "Make changes to a tenant while impersonating it (requires IMPERSONATE_TENANT)",
   [PLATFORM_PERMISSIONS.MANAGE_SUPPORT]:
     "Use support tooling: internal notes, session revocation, status tags, global search",
   [PLATFORM_PERMISSIONS.MANAGE_ANNOUNCEMENTS]: "Create or edit platform announcements",

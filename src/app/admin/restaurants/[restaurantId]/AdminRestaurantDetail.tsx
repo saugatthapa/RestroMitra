@@ -7,6 +7,7 @@ import { type Plan, type PlanKey } from "@/lib/plans";
 import { SUBSCRIPTION_STATUS_LABELS, type SubscriptionStatus } from "@/lib/subscription";
 import { EntitlementsPanel } from "./EntitlementsPanel";
 import { AiUsagePanel } from "./AiUsagePanel";
+import { ImpersonationPanel } from "./ImpersonationPanel";
 
 type Detail = {
   restaurant: {
@@ -211,6 +212,8 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
               </button>
             )}
           </div>
+
+          <ImpersonationPanel restaurantId={restaurantId} restaurantName={restaurant.name} />
 
           <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-4">
             <h2 className="mb-3 text-sm font-semibold text-neutral-900">Actions</h2>

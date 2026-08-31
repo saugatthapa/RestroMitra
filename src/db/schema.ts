@@ -3560,6 +3560,116 @@ export const aiUsageLogsRelations = relations(aiUsageLogs, ({ one }) => ({
   restaurant: one(restaurants, { fields: [aiUsageLogs.restaurantId], references: [restaurants.id] }),
 }));
 
+// Platform Control Center (Phase 8) — Impersonation. "read_only" (the
+// default) lets a platform admin/support agent see exactly what a
+// restaurant's dashboard shows without being able to change anything;
+// "write" additionally allows mutations, gated behind the separate
+// IMPERSONATE_TENANT_WRITE permission (not held by support_admin by
+// default — see platform-permissions.ts) so read access and write access
+// are independently grantable.
+export const impersonationModeEnum = pgEnum("impersonation_mode", ["read_only", "write"]);
+
+// "active" -> exactly one of "ended" (manual exit), "expired" (server-side
+// TTL reached, never client-trusted), or "revoked" (a platform_admin/
+// super_admin force-ended someone else's session). Terminal states are
+// kept (never deleted) as the permanent history of who impersonated whom,
+// when, why, and how it stopped.
+export const impersonationStatusEnum = pgEnum("impersonation_status", [
+  "active",
+  "ended",
+  "expired",
+  "revoked",
+]);
+
+/**
+ * Platform Control Center (Phase 8) — a deliberately SEPARATE session
+ * mechanism from `sessions` above, not an extension of it: starting
+ * impersonation must never touch, invalidate, or reshape the acting
+ * admin's own platform login (see src/lib/auth/impersonation.ts's own
+ * comment for the full reasoning). A row here represents one grant of
+ * "adminUserId may act as targetRestaurantId, in `mode`, until
+ * expiresAt" — resolved via its own httpOnly cookie
+ * (IMPERSONATION_SESSION_COOKIE_NAME), checked independently of the main
+ * session cookie on every request.
+ *
+ * Deliberately NOT a row in `sessions` with a restaurantId bolted on:
+ * `sessions` represents "this browser is logged in as this user," a
+ * concept impersonation must not redefine. This table instead represents
+ * a scoped, time-boxed, reasoned CAPABILITY GRANT layered on top of an
+ * already-authenticated admin identity — the admin's own `sessions` row
+ * keeps meaning exactly what it always has.
+ */
+export const platformImpersonationSessions = pgTable(
+  "platform_impersonation_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Same hash-only-at-rest pattern as sessions.tokenHash — the raw
+    // token lives only in the httpOnly cookie and briefly in memory.
+    tokenHash: text("token_hash").notNull(),
+    adminUserId: uuid("admin_user_id")
+      .notNull()
+      .references(() => users.id),
+    targetRestaurantId: uuid("target_restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    // Mandatory — enforced at the validation layer (a blank/whitespace-
+    // only reason is rejected before this row is ever inserted), not just
+    // by this column being NOT NULL.
+    reason: text("reason").notNull(),
+    mode: impersonationModeEnum("mode").notNull().default("read_only"),
+    status: impersonationStatusEnum("status").notNull().default("active"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    // Fixed, short TTL (see IMPERSONATION_SESSION_DURATION_MS) — checked
+    // server-side on every single request that relies on this grant,
+    // never inferred from the cookie's own expiry alone.
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    // Who ended it — usually the same as adminUserId (a normal exit), but
+    // a different platform_admin/super_admin for a forced "revoke".
+    endedByUserId: uuid("ended_by_user_id").references(() => users.id),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("platform_impersonation_sessions_token_hash_unique").on(table.tokenHash),
+    index("platform_impersonation_sessions_admin_user_id_idx").on(table.adminUserId),
+    index("platform_impersonation_sessions_target_restaurant_id_idx").on(table.targetRestaurantId),
+    // The concurrency guarantee item 32/38 of the spec calls for: at most
+    // one ACTIVE impersonation session per admin, enforced by the
+    // database itself (a unique-constraint violation on the second
+    // concurrent INSERT), never by an application-level "SELECT then
+    // INSERT" race. Same partial-unique-index pattern as
+    // user_roles_one_active_per_restaurant_unique/
+    // attendance_records_one_open_shift_per_user_unique above — only rows
+    // with status = 'active' participate, so ended/expired/revoked
+    // history accumulates freely.
+    uniqueIndex("platform_impersonation_sessions_one_active_per_admin_unique")
+      .on(table.adminUserId)
+      .where(sql`${table.status} = 'active'`),
+  ],
+);
+
+export const platformImpersonationSessionsRelations = relations(
+  platformImpersonationSessions,
+  ({ one }) => ({
+    admin: one(users, {
+      fields: [platformImpersonationSessions.adminUserId],
+      references: [users.id],
+      relationName: "impersonationSessionAdmin",
+    }),
+    endedBy: one(users, {
+      fields: [platformImpersonationSessions.endedByUserId],
+      references: [users.id],
+      relationName: "impersonationSessionEndedBy",
+    }),
+    targetRestaurant: one(restaurants, {
+      fields: [platformImpersonationSessions.targetRestaurantId],
+      references: [restaurants.id],
+    }),
+  }),
+);
+
 // ---------------------------------------------------------------------------
 // Relations (for query ergonomics)
 // ---------------------------------------------------------------------------
@@ -3570,6 +3680,12 @@ export const usersRelations = relations(users, ({ many }) => ({
   passwordResetTokens: many(passwordResetTokens),
   mfaChallenges: many(mfaChallenges),
   mfaBackupCodes: many(mfaBackupCodes),
+  impersonationSessionsStarted: many(platformImpersonationSessions, {
+    relationName: "impersonationSessionAdmin",
+  }),
+  impersonationSessionsEnded: many(platformImpersonationSessions, {
+    relationName: "impersonationSessionEndedBy",
+  }),
 }));
 
 export const passwordResetTokensRelations = relations(passwordResetTokens, ({ one }) => ({
@@ -3590,6 +3706,7 @@ export const restaurantsRelations = relations(restaurants, ({ many }) => ({
   subscriptionEvents: many(subscriptionEvents),
   entitlementOverrides: many(entitlementOverrides),
   aiUsageLogs: many(aiUsageLogs),
+  impersonationSessions: many(platformImpersonationSessions),
 }));
 
 export const subscriptionEventsRelations = relations(subscriptionEvents, ({ one }) => ({

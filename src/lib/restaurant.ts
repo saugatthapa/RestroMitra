@@ -85,6 +85,46 @@ export async function getRestaurantForUser(userId: string, restaurantId: string)
   return rows[0] ?? null;
 }
 
+/**
+ * Phase 8 (Platform Control Center) — fetches the full `OwnedRestaurant`
+ * shape for a restaurant an admin is IMPERSONATING, keyed purely on
+ * restaurantId (no userId/userRoles join — an impersonating admin
+ * deliberately has no real role grant on this restaurant; that's the
+ * whole point of the feature). Caller (dashboard/layout.tsx) is
+ * responsible for having already validated the impersonation context
+ * itself (see getImpersonationContext) — this is just the data lookup,
+ * with `role` filled in by the caller from the impersonation mode rather
+ * than from any DB row here.
+ *
+ * Returns null if the restaurant no longer exists, which in practice
+ * should be unreachable during a live impersonation session: the
+ * platform_impersonation_sessions.target_restaurant_id FK is
+ * ON DELETE CASCADE, so deleting a restaurant also deletes any of its
+ * active impersonation session rows.
+ */
+export async function getRestaurantForImpersonation(
+  restaurantId: string,
+): Promise<Omit<OwnedRestaurant, "role"> | null> {
+  const rows = await db
+    .select({
+      id: restaurants.id,
+      slug: restaurants.slug,
+      name: restaurants.name,
+      logoUrl: restaurants.logoUrl,
+      kotHeaderText: restaurants.kotHeaderText,
+      subscriptionStatus: restaurants.subscriptionStatus,
+      trialEndsAt: restaurants.trialEndsAt,
+      planKey: restaurants.planKey,
+      onboardingCompletedAt: restaurants.onboardingCompletedAt,
+      isActive: restaurants.isActive,
+    })
+    .from(restaurants)
+    .where(eq(restaurants.id, restaurantId))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
 export async function getMainBranch(restaurantId: string) {
   const rows = await db
     .select()
