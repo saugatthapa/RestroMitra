@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { isOpenShift, computeDurationMinutes, formatDuration, totalMinutes, summarizeAttendance } from "./attendance";
+import {
+  isOpenShift,
+  computeDurationMinutes,
+  formatDuration,
+  totalMinutes,
+  summarizeAttendance,
+  initialAttendanceStatus,
+  attendanceStatusAfterClockOut,
+} from "./attendance";
 
 describe("isOpenShift", () => {
   it("is true when clockOutAt is null", () => {
@@ -99,5 +107,29 @@ describe("summarizeAttendance", () => {
     const summary = summarizeAttendance(records, localDate, now);
     expect(summary.totalMinutes).toBe(180);
     expect(summary.daysPresent).toBe(1);
+  });
+});
+
+describe("initialAttendanceStatus", () => {
+  it("auto-verified when there's no clock-in photo — nothing for a human to review", () => {
+    expect(initialAttendanceStatus(false)).toBe("verified");
+  });
+
+  it("needs_review when a clock-in photo was captured — nobody has looked at it yet", () => {
+    expect(initialAttendanceStatus(true)).toBe("needs_review");
+  });
+});
+
+describe("attendanceStatusAfterClockOut", () => {
+  it("a new clock-out photo always flips the record back to needs_review, even if it was already verified", () => {
+    expect(attendanceStatusAfterClockOut("verified", true)).toBe("needs_review");
+    expect(attendanceStatusAfterClockOut("rejected", true)).toBe("needs_review");
+    expect(attendanceStatusAfterClockOut("needs_review", true)).toBe("needs_review");
+  });
+
+  it("no clock-out photo leaves whatever status clock-in already produced untouched", () => {
+    expect(attendanceStatusAfterClockOut("verified", false)).toBe("verified");
+    expect(attendanceStatusAfterClockOut("rejected", false)).toBe("rejected");
+    expect(attendanceStatusAfterClockOut("needs_review", false)).toBe("needs_review");
   });
 });

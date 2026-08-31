@@ -2617,6 +2617,14 @@ export const loyaltyTransactions = pgTable(
 // and closes this race regardless of the app layer).
 // ---------------------------------------------------------------------------
 
+// Phase 13 (Attendance overhaul, Track B) — see attendance.ts's own comment
+// on AttendanceStatus for what each value means and when it's set.
+export const attendanceStatusEnum = pgEnum("attendance_status", [
+  "needs_review",
+  "verified",
+  "rejected",
+]);
+
 export const attendanceRecords = pgTable(
   "attendance_records",
   {
@@ -2649,6 +2657,21 @@ export const attendanceRecords = pgTable(
     // string and have it accepted as proof a photo was taken.
     clockInPhotoObjectKey: varchar("clock_in_photo_object_key", { length: 500 }),
     clockOutPhotoObjectKey: varchar("clock_out_photo_object_key", { length: 500 }),
+    // Phase 13 — see attendance.ts's initialAttendanceStatus/
+    // attendanceStatusAfterClockOut for how this is actually computed;
+    // the DB default below is only a safety net (every write path sets it
+    // explicitly), same "explicit app logic, DB default as backstop"
+    // relationship as platform_maintenance_mode's enabled column.
+    // reviewedByUserId/reviewedAt/reviewNote hold the CURRENT reviewer's
+    // call only — the full history of every status change is in
+    // audit_logs (action "attendance.status_changed"), same "mutable
+    // current-state snapshot + separate ledger for history" split as
+    // platform_maintenance_mode (mutable) vs. platform_impersonation_
+    // sessions (ledger).
+    status: attendanceStatusEnum("status").notNull().default("verified"),
+    reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewNote: text("review_note"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -2671,6 +2694,44 @@ export const attendanceRecords = pgTable(
       .on(table.userId, table.restaurantId)
       .where(sql`${table.clockOutAt} IS NULL`),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// Phase 13 (Attendance overhaul, Track B) — an APPEND-ONLY ledger of every
+// manual correction made to an attendance_records row (clock-in/out time
+// and/or note), each one carrying the reason a manager/owner gave for it —
+// "correction-with-reason audit trail" per the implementation plan. Same
+// "ledger over mutable field" reasoning as attendance_records itself and
+// attendance_photo_consents: attendance_records.clockInAt/clockOutAt/note
+// are still mutated in place (a correction IS an edit — the current values
+// need to be the corrected ones for payroll/reporting to use), but every
+// edit's before/after and justification survives here regardless, so
+// "what did this record originally say, and who changed it and why" is
+// always answerable even after the row itself has been corrected multiple
+// times. recordAuditLog also gets an "attendance.corrected" entry per
+// correction (the generic cross-resource trail); this table is the
+// attendance-specific, fully-typed detail behind that entry.
+export const attendanceCorrections = pgTable(
+  "attendance_corrections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    attendanceRecordId: uuid("attendance_record_id")
+      .notNull()
+      .references(() => attendanceRecords.id, { onDelete: "cascade" }),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    correctedByUserId: uuid("corrected_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    reason: text("reason").notNull(),
+    previousClockInAt: timestamp("previous_clock_in_at", { withTimezone: true }).notNull(),
+    previousClockOutAt: timestamp("previous_clock_out_at", { withTimezone: true }),
+    previousNote: text("previous_note"),
+    newClockInAt: timestamp("new_clock_in_at", { withTimezone: true }).notNull(),
+    newClockOutAt: timestamp("new_clock_out_at", { withTimezone: true }),
+    newNote: text("new_note"),
+    correctedAt: timestamp("corrected_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("attendance_corrections_attendance_record_id_idx").on(table.attendanceRecordId)],
 );
 
 // ---------------------------------------------------------------------------

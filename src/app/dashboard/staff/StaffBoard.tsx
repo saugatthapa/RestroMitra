@@ -3,7 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client";
 import { ASSIGNABLE_STAFF_ROLES, STAFF_ROLE_LABELS, type AssignableStaffRole } from "@/lib/staff-roles";
-import { computeDurationMinutes, formatDuration } from "@/lib/attendance";
+import {
+  computeDurationMinutes,
+  formatDuration,
+  ATTENDANCE_STATUS_LABELS,
+  type AttendanceStatus,
+} from "@/lib/attendance";
 import { useDateSystem } from "@/lib/date-system";
 import { formatDate } from "@/lib/nepali-date";
 import { formatNPR } from "@/lib/money";
@@ -11,6 +16,7 @@ import { localDateIso, firstOfMonthIso } from "@/lib/local-date";
 import { SALARY_TYPES, SALARY_TYPE_LABELS, type SalaryType } from "@/lib/finance/salary-type";
 import { PAYOUT_METHODS, PAYOUT_METHOD_LABELS, type PayoutMethod } from "@/lib/finance/payout-methods";
 import { SelfieClockModal } from "./SelfieClockModal";
+import { AttendanceReviewModal } from "./AttendanceReviewModal";
 
 type StaffMember = {
   id: string; // user_roles id
@@ -35,7 +41,27 @@ type AttendanceRecord = {
   note: string | null;
   hasClockInPhoto: boolean;
   hasClockOutPhoto: boolean;
+  status: AttendanceStatus;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  reviewedByName: string | null;
 };
+
+const ATTENDANCE_STATUS_BADGE_CLASS: Record<AttendanceStatus, string> = {
+  needs_review: "bg-amber-50 text-amber-700",
+  verified: "bg-green-50 text-green-700",
+  rejected: "bg-red-50 text-red-700",
+};
+
+function AttendanceStatusBadge({ status }: { status: AttendanceStatus }) {
+  return (
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${ATTENDANCE_STATUS_BADGE_CLASS[status]}`}
+    >
+      {ATTENDANCE_STATUS_LABELS[status]}
+    </span>
+  );
+}
 
 type SalaryConfig = {
   id: string;
@@ -701,6 +727,8 @@ function AttendanceTab({
   const [photoLoadingId, setPhotoLoadingId] = useState<string | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [reviewingRecord, setReviewingRecord] = useState<AttendanceRecord | null>(null);
+  const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
   const dateSystem = useDateSystem();
 
   async function load() {
@@ -784,6 +812,9 @@ function AttendanceTab({
     }
   }
 
+  const needsReviewCount = records.filter((r) => r.status === "needs_review").length;
+  const visibleRecords = needsReviewOnly ? records.filter((r) => r.status === "needs_review") : records;
+
   if (loading) return <p className="text-sm text-neutral-500">Loading attendance…</p>;
 
   return (
@@ -856,6 +887,17 @@ function AttendanceTab({
         />
       )}
 
+      {canViewAll && needsReviewCount > 0 && (
+        <label className="flex items-center gap-2 text-sm text-neutral-700">
+          <input
+            type="checkbox"
+            checked={needsReviewOnly}
+            onChange={(e) => setNeedsReviewOnly(e.target.checked)}
+          />
+          Show only shifts needing review ({needsReviewCount})
+        </label>
+      )}
+
       <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
@@ -866,17 +908,19 @@ function AttendanceTab({
               <th className="px-3 py-2">Duration</th>
               <th className="px-3 py-2">Note</th>
               <th className="px-3 py-2">Photos</th>
+              {canViewAll && <th className="px-3 py-2">Status</th>}
+              {canViewAll && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
           <tbody>
-            {records.length === 0 && (
+            {visibleRecords.length === 0 && (
               <tr>
-                <td colSpan={canViewAll ? 6 : 5} className="px-3 py-6 text-center text-neutral-400">
-                  No attendance records yet.
+                <td colSpan={canViewAll ? 8 : 5} className="px-3 py-6 text-center text-neutral-400">
+                  {records.length === 0 ? "No attendance records yet." : "No shifts need review right now."}
                 </td>
               </tr>
             )}
-            {records.map((r) => (
+            {visibleRecords.map((r) => (
               <tr key={r.id} className="border-t border-neutral-100">
                 {canViewAll && <td className="px-3 py-2 font-medium text-neutral-900">{r.fullName}</td>}
                 <td className="px-3 py-2">{formatDate(r.clockInAt, dateSystem, { withTime: true })}</td>
@@ -914,11 +958,36 @@ function AttendanceTab({
                     {!r.hasClockInPhoto && !r.hasClockOutPhoto && <span className="text-neutral-300">—</span>}
                   </div>
                 </td>
+                {canViewAll && (
+                  <td className="px-3 py-2">
+                    <AttendanceStatusBadge status={r.status} />
+                  </td>
+                )}
+                {canViewAll && (
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setReviewingRecord(r)}
+                      className="text-orange-700 underline hover:text-orange-800"
+                    >
+                      Review
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {reviewingRecord && (
+        <AttendanceReviewModal
+          slug={slug}
+          record={reviewingRecord}
+          onUpdated={load}
+          onClose={() => setReviewingRecord(null)}
+        />
+      )}
     </div>
   );
 }

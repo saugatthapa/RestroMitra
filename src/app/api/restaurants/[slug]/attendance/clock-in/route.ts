@@ -8,6 +8,7 @@ import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { isUniqueViolation } from "@/lib/db-error";
 import { resolveAttendancePhotoForClock } from "@/lib/attendance-photos-db";
+import { initialAttendanceStatus } from "@/lib/attendance";
 
 /**
  * Self-service clock-in — any active staff member for this restaurant, no
@@ -81,6 +82,8 @@ export async function POST(
           branchId,
           note: parsed.data.note || null,
           clockInPhotoObjectKey,
+          // Phase 13 — see initialAttendanceStatus's own comment.
+          status: initialAttendanceStatus(clockInPhotoObjectKey !== null),
         })
         .returning();
       record = inserted;

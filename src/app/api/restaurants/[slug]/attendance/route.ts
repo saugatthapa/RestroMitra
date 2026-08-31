@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { and, desc, eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { attendanceRecords, users } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
 import { hasPermission, requireBranchAccess } from "@/lib/rbac/guard";
+
+const reviewers = alias(users, "reviewers");
 
 /**
  * No permission gate beyond ordinary restaurant membership — every staff
@@ -48,9 +51,14 @@ export async function GET(
         note: attendanceRecords.note,
         clockInPhotoObjectKey: attendanceRecords.clockInPhotoObjectKey,
         clockOutPhotoObjectKey: attendanceRecords.clockOutPhotoObjectKey,
+        status: attendanceRecords.status,
+        reviewedAt: attendanceRecords.reviewedAt,
+        reviewNote: attendanceRecords.reviewNote,
+        reviewedByName: reviewers.fullName,
       })
       .from(attendanceRecords)
       .innerJoin(users, eq(attendanceRecords.userId, users.id))
+      .leftJoin(reviewers, eq(attendanceRecords.reviewedByUserId, reviewers.id))
       .where(
         and(
           eq(attendanceRecords.restaurantId, restaurantId),

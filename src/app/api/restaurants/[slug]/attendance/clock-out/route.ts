@@ -7,6 +7,7 @@ import { clockOutSchema } from "@/lib/validation/attendance";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { resolveAttendancePhotoForClock } from "@/lib/attendance-photos-db";
+import { attendanceStatusAfterClockOut } from "@/lib/attendance";
 
 export async function POST(
   request: Request,
@@ -64,6 +65,8 @@ export async function POST(
         // Appended, not overwritten — preserves any note left at clock-in.
         note: parsed.data.note ? [open.note, parsed.data.note].filter(Boolean).join(" / ") : open.note,
         clockOutPhotoObjectKey,
+        // Phase 13 — see attendanceStatusAfterClockOut's own comment.
+        status: attendanceStatusAfterClockOut(open.status, clockOutPhotoObjectKey !== null),
       })
       .where(and(eq(attendanceRecords.id, open.id), isNull(attendanceRecords.clockOutAt)))
       .returning();

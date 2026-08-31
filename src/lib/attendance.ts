@@ -40,6 +40,50 @@ export function totalMinutes(records: AttendanceRecord[], now: Date = new Date()
 }
 
 /**
+ * Phase 13 (Attendance overhaul, Track B) — the review status a shift
+ * carries. A selfie-verified restaurant's whole point is that a human
+ * eventually LOOKS at the captured photo(s) — matching a client-supplied
+ * key to a real object in storage (Phase 12) only proves that account
+ * uploaded some photo, never that the photo genuinely shows that person.
+ * "verified"/"rejected" is that human judgment call; "needs_review" is the
+ * default whenever there's a photo nobody has looked at yet.
+ */
+export type AttendanceStatus = "needs_review" | "verified" | "rejected";
+
+export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
+  needs_review: "Needs review",
+  verified: "Verified",
+  rejected: "Rejected",
+};
+
+/**
+ * The status a brand-new record starts at, right after clock-in. Nothing
+ * to review (no photo — either the restaurant doesn't require one, or this
+ * one clock-in was submitted without one) auto-"verified", the same
+ * implicit trust every pre-Phase-12 clock-in already had. A photo present
+ * means there's now something a human needs to actually look at.
+ */
+export function initialAttendanceStatus(hasClockInPhoto: boolean): AttendanceStatus {
+  return hasClockInPhoto ? "needs_review" : "verified";
+}
+
+/**
+ * The status a record transitions to at clock-out. A clock-out photo is a
+ * SECOND, separate thing to look at — even a record an owner already
+ * marked "verified" from its clock-in photo goes back to "needs_review"
+ * once a new, not-yet-looked-at clock-out photo lands on it. No clock-out
+ * photo at all leaves whatever status clock-in already produced untouched
+ * (an owner's earlier verified/rejected call about the clock-in photo
+ * still stands — clocking out with no photo doesn't erase it).
+ */
+export function attendanceStatusAfterClockOut(
+  currentStatus: AttendanceStatus,
+  hasClockOutPhoto: boolean,
+): AttendanceStatus {
+  return hasClockOutPhoto ? "needs_review" : currentStatus;
+}
+
+/**
  * Commercial Launch Phase B.2 (Payroll Upgrades) — the attendance-side
  * inputs a payroll computation needs: total minutes worked (for hourly
  * pay) and distinct CALENDAR days with at least one shift (for daily pay).
