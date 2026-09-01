@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { apiGet, ApiError } from "@/lib/api-client";
+import { buildAuditLogParams } from "@/lib/audit-log-query";
+import { formatAuditLogEntry, formatAuditLogModifiers } from "@/lib/audit-log-format";
 
 type AuditLogEntry = {
   id: string;
@@ -54,8 +56,7 @@ export function AuditLogBoard() {
     setLoading(true);
     setError(null);
 
-    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
-    if (actionFilter.trim()) params.set("action", actionFilter.trim());
+    const params = buildAuditLogParams({ action: actionFilter }, { limit: PAGE_SIZE, offset });
     if (restaurantIdFilter.trim()) params.set("restaurantId", restaurantIdFilter.trim());
 
     apiGet<{ logs: AuditLogEntry[]; hasMore: boolean }>(`/api/admin/audit-log?${params}`)
@@ -128,6 +129,17 @@ export function AuditLogBoard() {
               {logs.map((log) => {
                 const isExpanded = expandedId === log.id;
                 const hasMetadata = log.metadata && Object.keys(log.metadata).length > 0;
+                // RC audit P1 fix (impersonation events rendering as raw
+                // JSON) — same formatter the tenant-side board uses (see
+                // its own comment); here every row already carries its own
+                // restaurantName, so the sentence just uses that instead of
+                // a fixed "this restaurant" label.
+                const readableSentence = formatAuditLogEntry({
+                  action: log.action,
+                  metadata: log.metadata,
+                  userFullName: log.userFullName,
+                });
+                const modifiers = formatAuditLogModifiers(log.metadata);
                 return (
                   <tr
                     key={log.id}
@@ -153,8 +165,18 @@ export function AuditLogBoard() {
                     </td>
                     <td className="px-4 py-2 font-medium text-neutral-900">
                       {formatAction(log.action)}
-                      {hasMetadata && <span className="ml-1.5 text-xs text-neutral-400">{isExpanded ? "▲" : "▼"}</span>}
-                      {isExpanded && hasMetadata && (
+                      {modifiers && (
+                        <span className="ml-1.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[11px] font-normal text-amber-700">
+                          {modifiers}
+                        </span>
+                      )}
+                      {hasMetadata && !readableSentence && (
+                        <span className="ml-1.5 text-xs text-neutral-400">{isExpanded ? "▲" : "▼"}</span>
+                      )}
+                      {readableSentence && (
+                        <p className="mt-1 max-w-md whitespace-normal font-normal text-neutral-600">{readableSentence}</p>
+                      )}
+                      {isExpanded && hasMetadata && !readableSentence && (
                         <pre className="mt-1 max-w-md overflow-x-auto rounded bg-neutral-50 p-2 text-xs text-neutral-600">
                           {JSON.stringify(log.metadata, null, 2)}
                         </pre>

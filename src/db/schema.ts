@@ -3942,6 +3942,18 @@ export const auditLogs = pgTable(
     userId: uuid("user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    // RC audit P1 fix (restaurant-facing audit log UI gap) — nullable
+    // because most audit entries genuinely aren't branch-scoped (settings,
+    // subscription, staff role/salary changes, auth events, platform-level
+    // actions) — same rationale the read route's own comment already gave
+    // for why it never had this column. Populated only at the call sites
+    // that already resolve a branchId for the action being logged (orders,
+    // tables, reservations, purchases); NOT backfilled for the ~130 other
+    // recordAuditLog() call sites, which is an intentional, bounded rollout
+    // rather than an oversight — see recordAuditLog's own comment.
+    branchId: uuid("branch_id").references(() => branches.id, {
+      onDelete: "set null",
+    }),
     action: varchar("action", { length: 100 }).notNull(), // e.g. "auth.login"
     resourceType: varchar("resource_type", { length: 100 }),
     resourceId: varchar("resource_id", { length: 100 }),
@@ -3955,6 +3967,7 @@ export const auditLogs = pgTable(
     index("audit_logs_restaurant_id_idx").on(table.restaurantId),
     index("audit_logs_user_id_idx").on(table.userId),
     index("audit_logs_created_at_idx").on(table.createdAt),
+    index("audit_logs_branch_id_idx").on(table.branchId),
     // QA hardening pass (dependency/CI/migration/index audit, P2) — the
     // audit log page's default view is "this restaurant's activity, most
     // recent first," which the separate restaurantId/createdAt indexes

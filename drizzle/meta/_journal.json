@@ -484,6 +484,13 @@
       "when": 1788287738509,
       "tag": "0068_db_level_branch_restaurant_composite_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1788289207094,
+      "tag": "0069_audit_logs_branch_id",
+      "breakpoints": true
     }
   ]
 }

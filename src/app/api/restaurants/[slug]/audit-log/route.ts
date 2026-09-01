@@ -23,8 +23,11 @@ import { AuthError } from "@/lib/rbac/guard";
  * `?limit=`/`?offset=` page through the log (newest first); `?action=`
  * narrows to actions starting with the given prefix (e.g. `?action=payment.`
  * for every payment/refund event); `?resourceType=` narrows to one resource
- * kind; `?from=`/`?to=` (YYYY-MM-DD, restaurant-local, inclusive) narrow the
- * date range, same half-open-range convention as the reports module.
+ * kind; `?userId=` narrows to one actor; `?branchId=` narrows to one branch
+ * (only matches entries actually tagged with a branchId at write time — see
+ * recordAuditLog's own comment); `?from=`/`?to=` (YYYY-MM-DD,
+ * restaurant-local, inclusive) narrow the date range, same half-open-range
+ * convention as the reports module.
  */
 export async function GET(
   request: Request,
@@ -61,6 +64,8 @@ export async function GET(
       offset: Number(url.searchParams.get("offset")) || undefined,
       actionPrefix: url.searchParams.get("action") ?? undefined,
       resourceType: url.searchParams.get("resourceType") ?? undefined,
+      userId: url.searchParams.get("userId") ?? undefined,
+      branchId: url.searchParams.get("branchId") ?? undefined,
       createdFrom: from ? restaurantStartOfDay(timezone, from) : undefined,
       createdBefore: to
         ? new Date(restaurantStartOfDay(timezone, to).getTime() + 24 * 60 * 60 * 1000)

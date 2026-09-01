@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { platformImpersonationSessions } from "@/db/schema";
+import { platformImpersonationSessions, restaurants, users } from "@/db/schema";
 import { requirePlatformPermission } from "@/lib/rbac/guard";
 import { PLATFORM_PERMISSIONS } from "@/lib/rbac/platform-permissions";
 import { parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
@@ -42,11 +42,20 @@ export async function POST(request: Request) {
       .select({
         id: platformImpersonationSessions.id,
         targetRestaurantId: platformImpersonationSessions.targetRestaurantId,
+        targetRestaurantName: restaurants.name,
         reason: platformImpersonationSessions.reason,
         adminUserId: platformImpersonationSessions.adminUserId,
+        // RC audit P1 fix (impersonation events rendering as raw JSON) —
+        // the audit log UI's readable-sentence formatter names whose
+        // session this was and how long it ran; both are one cheap extra
+        // join/column away rather than a second query.
+        adminFullName: users.fullName,
+        startedAt: platformImpersonationSessions.startedAt,
         status: platformImpersonationSessions.status,
       })
       .from(platformImpersonationSessions)
+      .innerJoin(restaurants, eq(platformImpersonationSessions.targetRestaurantId, restaurants.id))
+      .innerJoin(users, eq(platformImpersonationSessions.adminUserId, users.id))
       .where(eq(platformImpersonationSessions.id, sessionId))
       .limit(1);
 
@@ -72,9 +81,12 @@ export async function POST(request: Request) {
       metadata: {
         reason: existing.reason,
         revokedAdminUserId: existing.adminUserId,
+        revokedAdminName: existing.adminFullName,
         isImpersonated: true,
         impersonationSessionId: existing.id,
         impersonationReason: existing.reason,
+        targetRestaurantName: existing.targetRestaurantName,
+        durationMs: Date.now() - existing.startedAt.getTime(),
       },
     });
 

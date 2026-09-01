@@ -497,6 +497,7 @@ export async function POST(
     await recordAuditLog({
       restaurantId,
       userId: session.user.id,
+      branchId,
       action: "order.created",
       resourceType: "order",
       resourceId: insertedOrder.id,

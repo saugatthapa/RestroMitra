@@ -24,6 +24,15 @@ const eslintConfig = [
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Parallel-agent git worktrees (see .claude/worktrees/) live under the
+    // repo root and each contains a full copy of src/ — without this,
+    // ESLint's flat-config file globbing walks every one of them too,
+    // multiplying warning/error counts by however many worktrees happen to
+    // exist at lint time and (with enough of them) making full-repo lint
+    // runs pathologically slow. Diagnosed twice in this project's history
+    // (a spurious 48,015-error run, and a full timeout with 14 worktrees
+    // live) before landing this ignore.
+    ".claude/worktrees/**",
   ]),
 ];
 

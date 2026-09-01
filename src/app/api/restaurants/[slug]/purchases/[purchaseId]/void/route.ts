@@ -65,6 +65,7 @@ export async function POST(
     await recordAuditLog({
       restaurantId,
       userId: session.user.id,
+      branchId: existing.branchId,
       action: "inventory.purchase.voided",
       resourceType: "purchase",
       resourceId: purchaseId,

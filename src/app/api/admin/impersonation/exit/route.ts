@@ -51,6 +51,14 @@ export async function POST(request: Request) {
           isImpersonated: true,
           impersonationSessionId: impersonation.impersonationSessionId,
           impersonationReason: impersonation.reason,
+          // RC audit P1 fix (impersonation events rendering as raw JSON) —
+          // both fields the audit log UI's readable-sentence formatter
+          // needs and this route already has for free: targetRestaurantName
+          // came back with the context, durationMs is just "now minus
+          // startedAt" (this exit IS the end of the session, so "now" is
+          // exact, not an approximation).
+          targetRestaurantName: impersonation.targetRestaurantName,
+          durationMs: Date.now() - impersonation.startedAt.getTime(),
         },
       });
     }
