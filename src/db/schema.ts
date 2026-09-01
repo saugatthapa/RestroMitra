@@ -14,6 +14,8 @@ import {
   date,
   bigserial,
   check,
+  unique,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -509,7 +511,21 @@ export const branches = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("branches_restaurant_id_idx").on(table.restaurantId)],
+  (table) => [
+    index("branches_restaurant_id_idx").on(table.restaurantId),
+    // Defense-in-depth backstop (gap-audit P1): branches.id is already a
+    // unique PK, so this composite unique is free to add — it exists
+    // purely so every table below can declare a composite FOREIGN KEY
+    // (branch_id, restaurant_id) REFERENCES branches(id, restaurant_id),
+    // making "this row's branch actually belongs to this row's
+    // restaurant" a hard database-level guarantee instead of relying
+    // solely on requireBranchAccess (src/lib/rbac/guard.ts) at the
+    // application layer. See P0_PHASE_REPORT.md's P0-9 finding, which
+    // first identified this gap and deferred the fix pending a
+    // pre-migration data audit (now done — see the migration file this
+    // constraint ships in).
+    unique("branches_id_restaurant_id_unique").on(table.id, table.restaurantId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -590,6 +606,17 @@ export const userRoles = pgTable(
     uniqueIndex("user_roles_one_active_per_restaurant_unique")
       .on(table.userId, table.restaurantId)
       .where(sql`${table.isActive} = true AND ${table.restaurantId} IS NOT NULL`),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above. MATCH SIMPLE (the
+    // Postgres default) means this is only enforced when BOTH
+    // branchId and restaurantId are set — a platform_admin grant
+    // (restaurantId NULL) or a restaurant-wide grant (branchId NULL) is
+    // unaffected, exactly as before.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "user_roles_branch_restaurant_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -905,6 +932,13 @@ export const restaurantTables = pgTable(
     // is nullable (a table can be created before capacity is set), so this
     // only rejects an explicit non-positive value, not an unset one.
     check("restaurant_tables_capacity_positive", sql`${table.capacity} IS NULL OR ${table.capacity} > 0`),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "restaurant_tables_branch_restaurant_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -1051,6 +1085,14 @@ export const orders = pgTable(
       ${table.discountInPaisa} >= 0 AND ${table.serviceChargeInPaisa} >= 0 AND
       ${table.totalInPaisa} >= 0
     `),
+    // Defense-in-depth backstop (gap-audit P1) — the exact orders/
+    // branches mismatch called out in RESTROMITRA_MASTER_GAP_AUDIT.md.
+    // See branches' branches_id_restaurant_id_unique comment above.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "orders_branch_restaurant_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -1730,6 +1772,14 @@ export const purchases = pgTable(
           OR
           (${table.isVoided} = true AND ${table.voidedAt} IS NOT NULL)`,
     ),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above. "restrict" matches
+    // branchId's own onDelete above.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "purchases_branch_restaurant_fk",
+    }).onDelete("restrict"),
   ],
 );
 
@@ -2271,6 +2321,14 @@ export const stockMovements = pgTable(
       "stock_movements_total_cost_snapshot_non_negative",
       sql`${table.totalCostInPaisaSnapshot} IS NULL OR ${table.totalCostInPaisaSnapshot} >= 0`,
     ),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above. "restrict" matches
+    // branchId's own onDelete above.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "stock_movements_branch_restaurant_fk",
+    }).onDelete("restrict"),
   ],
 );
 
@@ -2450,6 +2508,14 @@ export const stockCounts = pgTable(
       sql`(${table.status} = 'open' AND ${table.submittedAt} IS NULL)
           OR (${table.status} <> 'open' AND ${table.submittedAt} IS NOT NULL)`,
     ),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above. "restrict" matches
+    // branchId's own onDelete above.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "stock_counts_branch_restaurant_fk",
+    }).onDelete("restrict"),
   ],
 );
 
@@ -2597,6 +2663,22 @@ export const stockTransfers = pgTable(
       sql`(${table.status} <> 'cancelled' AND ${table.cancelledByUserId} IS NULL AND ${table.cancelledAt} IS NULL AND ${table.cancellationReason} IS NULL)
           OR (${table.status} = 'cancelled' AND ${table.cancelledByUserId} IS NOT NULL AND ${table.cancelledAt} IS NOT NULL AND ${table.cancellationReason} IS NOT NULL)`,
     ),
+    // Defense-in-depth backstop (gap-audit P1) — this table has TWO
+    // branch columns (a transfer moves stock FROM one branch TO
+    // another), both of which must belong to the transfer's own
+    // restaurantId. See branches' branches_id_restaurant_id_unique
+    // comment above; "restrict" matches both branch columns' own
+    // onDelete above.
+    foreignKey({
+      columns: [table.fromBranchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "stock_transfers_from_branch_restaurant_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.toBranchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "stock_transfers_to_branch_restaurant_fk",
+    }).onDelete("restrict"),
   ],
 );
 
@@ -2844,6 +2926,16 @@ export const attendanceRecords = pgTable(
     uniqueIndex("attendance_records_one_open_shift_per_user_unique")
       .on(table.userId, table.restaurantId)
       .where(sql`${table.clockOutAt} IS NULL`),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above. branchId is
+    // nullable here (see its own column comment), so MATCH SIMPLE
+    // leaves an "unrestricted (all-branches) staff member" row
+    // unaffected, exactly as before.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "attendance_records_branch_restaurant_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -2957,6 +3049,15 @@ export const holidays = pgTable(
   (table) => [
     index("holidays_restaurant_id_idx").on(table.restaurantId),
     index("holidays_date_idx").on(table.date),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above. branchId is
+    // nullable (a restaurant-wide holiday), so MATCH SIMPLE leaves
+    // those rows unaffected, exactly as before.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "holidays_branch_restaurant_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -3009,6 +3110,15 @@ export const leaveRequests = pgTable(
     index("leave_requests_restaurant_id_idx").on(table.restaurantId),
     index("leave_requests_user_id_idx").on(table.userId),
     index("leave_requests_status_idx").on(table.status),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above. branchId is
+    // nullable here, so MATCH SIMPLE leaves an unscoped leave request
+    // unaffected, exactly as before.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "leave_requests_branch_restaurant_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -3051,6 +3161,15 @@ export const scheduledShifts = pgTable(
     index("scheduled_shifts_restaurant_id_idx").on(table.restaurantId),
     index("scheduled_shifts_user_id_idx").on(table.userId),
     index("scheduled_shifts_shift_date_idx").on(table.shiftDate),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above. branchId is
+    // nullable here, so MATCH SIMPLE leaves an unscoped shift
+    // unaffected, exactly as before.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "scheduled_shifts_branch_restaurant_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -3197,6 +3316,22 @@ export const expenses = pgTable(
     uniqueIndex("expenses_restaurant_client_request_id_unique")
       .on(table.restaurantId, table.clientRequestId)
       .where(sql`${table.clientRequestId} IS NOT NULL`),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above. branchId is
+    // nullable here, so MATCH SIMPLE leaves an unscoped expense
+    // unaffected. Deliberately "restrict", NOT "set null" like
+    // branchId's own onDelete above: a composite FK's ON DELETE SET
+    // NULL would null out BOTH columns of the constraint (branchId AND
+    // restaurantId) when a referenced branch is hard-deleted, which
+    // would violate restaurantId's own NOT NULL. Branches are never
+    // hard-deleted in this codebase (soft-deleted via isActive) so this
+    // never fires in practice, but "restrict" is the only choice that
+    // can't corrupt this table if that ever changes.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "expenses_branch_restaurant_fk",
+    }).onDelete("restrict"),
   ],
 );
 
@@ -3314,6 +3449,14 @@ export const registerShifts = pgTable(
           OR
           (${table.status} = 'closed' AND ${table.closedAt} IS NOT NULL AND ${table.actualCashInPaisa} IS NOT NULL AND ${table.expectedCashInPaisa} IS NOT NULL AND ${table.varianceInPaisa} IS NOT NULL)`,
     ),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above. "restrict" matches
+    // branchId's own onDelete above.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "register_shifts_branch_restaurant_fk",
+    }).onDelete("restrict"),
   ],
 );
 
@@ -3435,6 +3578,14 @@ export const dailyCloses = pgTable(
       table.branchId,
       table.businessDate,
     ),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above. "restrict" matches
+    // branchId's own onDelete above.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "daily_closes_branch_restaurant_fk",
+    }).onDelete("restrict"),
   ],
 );
 
@@ -3718,6 +3869,15 @@ export const reservations = pgTable(
     index("reservations_table_id_idx").on(table.tableId),
     index("reservations_branch_id_idx").on(table.branchId),
     check("reservations_party_size_positive", sql`${table.partySize} > 0`),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above. branchId is
+    // nullable here (a phone reservation taken before a table/branch is
+    // assigned), so MATCH SIMPLE leaves those rows unaffected.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "reservations_branch_restaurant_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -4853,6 +5013,15 @@ export const realtimeEvents = pgTable(
   },
   (table) => [
     index("realtime_events_restaurant_id_id_idx").on(table.restaurantId, table.id),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above. branchId is
+    // nullable (a restaurant-wide event), so MATCH SIMPLE leaves those
+    // rows unaffected.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "realtime_events_branch_restaurant_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -4913,6 +5082,13 @@ export const serviceCalls = pgTable(
     uniqueIndex("service_calls_one_active_per_table_unique")
       .on(table.tableId)
       .where(sql`${table.status} IN ('pending', 'acknowledged')`),
+    // Defense-in-depth backstop (gap-audit P1) — see branches'
+    // branches_id_restaurant_id_unique comment above.
+    foreignKey({
+      columns: [table.branchId, table.restaurantId],
+      foreignColumns: [branches.id, branches.restaurantId],
+      name: "service_calls_branch_restaurant_fk",
+    }).onDelete("cascade"),
   ],
 );
 

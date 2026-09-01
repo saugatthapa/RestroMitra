@@ -477,6 +477,13 @@
       "when": 1788268982743,
       "tag": "0067_coupon_advanced_restrictions",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1788287738509,
+      "tag": "0068_db_level_branch_restaurant_composite_fk",
+      "breakpoints": true
     }
   ]
 }
