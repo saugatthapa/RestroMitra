@@ -485,9 +485,22 @@ export default function LandingPage() {
             </Link>
           </nav>
         </div>
-        <p className="mt-8 text-center text-xs text-neutral-400">
-          © {new Date().getFullYear()} RestroMitra · by Saugat Thapa
-        </p>
+        <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-6">
+          <p className="text-xs text-neutral-400">
+            © {new Date().getFullYear()} RestroMitra · by Saugat Thapa
+          </p>
+          <span className="hidden text-neutral-300 sm:inline" aria-hidden="true">
+            ·
+          </span>
+          <nav className="flex items-center gap-4 text-xs text-neutral-400">
+            <Link href="/privacy" className="transition-colors hover:text-neutral-700">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="transition-colors hover:text-neutral-700">
+              Terms of Service
+            </Link>
+          </nav>
+        </div>
       </footer>
     </div>
   );
