@@ -63,8 +63,8 @@ export async function GET(
   // resource/outbound-API abuse worth closing off. Limited both per-IP
   // (generic abuse) and per-reference (this exact in-flight payment).
   const ip = getClientIp(request);
-  const ipLimit = rateLimit(`gateway-callback:ip:${ip}`, { limit: 30, windowMs: 10 * 60 * 1000 });
-  const refLimit = rateLimit(`gateway-callback:ref:${gatewayReference}`, {
+  const ipLimit = await rateLimit(`gateway-callback:ip:${ip}`, { limit: 30, windowMs: 10 * 60 * 1000 });
+  const refLimit = await rateLimit(`gateway-callback:ref:${gatewayReference}`, {
     limit: 10,
     windowMs: 10 * 60 * 1000,
   });

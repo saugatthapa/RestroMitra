@@ -54,7 +54,7 @@ export async function POST(
     const parsed = await parseJsonBody(request, requestPhotoUploadUrlSchema);
     if (!parsed.ok) return parsed.response;
 
-    const limit = rateLimit(`attendance-photo-upload-url:user:${session.user.id}`, {
+    const limit = await rateLimit(`attendance-photo-upload-url:user:${session.user.id}`, {
       limit: 20,
       windowMs: 10 * 60 * 1000,
     });

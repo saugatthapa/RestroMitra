@@ -50,7 +50,7 @@ export async function POST(
       PERMISSIONS.VIEW_REPORTS,
     );
 
-    const limit = rateLimit(`assistant:user:${session.user.id}`, {
+    const limit = await rateLimit(`assistant:user:${session.user.id}`, {
       limit: 20,
       windowMs: 10 * 60 * 1000,
     });

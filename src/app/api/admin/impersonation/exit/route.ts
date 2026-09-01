@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireAuth();
 
-    const limit = rateLimit(`impersonation-exit:${session.user.id}`, {
+    const limit = await rateLimit(`impersonation-exit:${session.user.id}`, {
       limit: 20,
       windowMs: 10 * 60 * 1000,
     });

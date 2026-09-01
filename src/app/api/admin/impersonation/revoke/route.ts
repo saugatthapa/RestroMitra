@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   try {
     const session = await requirePlatformPermission(PLATFORM_PERMISSIONS.MANAGE_SUPPORT);
 
-    const limit = rateLimit(`impersonation-revoke:${session.user.id}`, {
+    const limit = await rateLimit(`impersonation-revoke:${session.user.id}`, {
       limit: 20,
       windowMs: 10 * 60 * 1000,
     });

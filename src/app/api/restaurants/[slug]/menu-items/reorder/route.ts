@@ -27,7 +27,7 @@ export async function POST(
     // buggy client retry loop or a compromised staff session hammering
     // writes. Generous on purpose — a busy admin reordering a whole menu
     // in one sitting must never be blocked by this.
-    const limit = rateLimit(`menu-write:user:${session.user.id}`, {
+    const limit = await rateLimit(`menu-write:user:${session.user.id}`, {
       limit: 60,
       windowMs: 5 * 60 * 1000,
     });

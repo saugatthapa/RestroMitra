@@ -58,7 +58,7 @@ export async function POST(
     // table. Same per-user rate-limit pattern as the AI assistant route
     // (assistant/ask/route.ts) — generous enough (one call every ~20s
     // sustained) not to get in the way of a busy till's legitimate use.
-    const limit = rateLimit(`gateway-initiate:user:${session.user.id}`, {
+    const limit = await rateLimit(`gateway-initiate:user:${session.user.id}`, {
       limit: 30,
       windowMs: 10 * 60 * 1000,
     });

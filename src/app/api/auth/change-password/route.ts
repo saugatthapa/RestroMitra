@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     // action, so the user id is a reliable key, and it directly blocks an
     // attacker who stole a session cookie from brute-forcing the current
     // password to defeat this exact "prove you still know it" check.
-    const limited = rateLimit(`change-password:${session.user.id}`, {
+    const limited = await rateLimit(`change-password:${session.user.id}`, {
       limit: 8,
       windowMs: 60_000,
     });

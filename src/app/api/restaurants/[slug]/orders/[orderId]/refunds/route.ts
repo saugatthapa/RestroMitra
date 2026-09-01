@@ -66,7 +66,7 @@ export async function POST(
     // that's a correctness guard, not a throttle on a caller issuing many
     // DIFFERENT refund requests back to back. Same per-user rate-limit
     // pattern as the AI assistant route and the gateway-initiate route.
-    const limit = rateLimit(`refund:user:${session.user.id}`, {
+    const limit = await rateLimit(`refund:user:${session.user.id}`, {
       limit: 20,
       windowMs: 10 * 60 * 1000,
     });

@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireAuth();
 
-    const limited = rateLimit(`mfa-enroll-confirm:${session.user.id}`, { limit: 10, windowMs: 60_000 });
+    const limited = await rateLimit(`mfa-enroll-confirm:${session.user.id}`, { limit: 10, windowMs: 60_000 });
     if (!limited.allowed) {
       return NextResponse.json(
         { error: "Too many attempts. Please try again in a minute." },
