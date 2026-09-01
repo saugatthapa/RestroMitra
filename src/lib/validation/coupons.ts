@@ -6,6 +6,14 @@ import { DISCOUNT_TYPES } from "@/lib/order-adjustments";
 // actually say/type one out loud ("SAVE20", "NEWYEAR-10").
 const couponCodeRegex = /^[A-Za-z0-9-]+$/;
 
+// Gap-audit follow-up (P1 revenue leakage) — restriction id lists shared by
+// create and update. Deliberately capped well above any realistic
+// restaurant's branch/menu/category count; ownership (do these ids
+// actually belong to this restaurant) is checked separately in
+// assertCouponRestrictionsOwnership (coupons.ts) since zod has no DB
+// access — this only shapes the request.
+const idListSchema = z.array(z.string().uuid()).max(200).optional();
+
 export const createCouponSchema = z
   .object({
     code: z
@@ -20,6 +28,22 @@ export const createCouponSchema = z
     maxDiscount: z.number().positive().max(10_000_000).optional(),
     minOrderSubtotal: z.number().nonnegative().max(10_000_000).optional(),
     usageLimit: z.number().int().positive().max(1_000_000).optional(),
+    // Per-customer usage cap — how many times ONE customer may redeem this
+    // coupon, independent of (and always <=, though not enforced as such —
+    // a perCustomerLimit above usageLimit is just never reachable) the
+    // restaurant-wide usageLimit above.
+    perCustomerLimit: z.number().int().positive().max(1_000_000).optional(),
+    // Valid only on a customer's chronologically first non-cancelled order
+    // at this restaurant — see resolveCoupon's own comment for exactly how
+    // "first" is determined.
+    firstOrderOnly: z.boolean().optional(),
+    // Branch/menu-item/category restrictions — omitted or empty = no
+    // restriction of that kind (the pre-existing, unrestricted behavior).
+    // See assertCouponRestrictionsOwnership for the tenant-ownership check
+    // and resolveCoupon for exactly how each is enforced.
+    branchIds: idListSchema,
+    menuItemIds: idListSchema,
+    categoryIds: idListSchema,
     startsAt: z.string().datetime().optional().or(z.literal("")),
     expiresAt: z.string().datetime().optional().or(z.literal("")),
     note: z.string().trim().max(500).optional().or(z.literal("")),
@@ -47,6 +71,11 @@ export function resolveCreateCouponInput(parsed: CreateCouponInput) {
     minOrderSubtotalInPaisa:
       parsed.minOrderSubtotal !== undefined ? rupeesToPaisa(parsed.minOrderSubtotal) : null,
     usageLimit: parsed.usageLimit ?? null,
+    perCustomerLimit: parsed.perCustomerLimit ?? null,
+    firstOrderOnly: parsed.firstOrderOnly ?? false,
+    branchIds: parsed.branchIds ?? [],
+    menuItemIds: parsed.menuItemIds ?? [],
+    categoryIds: parsed.categoryIds ?? [],
     startsAt: parsed.startsAt ? new Date(parsed.startsAt) : null,
     expiresAt: parsed.expiresAt ? new Date(parsed.expiresAt) : null,
     note: parsed.note?.trim() || null,
@@ -66,6 +95,15 @@ export const updateCouponSchema = z.object({
   maxDiscount: z.number().positive().max(10_000_000).nullable().optional(),
   minOrderSubtotal: z.number().nonnegative().max(10_000_000).nullable().optional(),
   usageLimit: z.number().int().positive().max(1_000_000).nullable().optional(),
+  perCustomerLimit: z.number().int().positive().max(1_000_000).nullable().optional(),
+  firstOrderOnly: z.boolean().optional(),
+  // Same whole-state-replace semantics as updateComboSchema's `items`:
+  // when present, the COMPLETE new restriction set, not a patch — an
+  // explicit `[]` clears the restriction entirely, `undefined` (the field
+  // simply omitted) leaves it untouched.
+  branchIds: idListSchema,
+  menuItemIds: idListSchema,
+  categoryIds: idListSchema,
   startsAt: z.string().datetime().nullable().optional(),
   expiresAt: z.string().datetime().nullable().optional(),
   note: z.string().trim().max(500).nullable().optional(),

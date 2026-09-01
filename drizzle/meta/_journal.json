@@ -470,6 +470,13 @@
       "when": 1788198000000,
       "tag": "0066_phase17_staff_attendance_plan_gating",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1788268982743,
+      "tag": "0067_coupon_advanced_restrictions",
+      "breakpoints": true
     }
   ]
 }

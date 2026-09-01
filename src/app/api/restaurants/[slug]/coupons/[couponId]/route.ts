@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { coupons } from "@/db/schema";
+import { coupons, couponBranches, couponMenuItems, couponCategories } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { updateCouponSchema } from "@/lib/validation/coupons";
+import { assertCouponRestrictionsOwnership } from "@/lib/coupons";
 import { rupeesToPaisa } from "@/lib/money";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
@@ -56,34 +57,92 @@ export async function PATCH(
       );
     }
 
-    const [updated] = await db
-      .update(coupons)
-      .set({
-        ...(data.discountType !== undefined ? { discountType: data.discountType } : {}),
-        ...(data.discountPercent !== undefined
-          ? { discountValue: Math.round(data.discountPercent * 100) }
-          : {}),
-        ...(data.discountFlatAmount !== undefined
-          ? { discountValue: rupeesToPaisa(data.discountFlatAmount) }
-          : {}),
-        ...(data.maxDiscount !== undefined
-          ? { maxDiscountInPaisa: data.maxDiscount === null ? null : rupeesToPaisa(data.maxDiscount) }
-          : {}),
-        ...(data.minOrderSubtotal !== undefined
-          ? {
-              minOrderSubtotalInPaisa:
-                data.minOrderSubtotal === null ? null : rupeesToPaisa(data.minOrderSubtotal),
-            }
-          : {}),
-        ...(data.usageLimit !== undefined ? { usageLimit: data.usageLimit } : {}),
-        ...(data.startsAt !== undefined ? { startsAt: data.startsAt ? new Date(data.startsAt) : null } : {}),
-        ...(data.expiresAt !== undefined ? { expiresAt: data.expiresAt ? new Date(data.expiresAt) : null } : {}),
-        ...(data.note !== undefined ? { note: data.note?.trim() || null } : {}),
-        ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
-        updatedAt: new Date(),
-      })
-      .where(and(eq(coupons.id, couponId), eq(coupons.restaurantId, restaurantId)))
-      .returning();
+    if (data.branchIds || data.menuItemIds || data.categoryIds) {
+      await assertCouponRestrictionsOwnership(restaurantId, {
+        branchIds: data.branchIds,
+        menuItemIds: data.menuItemIds,
+        categoryIds: data.categoryIds,
+      });
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(coupons)
+        .set({
+          ...(data.discountType !== undefined ? { discountType: data.discountType } : {}),
+          ...(data.discountPercent !== undefined
+            ? { discountValue: Math.round(data.discountPercent * 100) }
+            : {}),
+          ...(data.discountFlatAmount !== undefined
+            ? { discountValue: rupeesToPaisa(data.discountFlatAmount) }
+            : {}),
+          ...(data.maxDiscount !== undefined
+            ? { maxDiscountInPaisa: data.maxDiscount === null ? null : rupeesToPaisa(data.maxDiscount) }
+            : {}),
+          ...(data.minOrderSubtotal !== undefined
+            ? {
+                minOrderSubtotalInPaisa:
+                  data.minOrderSubtotal === null ? null : rupeesToPaisa(data.minOrderSubtotal),
+              }
+            : {}),
+          ...(data.usageLimit !== undefined ? { usageLimit: data.usageLimit } : {}),
+          ...(data.perCustomerLimit !== undefined ? { perCustomerLimit: data.perCustomerLimit } : {}),
+          ...(data.firstOrderOnly !== undefined ? { firstOrderOnly: data.firstOrderOnly } : {}),
+          ...(data.startsAt !== undefined ? { startsAt: data.startsAt ? new Date(data.startsAt) : null } : {}),
+          ...(data.expiresAt !== undefined ? { expiresAt: data.expiresAt ? new Date(data.expiresAt) : null } : {}),
+          ...(data.note !== undefined ? { note: data.note?.trim() || null } : {}),
+          ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(coupons.id, couponId), eq(coupons.restaurantId, restaurantId)))
+        .returning();
+
+      // Whole-state-replace, same convention as combos/[comboId]/route.ts's
+      // `items` handling — see updateCouponSchema's own comment. Only
+      // touched (re-fetched only when NOT replaced) when the field is
+      // actually present in the request.
+      let branchIds = data.branchIds;
+      if (branchIds !== undefined) {
+        await tx.delete(couponBranches).where(eq(couponBranches.couponId, couponId));
+        if (branchIds.length > 0) {
+          await tx.insert(couponBranches).values(branchIds.map((branchId) => ({ restaurantId, couponId, branchId })));
+        }
+      } else {
+        branchIds = (
+          await tx.select({ branchId: couponBranches.branchId }).from(couponBranches).where(eq(couponBranches.couponId, couponId))
+        ).map((r) => r.branchId);
+      }
+
+      let menuItemIds = data.menuItemIds;
+      if (menuItemIds !== undefined) {
+        await tx.delete(couponMenuItems).where(eq(couponMenuItems.couponId, couponId));
+        if (menuItemIds.length > 0) {
+          await tx
+            .insert(couponMenuItems)
+            .values(menuItemIds.map((menuItemId) => ({ restaurantId, couponId, menuItemId })));
+        }
+      } else {
+        menuItemIds = (
+          await tx.select({ menuItemId: couponMenuItems.menuItemId }).from(couponMenuItems).where(eq(couponMenuItems.couponId, couponId))
+        ).map((r) => r.menuItemId);
+      }
+
+      let categoryIds = data.categoryIds;
+      if (categoryIds !== undefined) {
+        await tx.delete(couponCategories).where(eq(couponCategories.couponId, couponId));
+        if (categoryIds.length > 0) {
+          await tx
+            .insert(couponCategories)
+            .values(categoryIds.map((categoryId) => ({ restaurantId, couponId, categoryId })));
+        }
+      } else {
+        categoryIds = (
+          await tx.select({ categoryId: couponCategories.categoryId }).from(couponCategories).where(eq(couponCategories.couponId, couponId))
+        ).map((r) => r.categoryId);
+      }
+
+      return { updated, branchIds, menuItemIds, categoryIds };
+    });
 
     await recordAuditLog({
       restaurantId,
@@ -95,7 +154,14 @@ export async function PATCH(
       metadata: { changes: data },
     });
 
-    return NextResponse.json({ coupon: updated });
+    return NextResponse.json({
+      coupon: {
+        ...result.updated,
+        branchIds: result.branchIds,
+        menuItemIds: result.menuItemIds,
+        categoryIds: result.categoryIds,
+      },
+    });
   } catch (err) {
     return toErrorResponse(err);
   }

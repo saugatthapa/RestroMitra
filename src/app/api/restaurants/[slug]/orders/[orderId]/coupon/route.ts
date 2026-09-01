@@ -70,7 +70,12 @@ export async function POST(
 
       let resolved;
       try {
-        resolved = await resolveCoupon(restaurantId, parsed.data.code, order.subtotalInPaisa);
+        resolved = await resolveCoupon(restaurantId, parsed.data.code, order.subtotalInPaisa, {
+          branchId: order.branchId,
+          customerId: order.customerId,
+          orderId: order.id,
+          orderCreatedAt: order.createdAt,
+        });
       } catch (err) {
         if (err instanceof CouponError) {
           return { error: err.message, status: err.status } as const;
@@ -116,6 +121,7 @@ export async function POST(
         couponId: resolved.coupon.id,
         orderId,
         discountInPaisa: resolved.discountInPaisa,
+        customerId: order.customerId,
         recordedByUserId: session.user.id,
       });
 
