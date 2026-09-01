@@ -96,7 +96,23 @@ mkdir -p tmp && touch tmp/restart.txt
 If every line succeeds cleanly, the automated version will too — it's the exact
 same sequence.
 
-### 5. Turn it on
+### 5. (Strongly recommended) Add a required-reviewer gate on the `production` environment
+
+The `deploy` job now declares `environment: production`. GitHub auto-creates
+that environment with no rules the first time the workflow references it, so
+this step is optional — but without it, step 6 below is the *only* thing
+standing between a green `main` push and a live deploy, and that gate is a
+single repository Variable, not a person.
+
+GitHub → your repo → **Settings → Environments → production** (create it if
+it isn't listed yet) → **Deployment protection rules → Required reviewers** →
+add yourself (or whoever should approve production deploys). Once set, every
+run of the `deploy` job pauses in the **Actions** tab for that reviewer to
+click **Approve** before it touches the server — on top of, not instead of,
+`DEPLOY_ENABLED`. This is the closest this workflow can get to a manual
+approval step without inventing a bespoke one.
+
+### 6. Turn it on
 
 GitHub → your repo → **Settings → Secrets and variables → Actions → Variables**
 tab (not Secrets) → **New repository variable**:
@@ -106,8 +122,25 @@ tab (not Secrets) → **New repository variable**:
 | `DEPLOY_ENABLED` | `true` |
 
 From this point on, every push to `main` that passes the full `verify` job
-(lint/typecheck/test/build/e2e) will automatically deploy. Watch the first one
-in the **Actions** tab to confirm it behaves the way step 4's manual run did.
+(lint/typecheck/test/build/e2e) will automatically deploy (pausing for
+approval first if step 5 was configured). Watch the first one in the
+**Actions** tab to confirm it behaves the way step 4's manual run did.
+
+## Other robustness details already built into the `deploy` job
+
+- **`github.repository == 'saugatthapa/RestroMitra'`** — an explicit guard so
+  this job only ever runs in this repository, never in a fork that happens to
+  push to its own `main` with its own copy of this workflow file.
+- **`concurrency: { group: production-deploy, cancel-in-progress: false }`** —
+  two pushes to `main` close together queue their deploys one after another
+  instead of running `git reset --hard` / `npm ci` / `npm run build` against
+  the same server checkout at the same time.
+- **`timeout-minutes: 10`** — a hung SSH connection or unresponsive server
+  fails the job instead of tying up the runner (and leaving you unsure
+  whether it's still running) indefinitely.
+- **`permissions: contents: read`** at the workflow level — the default
+  `GITHUB_TOKEN` this workflow gets is read-only; nothing here needs to write
+  to the repository, open PRs, or touch releases.
 
 ## Turning it back off
 

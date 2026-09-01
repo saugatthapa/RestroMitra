@@ -24,6 +24,14 @@ on:
   pull_request:
     branches: [main]
 
+# Least-privilege default: this workflow only ever needs to read the repo
+# (checkout) — it doesn't open PRs, write statuses, or push tags. Explicit
+# `contents: read` here means a compromised/typo'd action anywhere in this
+# file gets the narrowest possible default GITHUB_TOKEN, instead of
+# whatever broader default the repo/org settings happen to have.
+permissions:
+  contents: read
+
 env:
   DATABASE_URL: postgresql://postgres:postgres@localhost:5432/restromitra_ci
   DIRECT_URL: postgresql://postgres:postgres@localhost:5432/restromitra_ci
@@ -129,7 +137,8 @@ jobs:
   # runbook decision, not a code fix)". This job is that gate: `needs:
   # verify` means it only starts once lint/typecheck/test/build/e2e have
   # ALL passed, and the `if:` below further restricts it to real pushes to
-  # main (never a PR, never a failed verify run).
+  # main, on this repository specifically (never a PR, never a fork, never
+  # a failed verify run).
   #
   # OFF BY DEFAULT — see CI_GATED_DEPLOY_SETUP.md for what to configure.
   # `vars.DEPLOY_ENABLED` is a plain repository Variable (Settings ->
@@ -142,11 +151,46 @@ jobs:
   # (in particular, confirming the restart command actually matches how
   # THIS account's Hostinger app is run — that varies by hosting plan and
   # isn't something this workflow can know on its own).
+  #
+  # `github.repository == 'saugatthapa/RestroMitra'` is defense-in-depth
+  # against a fork: `pull_request` events never reach this job anyway (the
+  # `github.event_name == 'push'` check already excludes them, and a fork's
+  # own `pull_request` runs get a read-only token with none of this repo's
+  # secrets regardless), but a fork that pushes to its own `main` runs its
+  # own copy of this workflow file with the fork owner's own secrets/vars —
+  # this line just makes explicit that THIS deploy job, in THIS repository,
+  # never fires for anything other than a push to this repository's main.
+  #
+  # `environment: production` (below) opts this job into GitHub's
+  # Environment protection rules. It works with zero configuration (an
+  # environment named "production" is auto-created on first use, with no
+  # rules, so this is a no-op until configured) — but once a human adds a
+  # "required reviewers" rule to that environment (Settings -> Environments
+  # -> production -> Deployment protection rules), every run of this job
+  # pauses for a manual approval click before it touches the server, on
+  # top of `DEPLOY_ENABLED`. See CI_GATED_DEPLOY_SETUP.md step 6.
+  #
+  # `concurrency` serializes deploy runs: two pushes to main close together
+  # would otherwise start two independent `git reset --hard` + `npm ci` +
+  # `npm run build` + restart sequences against the SAME server checkout at
+  # the same time, which is a real way to corrupt a deploy (half of one
+  # build's files, half of another's). `cancel-in-progress: false` means a
+  # second run queues behind the first and still deploys the newer commit
+  # after it — it does not cancel a deploy that's already underway.
   deploy:
     name: Deploy to Hostinger
     needs: verify
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    timeout-minutes: 10
+    environment: production
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'saugatthapa/RestroMitra' &&
+      vars.DEPLOY_ENABLED == 'true'
     steps:
       - name: Configure SSH
         run: |

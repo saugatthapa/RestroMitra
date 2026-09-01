@@ -52,6 +52,10 @@ yarn-error.log*
 /screenshots
 /screenshots-*
 
+# scheduled DB backups written by scripts/backup-db.sh (see BACKUP_RESTORE.md)
+# — real dump files and logs, never meant to be committed.
+/backups
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
