@@ -43,6 +43,10 @@ import { rateLimit } from "@/lib/rate-limit";
  * insert. The (orderId, clientRequestId) unique index on `payments` is
  * shared with regular payments (refunds are just negative-amount rows in
  * the same table) and is still there as a DB-level backstop.
+ *
+ * Gap audit (P1) — `requireOwnerMfa: true` additionally requires MFA to be
+ * enabled when the CALLER is the owner (a no-op for a manager issuing the
+ * same refund — see requireOwnerMfaEnabled's own doc comment in guard.ts).
  */
 export async function POST(
   request: Request,
@@ -54,7 +58,7 @@ export async function POST(
   try {
     const { slug, orderId } = await ctx.params;
     const { session, restaurantId, role, timezone, branchId: grantedBranchId } =
-      await resolveRestaurantContext(slug, PERMISSIONS.REFUND_ORDER);
+      await resolveRestaurantContext(slug, PERMISSIONS.REFUND_ORDER, { requireOwnerMfa: true });
 
     // QA hardening pass (Phase 20 / security audit — rate-limiting gap).
     // Refunds move real money back out and had no throttle at all — a

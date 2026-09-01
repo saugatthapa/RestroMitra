@@ -20,6 +20,12 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
  * Gated MANAGE_SUBSCRIPTION (owner-only by default) but explicitly allows
  * inactive-subscription access — an owner whose trial just expired is
  * exactly who needs to be able to submit this request.
+ *
+ * Gap audit (P1) — also `requireOwnerMfa: true`. MANAGE_SUBSCRIPTION is
+ * already owner-only by default, so in practice this always applies here;
+ * kept as an explicit, self-documenting flag rather than relying on that
+ * being true forever (see requireOwnerMfaEnabled's own doc comment in
+ * guard.ts).
  */
 export async function POST(
   request: Request,
@@ -33,7 +39,7 @@ export async function POST(
     const { session, restaurantId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_SUBSCRIPTION,
-      { allowInactiveSubscription: true },
+      { allowInactiveSubscription: true, requireOwnerMfa: true },
     );
 
     const parsed = await parseJsonBody(request, upgradeRequestSchema);

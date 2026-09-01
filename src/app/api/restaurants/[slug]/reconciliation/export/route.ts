@@ -19,6 +19,11 @@ const EXPORT_ROW_LIMIT = 20_000;
  * module doc comment for why no new permission was introduced and why
  * "cash" never appears here). Filters mirror that route exactly, reusing
  * listPaymentsForReconciliation at a higher row limit.
+ *
+ * Gap audit (P1) — `requireOwnerMfa: true` additionally requires MFA to be
+ * enabled when the CALLER is the owner (a no-op for a manager/accountant
+ * running the same export — see requireOwnerMfaEnabled's own doc comment
+ * in guard.ts).
  */
 export async function GET(request: Request, ctx: { params: Promise<{ slug: string }> }) {
   try {
@@ -29,7 +34,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
       role,
       branchId: grantedBranchId,
       timezone,
-    } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_ACCOUNT_BOOKS);
+    } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_ACCOUNT_BOOKS, {
+      requireOwnerMfa: true,
+    });
 
     const url = new URL(request.url);
     const parsed = reconciliationQuerySchema.safeParse(Object.fromEntries(url.searchParams));

@@ -9,6 +9,7 @@ import {
   requireActiveSubscription,
   requireRestaurantActive,
   requireNotInMaintenanceMode,
+  requireOwnerMfaEnabled,
   isPlatformOrImpersonatedRole,
 } from "@/lib/rbac/guard";
 import { HttpError } from "@/lib/http-error";
@@ -104,11 +105,25 @@ export type RestaurantContext = {
  * place) and, like suspension/maintenance-mode above, skipped entirely
  * for platform_admin/impersonated roles — support/ops investigating a
  * tenant must see the same capabilities regardless of that tenant's plan.
+ *
+ * `opts.requireOwnerMfa` (Gap audit P1) — opt-in, per-route flag for the
+ * handful of money-moving actions that need owner MFA enforcement (see
+ * requireOwnerMfaEnabled in guard.ts for the full reasoning). Checked
+ * AFTER the permission check, same ordering rationale as requireFeature
+ * above: a caller who lacks the permission entirely should see "you can't
+ * do this" rather than an MFA prompt for an action they were never
+ * allowed to attempt. A no-op for every role except "owner" — a manager/
+ * accountant sharing the same permission on a route that sets this flag
+ * is completely unaffected.
  */
 export async function resolveRestaurantContext(
   slug: string,
   permission?: PermissionKey,
-  opts?: { allowInactiveSubscription?: boolean; requireFeature?: FeatureKey },
+  opts?: {
+    allowInactiveSubscription?: boolean;
+    requireFeature?: FeatureKey;
+    requireOwnerMfa?: boolean;
+  },
 ): Promise<RestaurantContext> {
   const session = await requireAuth();
   const { restaurantId, role, branchId, timezone } = await requireRestaurantBySlug(
@@ -138,6 +153,9 @@ export async function resolveRestaurantContext(
     // second isPlatformAdmin + userRoles round trip. See guard.ts's
     // requirePermission doc comment and PERFORMANCE_AUDIT.md.
     await requirePermission(session.user.id, restaurantId, permission, role);
+  }
+  if (opts?.requireOwnerMfa) {
+    await requireOwnerMfaEnabled(session.user.id, role);
   }
   if (opts?.requireFeature && !isPlatformOrImpersonatedRole(role)) {
     await requireFeature(restaurantId, opts.requireFeature);

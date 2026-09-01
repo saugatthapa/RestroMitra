@@ -16,6 +16,12 @@ import { STAFF_ROLE_LABELS, type AssignableStaffRole } from "@/lib/staff-roles";
  * payment list) — no new write surface, this just assembles what's
  * already recorded on the payrollPayments row into a receipt shape the
  * print view renders.
+ *
+ * Gap audit (P1) — `requireOwnerMfa: true` additionally requires MFA to be
+ * enabled when the CALLER is the owner (a no-op for a manager/accountant
+ * pulling the same payslip — see requireOwnerMfaEnabled's own doc comment
+ * in guard.ts). A payslip is per-employee financial detail (pay amount,
+ * deductions), the same class of export this audit targets.
  */
 export async function GET(
   request: Request,
@@ -26,6 +32,7 @@ export async function GET(
     const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.VIEW_PAYROLL,
+      { requireOwnerMfa: true },
     );
 
     const rows = await db

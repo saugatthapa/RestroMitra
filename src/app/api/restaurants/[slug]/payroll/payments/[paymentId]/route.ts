@@ -18,6 +18,10 @@ import { assertBusinessDayWritable } from "@/lib/daily-closing";
  * delete the original" pattern as expenses. Only ever un-does a genuine
  * mistake; it does NOT claw back real money — that's a conversation with
  * the staff member, not something this button does.
+ *
+ * Gap audit (P1) — `requireOwnerMfa: true` additionally requires MFA to be
+ * enabled when the CALLER is the owner (see requireOwnerMfaEnabled's own
+ * doc comment in guard.ts).
  */
 export async function PATCH(
   request: Request,
@@ -31,6 +35,7 @@ export async function PATCH(
     const { session, restaurantId, role, branchId: grantedBranchId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_PAYROLL,
+      { requireOwnerMfa: true },
     );
 
     const existing = await db.query.payrollPayments.findFirst({

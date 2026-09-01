@@ -20,11 +20,19 @@ const EXPORT_ROW_LIMIT = 20_000;
  * permission would risk letting a caller export data they can't otherwise
  * view. Filters mirror GET /ledger exactly, just reusing listLedgerEntries
  * (see ledger.ts) at a higher row limit.
+ *
+ * Gap audit (P1) — `requireOwnerMfa: true` additionally requires MFA to be
+ * enabled when the CALLER is the owner (a no-op for a manager/accountant
+ * running the same export — see requireOwnerMfaEnabled's own doc comment
+ * in guard.ts). A bulk CSV of every financial ledger entry is exactly the
+ * kind of exfiltratable financial data this audit targets.
  */
 export async function GET(request: Request, ctx: { params: Promise<{ slug: string }> }) {
   try {
     const { slug } = await ctx.params;
-    const { restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_ACCOUNT_BOOKS);
+    const { restaurantId } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_ACCOUNT_BOOKS, {
+      requireOwnerMfa: true,
+    });
 
     const url = new URL(request.url);
     const from = url.searchParams.get("from");

@@ -135,6 +135,71 @@ async function requirePlatformMfaEnabled(userId: string): Promise<void> {
 }
 
 /**
+ * Gap audit (P1) — "MFA is not enforced for restaurant owners, only for
+ * platform admins... it's just not mandatory for the role (owner) that
+ * controls a restaurant's financial data." Mirrors requirePlatformMfaEnabled's
+ * pattern (fail closed with an actionable message at the point of a
+ * sensitive action, not a blanket block that would create a redirect loop
+ * for an owner who hasn't enrolled yet — see dashboard/layout.tsx's own
+ * comment for the non-blocking banner half of this).
+ *
+ * Deliberately scoped by ROLE, not by permission: a no-op for any role
+ * other than "owner", including a manager/accountant who happens to hold
+ * the exact same permission (MANAGE_PAYROLL, REFUND_ORDER, ...) on a route
+ * that also calls this. That is intentional — this protects the OWNER's
+ * own use of these actions specifically (the audit's framing: MFA for
+ * "the role that controls a restaurant's financial data"), never a
+ * co-worker who happens to share the underlying permission. platform_admin
+ * and the impersonation roles are likewise untouched here: their own MFA
+ * requirement is already enforced one layer up, at the point platform
+ * access itself was granted (requirePlatformAdmin/requirePlatformPermission),
+ * before an impersonation session can even start.
+ *
+ * Callers: pass `requireOwnerMfa: true` to resolveRestaurantContext for a
+ * specific money-moving route (refunds, payroll payments/void/payslips,
+ * subscription/billing changes, staff role changes, financial-data
+ * exports) rather than calling this directly — see that function's own
+ * doc comment for why it runs after the permission check.
+ */
+export async function requireOwnerMfaEnabled(userId: string, role: string): Promise<void> {
+  if (role !== "owner") return;
+  const [row] = await db
+    .select({ mfaEnabled: users.mfaEnabled })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!row?.mfaEnabled) {
+    throw new AuthError(
+      "MFA is required for this action. Enable multi-factor authentication in your account settings (/dashboard/account), then retry.",
+      403,
+    );
+  }
+}
+
+/**
+ * Gap audit (P1) — pure predicate behind dashboard/layout.tsx's
+ * non-blocking owner-MFA warning banner (the mirror of admin/layout.tsx's
+ * own banner condition for platform roles). Factored out as a plain
+ * function, rather than inlined in the layout, so it's unit-testable
+ * without a component-rendering harness — this project has none (see
+ * platform-authorization.test.ts's own comment on the same limitation for
+ * requirePlatformAdmin's session-dependent half).
+ *
+ * Scoped to match requireOwnerMfaEnabled exactly: true only for the real
+ * "owner" role, never during an impersonation session (which already
+ * renders its own, separate banner) — a platform_admin/impersonated_read/
+ * impersonated_write viewer is never shown this, since none of those is
+ * this account's own ownership.
+ */
+export function shouldShowOwnerMfaWarning(params: {
+  isImpersonating: boolean;
+  role: string;
+  mfaEnabled: boolean;
+}): boolean {
+  return !params.isImpersonating && params.role === "owner" && !params.mfaEnabled;
+}
+
+/**
  * Fails closed for any endpoint that operates across every tenant (the
  * platform admin console) rather than within one restaurant's scope —
  * distinct from requireRestaurantAccess, which is about access to ONE

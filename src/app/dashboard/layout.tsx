@@ -1,4 +1,8 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { users } from "@/db/schema";
 import { getSession } from "@/lib/auth/session";
 import {
   getUserRestaurants,
@@ -7,7 +11,7 @@ import {
   type OwnedRestaurant,
 } from "@/lib/restaurant";
 import { getImpersonationContext } from "@/lib/auth/impersonation";
-import { isPlatformOrImpersonatedRole } from "@/lib/rbac/guard";
+import { isPlatformOrImpersonatedRole, shouldShowOwnerMfaWarning } from "@/lib/rbac/guard";
 import { computeSubscriptionAccess } from "@/lib/subscription";
 import { getMaintenanceMode } from "@/lib/system/maintenance-mode-db";
 import { getActiveAnnouncements } from "@/lib/system/announcements-db";
@@ -125,6 +129,39 @@ export default async function DashboardLayout({
     getActiveAnnouncements(),
   ]);
 
+  // Gap audit (P1) — MFA is not enforced for restaurant owners the way it
+  // is for platform roles (see admin/layout.tsx's own doc comment on that
+  // design). Same deliberate choice here: this gate does NOT hard-block on
+  // missing MFA — that would create a redirect loop for a legitimate owner
+  // who hasn't enabled it yet, since they need to be able to reach
+  // /dashboard/account to turn it on. Instead, a non-blocking warning
+  // banner is shown and real enforcement happens only at the point of
+  // calling the specific money-moving actions gated by
+  // requireOwnerMfaEnabled (see guard.ts) — refunds, payroll runs/
+  // payslips, subscription/billing changes, staff role changes, and
+  // financial-data exports.
+  //
+  // Scoped to the ACTIVE restaurant's role specifically: only shown when
+  // this user is the real "owner" of the currently-active restaurant, not
+  // for impersonation (isImpersonating) or the platform_admin/
+  // impersonated_read/impersonated_write bypass roles, none of which are
+  // this account's own ownership — impersonation already has its own,
+  // separate banner above.
+  let ownerMfaEnabled = true;
+  if (!isImpersonating && active.role === "owner") {
+    const [userRow] = await db
+      .select({ mfaEnabled: users.mfaEnabled })
+      .from(users)
+      .where(eq(users.id, session.user.id))
+      .limit(1);
+    ownerMfaEnabled = userRow?.mfaEnabled ?? false;
+  }
+  const showOwnerMfaWarning = shouldShowOwnerMfaWarning({
+    isImpersonating,
+    role: active.role,
+    mfaEnabled: ownerMfaEnabled,
+  });
+
   return (
     <>
       {isImpersonating && impersonation && (
@@ -135,6 +172,17 @@ export default async function DashboardLayout({
           startedAt={impersonation.startedAt.toISOString()}
           expiresAt={impersonation.expiresAt.toISOString()}
         />
+      )}
+      {showOwnerMfaWarning && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-800 md:px-6">
+          Two-factor authentication isn&apos;t enabled on your account yet. It&apos;s
+          strongly recommended for restaurant owners.{" "}
+          <Link href="/dashboard/account" className="underline hover:text-amber-900">
+            Enable it now
+          </Link>{" "}
+          — sensitive actions like refunds, payroll, billing changes, staff role
+          changes, and financial exports will be rejected until you do.
+        </div>
       )}
       {announcements.length > 0 && (
         <AnnouncementBanner

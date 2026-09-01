@@ -27,6 +27,12 @@ async function getOwnedGrant(restaurantId: string, userRoleId: string) {
  *    MANAGE_STAFF could otherwise lock themselves out with no one left to
  *    undo it (unlike the owner, who's protected structurally, a manager
  *    has no such backstop).
+ *
+ * Gap audit (P1) — `requireOwnerMfa: true` additionally requires MFA to be
+ * enabled when the CALLER is the owner (a no-op for a manager changing the
+ * same staff member's role — see requireOwnerMfaEnabled's own doc comment
+ * in guard.ts). Staff role changes govern who can reach the financial
+ * actions above, so the same protection applies here.
  */
 export async function PATCH(
   request: Request,
@@ -40,6 +46,7 @@ export async function PATCH(
     const { session, restaurantId, role, branchId: grantedBranchId } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_STAFF,
+      { requireOwnerMfa: true },
     );
 
     const existing = await getOwnedGrant(restaurantId, userRoleId);

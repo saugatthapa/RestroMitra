@@ -66,6 +66,11 @@ export async function GET(
  * there's no payout API for ANY method to pull a number from, so the
  * amount is always typed in by the person confirming the payment (see
  * payout-methods.ts's doc comment).
+ *
+ * Gap audit (P1) — `requireOwnerMfa: true` additionally requires MFA to be
+ * enabled when the CALLER is the owner (a no-op for an accountant/manager
+ * running the same payroll payment — see requireOwnerMfaEnabled's own doc
+ * comment in guard.ts).
  */
 export async function POST(
   request: Request,
@@ -79,6 +84,7 @@ export async function POST(
     const { session, restaurantId, role, branchId: grantedBranchId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.MANAGE_PAYROLL,
+      { requireOwnerMfa: true },
     );
 
     const parsed = await parseJsonBody(request, createPayrollPaymentSchema);
