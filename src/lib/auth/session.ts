@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { randomBytes, createHash } from "crypto";
-import { and, eq, ne } from "drizzle-orm";
+import { and, desc, eq, gte, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { sessions, users } from "@/db/schema";
 import { SESSION_COOKIE_NAME } from "./session-cookie";
@@ -192,4 +192,58 @@ export async function destroyAllSessions(userId: string): Promise<number> {
     .where(eq(sessions.userId, userId))
     .returning({ id: sessions.id });
   return deleted.length;
+}
+
+export type ActiveSessionSummary = {
+  id: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  activeRestaurantId: string | null;
+  createdAt: Date;
+  expiresAt: Date;
+};
+
+/**
+ * Gap-audit P1 fix (Finding 2) — every currently-unexpired session row for
+ * one user, newest first. Backs the platform admin console's per-staff
+ * session list (support tooling), which previously offered only a blind
+ * "revoke everything" with no visibility into what was actually being
+ * revoked — device (userAgent), IP, and created/expires timestamps are
+ * exactly the fields this table actually has (there is no separate
+ * "last active" column — a session row is only ever inserted at login and
+ * deleted at logout/revocation, never touched in between).
+ */
+export async function listActiveSessionsForUser(userId: string): Promise<ActiveSessionSummary[]> {
+  const now = new Date();
+  const rows = await db
+    .select({
+      id: sessions.id,
+      userAgent: sessions.userAgent,
+      ipAddress: sessions.ipAddress,
+      activeRestaurantId: sessions.activeRestaurantId,
+      createdAt: sessions.createdAt,
+      expiresAt: sessions.expiresAt,
+    })
+    .from(sessions)
+    .where(and(eq(sessions.userId, userId), gte(sessions.expiresAt, now)))
+    .orderBy(desc(sessions.createdAt));
+  return rows;
+}
+
+/**
+ * Gap-audit P1 fix (Finding 2) — revokes exactly ONE session, replacing
+ * the platform admin console's previous all-or-nothing revoke. Scoped to
+ * (sessionId, userId) together, same defense-in-depth shape as the
+ * existing revoke-sessions route's (userId, restaurantId) scoping —
+ * an admin can only ever revoke a session that actually belongs to the
+ * user they're looking at, never an arbitrary session id. Returns true
+ * only if a row was actually deleted, so the route can tell "revoked" from
+ * "already gone / never belonged to this user" and answer accordingly.
+ */
+export async function destroySessionById(sessionId: string, userId: string): Promise<boolean> {
+  const deleted = await db
+    .delete(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)))
+    .returning({ id: sessions.id });
+  return deleted.length > 0;
 }

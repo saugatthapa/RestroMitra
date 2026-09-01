@@ -127,4 +127,15 @@ describe.skipIf(!hasDb)("usage-db (integration)", () => {
     const failedEvent = events.find((e) => e.restaurantId === restaurantAId && !e.success);
     expect(failedEvent?.errorMessage).toBe("rate limited");
   });
+
+  // Gap-audit P1 fix (Finding 3) — getRecentAiFailures backs the platform
+  // admin console's "recent alerts" AI-failure feed.
+  it("getRecentAiFailures returns only failed attempts, never a successful one", async () => {
+    const failures = await usageDb.getRecentAiFailures(100);
+    const ours = failures.filter((f) => f.restaurantId === restaurantAId || f.restaurantId === restaurantBId);
+    expect(ours).toHaveLength(1);
+    expect(ours[0].restaurantId).toBe(restaurantAId);
+    expect(ours[0].errorMessage).toBe("rate limited");
+    expect(ours[0].restaurantName).toBe("TEST Usage Restaurant A");
+  });
 });

@@ -16,6 +16,7 @@ import type { PermissionKey } from "@/lib/rbac/permissions";
 import type { SessionContext } from "@/lib/auth/session";
 import { requireFeature } from "@/lib/entitlements-db";
 import type { FeatureKey } from "@/lib/feature-catalog";
+import { recordSystemError } from "@/lib/system/error-log";
 
 /**
  * Converts a thrown HttpError (AuthError, OrderValidationError, ...) — or
@@ -37,6 +38,15 @@ import type { FeatureKey } from "@/lib/feature-catalog";
  * exists to surface. Same no-op-until-SENTRY_DSN-is-set behavior as every
  * other Sentry call site in this app (see sentry.server.config.ts's own
  * comment) — safe to call unconditionally.
+ *
+ * Gap-audit P1 fix (Finding 3) — also feeds src/lib/system/error-log.ts's
+ * in-memory ring buffer, which is what actually powers the platform admin
+ * console's "recent alerts" list: Sentry (this project's real
+ * error-tracking system) is an external service this app has no read
+ * access back into, so this in-process log is the pragmatic in-app
+ * substitute for "what broke recently" — see that module's own doc
+ * comment for the full reasoning and its single-instance-deployment
+ * caveat.
  */
 export function toErrorResponse(err: unknown): NextResponse {
   if (err instanceof HttpError) {
@@ -44,6 +54,7 @@ export function toErrorResponse(err: unknown): NextResponse {
   }
   console.error("Unhandled API error:", err);
   Sentry.captureException(err);
+  recordSystemError(err);
   return NextResponse.json(
     { error: "Something went wrong. Please try again." },
     { status: 500 },

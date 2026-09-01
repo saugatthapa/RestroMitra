@@ -172,6 +172,26 @@ export async function getPlatformAiUsageSummary(range?: {
   }));
 }
 
+/** Gap-audit P1 fix (Finding 3) — most recent FAILED attempts only, across the whole platform, newest first. Backs the platform admin "recent alerts" list's AI-provider-failure feed; filtered in SQL (not fetched-then-filtered from getRecentAiUsageEvents) so a burst of successful traffic can never push a real failure off the page. */
+export async function getRecentAiFailures(limit = 50) {
+  return db
+    .select({
+      id: aiUsageLogs.id,
+      restaurantId: aiUsageLogs.restaurantId,
+      restaurantName: restaurants.name,
+      provider: aiUsageLogs.provider,
+      model: aiUsageLogs.model,
+      errorMessage: aiUsageLogs.errorMessage,
+      latencyMs: aiUsageLogs.latencyMs,
+      createdAt: aiUsageLogs.createdAt,
+    })
+    .from(aiUsageLogs)
+    .innerJoin(restaurants, eq(restaurants.id, aiUsageLogs.restaurantId))
+    .where(eq(aiUsageLogs.success, false))
+    .orderBy(desc(aiUsageLogs.createdAt))
+    .limit(limit);
+}
+
 /** Most recent attempts (success and failure) across the whole platform — for a simple activity feed on /admin/ai-providers, newest first. */
 export async function getRecentAiUsageEvents(limit = 50) {
   return db

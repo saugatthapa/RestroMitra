@@ -9,6 +9,7 @@ import { EntitlementsPanel } from "./EntitlementsPanel";
 import { AiUsagePanel } from "./AiUsagePanel";
 import { ImpersonationPanel } from "./ImpersonationPanel";
 import { SupportPanel, type SupportPanelData } from "./SupportPanel";
+import { BranchesPanel, RecentOrdersPanel, RestaurantAuditLogPanel } from "./RestaurantOperationsPanels";
 
 type Detail = {
   restaurant: {
@@ -352,13 +353,21 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
         </div>
       </div>
 
-      <AiUsagePanel
-        restaurantId={restaurantId}
-        aiMonthlyRequestLimitOverride={restaurant.aiMonthlyRequestLimitOverride}
-        aiMonthlyRequestLimit={restaurant.aiMonthlyRequestLimit}
-        aiRequestsThisMonth={restaurant.aiRequestsThisMonth}
-        onSaved={load}
-      />
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <BranchesPanel restaurantId={restaurantId} />
+        <RecentOrdersPanel restaurantId={restaurantId} />
+        <RestaurantAuditLogPanel restaurantId={restaurantId} />
+      </div>
+
+      <div className="mt-6">
+        <AiUsagePanel
+          restaurantId={restaurantId}
+          aiMonthlyRequestLimitOverride={restaurant.aiMonthlyRequestLimitOverride}
+          aiMonthlyRequestLimit={restaurant.aiMonthlyRequestLimit}
+          aiRequestsThisMonth={restaurant.aiRequestsThisMonth}
+          onSaved={load}
+        />
+      </div>
 
       <SupportPanel
         restaurantId={restaurantId}

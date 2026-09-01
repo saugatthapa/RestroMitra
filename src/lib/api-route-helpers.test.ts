@@ -23,8 +23,10 @@ const captureException = vi.fn();
 vi.mock("@sentry/nextjs", () => ({ captureException: (...args: unknown[]) => captureException(...args) }));
 
 describe("toErrorResponse", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     captureException.mockClear();
+    const { _resetSystemErrorLogForTests } = await import("@/lib/system/error-log");
+    _resetSystemErrorLogForTests();
   });
 
   it("reports an unrecognized, unhandled error to Sentry and returns an opaque 500", async () => {
@@ -40,6 +42,13 @@ describe("toErrorResponse", () => {
 
     expect(captureException).toHaveBeenCalledTimes(1);
     expect(captureException).toHaveBeenCalledWith(err);
+
+    // Gap-audit P1 fix (Finding 3) — also lands in the in-memory
+    // recent-alerts log, independent of Sentry.
+    const { listRecentSystemErrors } = await import("@/lib/system/error-log");
+    const recent = listRecentSystemErrors();
+    expect(recent).toHaveLength(1);
+    expect(recent[0].message).toBe("something exploded deep in a query");
   });
 
   it("does NOT report a recognized HttpError to Sentry", async () => {
@@ -53,5 +62,8 @@ describe("toErrorResponse", () => {
     expect(body.error).toBe("Order not found.");
 
     expect(captureException).not.toHaveBeenCalled();
+
+    const { listRecentSystemErrors } = await import("@/lib/system/error-log");
+    expect(listRecentSystemErrors()).toHaveLength(0);
   });
 });

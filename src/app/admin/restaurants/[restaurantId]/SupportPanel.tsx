@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { apiPost, apiDelete, ApiError } from "@/lib/api-client";
+import { apiGet, apiPost, apiDelete, ApiError } from "@/lib/api-client";
 import { SUPPORT_TAGS, SUPPORT_TAG_LABELS, type SupportTag } from "@/lib/support/tags";
 import { HEALTH_BAND_LABELS, type HealthBand } from "@/lib/support/health-score";
 
@@ -29,6 +29,15 @@ const BAND_CLASSES: Record<HealthBand, string> = {
   healthy: "bg-emerald-50 text-emerald-700 border-emerald-200",
   watch: "bg-amber-50 text-amber-700 border-amber-200",
   at_risk: "bg-red-50 text-red-700 border-red-200",
+};
+
+type ActiveSession = {
+  id: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  activeRestaurantId: string | null;
+  createdAt: string;
+  expiresAt: string;
 };
 
 function formatDateTime(iso: string) {
@@ -219,25 +228,23 @@ export function SupportPanel({
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
               Staff sessions
             </h3>
+            <p className="mb-2 text-xs text-neutral-400">
+              Expand a staff member to see their actual active sessions (device, IP, created/expires)
+              and revoke one at a time — or use &quot;Revoke all&quot; for a compromised-account sweep.
+            </p>
             <div className="space-y-1.5">
               {staff.length === 0 && <p className="text-xs text-neutral-400">No active staff.</p>}
               {staff.map((s) => (
-                <div
+                <StaffSessionRow
                   key={s.userRoleId}
-                  className="flex items-center justify-between rounded-lg border border-neutral-100 px-2.5 py-1.5 text-xs"
-                >
-                  <span className="text-neutral-700">
-                    {s.fullName} <span className="text-neutral-400">· {s.role}</span>
-                  </span>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => revokeSessions(s.userId, s.fullName)}
-                    className="text-neutral-500 underline decoration-dotted hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Revoke sessions
-                  </button>
-                </div>
+                  restaurantId={restaurantId}
+                  userId={s.userId}
+                  fullName={s.fullName}
+                  role={s.role}
+                  busy={busy}
+                  onRevokeAll={() => revokeSessions(s.userId, s.fullName)}
+                  onError={setError}
+                />
               ))}
             </div>
           </div>
@@ -288,6 +295,125 @@ export function SupportPanel({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Gap-audit P1 fix (Finding 2) — one staff member's row, expandable to show
+ * their real active sessions (reads GET .../staff/[userId]/sessions) with
+ * a per-session revoke (DELETE .../sessions/[sessionId]), replacing the
+ * previous blind "revoke sessions" as the primary action. The bulk revoke
+ * (onRevokeAll, unchanged) stays available for a "this account is
+ * compromised, kill everything" sweep.
+ */
+function StaffSessionRow({
+  restaurantId,
+  userId,
+  fullName,
+  role,
+  busy,
+  onRevokeAll,
+  onError,
+}: {
+  restaurantId: string;
+  userId: string;
+  fullName: string;
+  role: string;
+  busy: boolean;
+  onRevokeAll: () => void;
+  onError: (message: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [sessions, setSessions] = useState<ActiveSession[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  async function toggle() {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && sessions === null) {
+      setLoading(true);
+      try {
+        const res = await apiGet<{ sessions: ActiveSession[] }>(
+          `/api/admin/restaurants/${restaurantId}/staff/${userId}/sessions`,
+        );
+        setSessions(res.sessions);
+      } catch (err) {
+        onError(err instanceof ApiError ? err.message : "Could not load sessions.");
+      } finally {
+        setLoading(false);
+      }
+    }
+  }
+
+  async function revokeOne(sessionId: string) {
+    setRevokingId(sessionId);
+    try {
+      await apiDelete(`/api/admin/restaurants/${restaurantId}/staff/${userId}/sessions/${sessionId}`);
+      setSessions((prev) => (prev ? prev.filter((s) => s.id !== sessionId) : prev));
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Could not revoke that session.");
+    } finally {
+      setRevokingId(null);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-neutral-100 px-2.5 py-1.5 text-xs">
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={toggle}
+          className="text-left text-neutral-700 hover:text-neutral-900"
+        >
+          <span aria-hidden className="mr-1 inline-block w-3 text-neutral-400">
+            {expanded ? "▾" : "▸"}
+          </span>
+          {fullName} <span className="text-neutral-400">· {role}</span>
+          {sessions !== null && (
+            <span className="ml-1 text-neutral-400">
+              ({sessions.length} active session{sessions.length === 1 ? "" : "s"})
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onRevokeAll}
+          className="text-neutral-500 underline decoration-dotted hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Revoke all
+        </button>
+      </div>
+      {expanded && (
+        <div className="mt-2 space-y-1.5 border-t border-neutral-100 pt-2">
+          {loading && <p className="text-neutral-400">Loading sessions…</p>}
+          {!loading && sessions && sessions.length === 0 && (
+            <p className="text-neutral-400">No active sessions.</p>
+          )}
+          {!loading &&
+            sessions?.map((s) => (
+              <div key={s.id} className="flex items-center justify-between gap-2 rounded bg-neutral-50 px-2 py-1.5">
+                <div className="min-w-0">
+                  <p className="truncate text-neutral-700">{s.userAgent ?? "Unknown device"}</p>
+                  <p className="text-neutral-400">
+                    {s.ipAddress ?? "Unknown IP"} · Created {formatDateTime(s.createdAt)} · Expires{" "}
+                    {formatDateTime(s.expiresAt)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={revokingId === s.id}
+                  onClick={() => revokeOne(s.id)}
+                  className="shrink-0 text-neutral-500 underline decoration-dotted hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {revokingId === s.id ? "Revoking…" : "Revoke"}
+                </button>
+              </div>
+            ))}
+        </div>
+      )}
     </div>
   );
 }
