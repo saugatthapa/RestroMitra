@@ -23,8 +23,20 @@ import {
   restaurantTables,
   reservations,
   orders,
+  platformImpersonationSessions,
 } from "@/db/schema";
 import { hashPassword } from "@/lib/auth/password";
+// Not `import { generateMfaEnrollment } from "@/lib/auth/mfa"`: that module
+// starts with `import "server-only"`, which vitest tolerates only because
+// vitest.config.mts aliases "server-only" to a no-op mock — Playwright's
+// test runner has no equivalent alias, so pulling it in here throws "This
+// module cannot be imported from a Client Component module" the moment
+// this file loads, before any test even runs. Calling otplib's own
+// `generateSecret` directly is not a shortcut around that: it's the exact
+// same call generateMfaEnrollment itself makes (see mfa.ts) — a real
+// RFC 6238 base32 secret from the same well-audited library, not a
+// hand-rolled one.
+import { generateSecret } from "otplib";
 
 /** Nepal mobile numbers must match /^9[678]\d{8}$/ (see
  * src/lib/validation/auth.ts) — the real login form round-trips through
@@ -49,6 +61,7 @@ export type SeededRestaurant = {
   restaurantId: string;
   branchId: string;
   slug: string;
+  name: string;
   ownerId: string;
   ownerPhone: string;
 };
@@ -80,7 +93,7 @@ export async function seedOwnerRestaurant(label: string): Promise<SeededRestaura
       slug: `test-e2e-${label}-${suffix}`,
       name: `TEST E2E ${label} Restaurant`,
     })
-    .returning({ id: restaurants.id, slug: restaurants.slug });
+    .returning({ id: restaurants.id, slug: restaurants.slug, name: restaurants.name });
 
   const [branch] = await db
     .insert(branches)
@@ -98,6 +111,7 @@ export async function seedOwnerRestaurant(label: string): Promise<SeededRestaura
     restaurantId: restaurant.id,
     branchId: branch.id,
     slug: restaurant.slug,
+    name: restaurant.name,
     ownerId: owner.id,
     ownerPhone,
   };
@@ -131,6 +145,90 @@ export async function seedMenuAndTable(r: SeededRestaurant): Promise<{ qrToken: 
   });
 
   return { qrToken, tableName };
+}
+
+export type SeededPlatformAdmin = {
+  userId: string;
+  phone: string;
+  /**
+   * Base32 TOTP secret for this admin, generated with otplib's own
+   * generateSecret() — the exact same call mfa.ts's generateMfaEnrollment
+   * makes (see this file's import comment for why that helper itself
+   * can't be imported here) — a spec logging in as this admin computes a live
+   * 6-digit code from this with otplib's `generate()` (see e2e/db.ts's own
+   * import and src/db/__tests__/mfa.test.ts's identical pattern), exactly
+   * like a real authenticator app would, rather than special-casing MFA
+   * away for the test.
+   */
+  mfaSecret: string;
+};
+
+/**
+ * Seeds one platform_admin user — a real user_roles row with
+ * restaurantId: null (a platform-scoped grant, not tied to any one
+ * tenant — see schema.ts's own comment on user_roles_one_active_per_
+ * restaurant_unique excluding these rows) — with MFA already enrolled and
+ * enabled.
+ *
+ * requirePlatformAdmin()/requirePlatformPermission() (src/lib/rbac/guard.ts)
+ * hard-require users.mfaEnabled = true before any platform route (including
+ * /api/admin/impersonation/start) will do anything, so a seeded platform
+ * admin without MFA enabled would 403 on every single platform action —
+ * this mirrors confirmMfaEnrollment's own persisted shape (mfaEnabled: true,
+ * mfaSecret set, mfaEnabledAt set) directly via a DB insert rather than
+ * driving the actual /api/auth/mfa/enroll/confirm HTTP round trip, the same
+ * "seed the end state directly" convention seedOwnerRestaurant already uses
+ * for passwordHash instead of going through /api/auth/register. The secret
+ * itself is realistic, not a shortcut: it's produced by the exact same
+ * otplib generateSecret() call the real enrollment endpoint's
+ * generateMfaEnrollment() wraps, stored exactly as plaintext base32 the way
+ * schema.ts's own comment documents mfaSecret
+ * being stored (this app has no column-level encryption for it — "anyone
+ * with DB access already has everything" is the documented trust boundary),
+ * so the seeded row is byte-for-byte what a real enrolled account looks
+ * like in this DB, and the spec still has to submit a real, freshly
+ * computed TOTP code through the real /login + /api/auth/mfa/verify flow
+ * to get in.
+ */
+export async function seedPlatformAdmin(label: string): Promise<SeededPlatformAdmin> {
+  const phone = randomPhone();
+  const secret = generateSecret();
+
+  const [admin] = await db
+    .insert(users)
+    .values({
+      fullName: `TEST E2E Platform Admin ${label}`,
+      phone,
+      passwordHash: await hashPassword(E2E_PASSWORD),
+      mfaEnabled: true,
+      mfaSecret: secret,
+      mfaEnabledAt: new Date(),
+    })
+    .returning({ id: users.id });
+
+  await db.insert(userRoles).values({
+    userId: admin.id,
+    restaurantId: null,
+    role: "platform_admin",
+    isActive: true,
+  });
+
+  return { userId: admin.id, phone, mfaSecret: secret };
+}
+
+/** Deletes a platform admin seeded via seedPlatformAdmin — any
+ * platform_impersonation_sessions row this admin started (FK-referenced by
+ * both admin_user_id and, once exited, ended_by_user_id — neither is
+ * ON DELETE CASCADE, so a spec that actually starts/exits impersonation
+ * would otherwise leave the users row un-deletable), its userRoles row
+ * (restaurantId IS NULL, so teardownRestaurant never touches it), and the
+ * user row itself. */
+export async function teardownPlatformAdmin(admin: SeededPlatformAdmin): Promise<void> {
+  await db
+    .delete(platformImpersonationSessions)
+    .where(eq(platformImpersonationSessions.adminUserId, admin.userId));
+  await db.delete(userRoles).where(eq(userRoles.userId, admin.userId));
+  await db.delete(users).where(eq(users.id, admin.userId));
 }
 
 /** Deletes everything a spec may have created for one seeded restaurant,
