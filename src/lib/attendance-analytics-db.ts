@@ -1,9 +1,11 @@
 import "server-only";
 import { and, eq, gte, inArray, isNull, lt, lte, ne, or } from "drizzle-orm";
 import { db } from "@/db";
-import { attendanceRecords, leaveRequests, scheduledShifts, userRoles, users } from "@/db/schema";
+import { attendanceRecords, holidays, leaveRequests, scheduledShifts, userRoles, users } from "@/db/schema";
 import {
   computeStaffAttendanceAnalytics,
+  isDateHoliday,
+  isDateWithinLeaveRanges,
   type StaffAttendanceAnalytics,
 } from "@/lib/attendance-analytics";
 import { leaveDaysWithinPeriod } from "@/lib/leave";
@@ -27,6 +29,24 @@ export type StaffAttendanceAnalyticsRow = StaffAttendanceAnalytics & { fullName:
  * Never omits a staff member: every active roster row gets a result, even
  * one with zero activity in the period (matching
  * getPayrollComputationsBatch's own "never omits one" convention).
+ *
+ * Correctness fix (attendance-overhaul gap audit, P1): a scheduled shift
+ * that falls on a day the staff member had APPROVED leave covering, or a
+ * day the branch/restaurant declared a HOLIDAY, must never be tallied as a
+ * no-show or late arrival — the staff member had no obligation to clock in
+ * that day. Before this fix, computeStaffAttendanceAnalytics's matchedShifts
+ * carried no such signal, so an approved-leave or holiday day with no
+ * clock-in silently fell through to ScheduleStatus "no_show" from
+ * scheduling.ts's computeScheduleVariance (which only ever compares planned
+ * times against attendance — it has no leave/holiday awareness of its own,
+ * by design) and got counted twice: once correctly as paid leave, and once
+ * incorrectly as a no-show. Fixed here — not in payroll.ts, which already
+ * only reasons about worked minutes and leaveDaysWithinPeriod and was never
+ * exposed to this bug — by resolving each matched shift's `excusedReason`
+ * (via isDateWithinLeaveRanges/isDateHoliday) before handing it to the pure
+ * aggregator, which now excludes an excused shift from noShowCount/
+ * lateCount and tallies it into excusedLeaveCount/excusedHolidayCount
+ * instead.
  */
 export async function getAttendanceAnalytics(
   restaurantId: string,
@@ -89,6 +109,7 @@ export async function getAttendanceAnalytics(
       shiftDate: scheduledShifts.shiftDate,
       plannedStartAt: scheduledShifts.plannedStartAt,
       plannedEndAt: scheduledShifts.plannedEndAt,
+      branchId: scheduledShifts.branchId,
     })
     .from(scheduledShifts)
     .where(
@@ -99,19 +120,6 @@ export async function getAttendanceAnalytics(
         lte(scheduledShifts.shiftDate, periodEnd),
       ),
     );
-  // Matching uses EVERY attendance record regardless of review status — a
-  // late/no-show call is about clock TIMES, not about whether a manager
-  // has since verified the shift's photo, so it's a deliberately separate
-  // concern from the rejected-exclusion applied below for the worked-time
-  // figures.
-  const matched = matchScheduleWithAttendance(shiftRows, attendanceRows, timezone);
-  const matchedByUserId = new Map<string, typeof matched>();
-  for (const m of matched) {
-    const list = matchedByUserId.get(m.shift.userId);
-    if (list) list.push(m);
-    else matchedByUserId.set(m.shift.userId, [m]);
-  }
-
   const leaveRows = await db
     .select({ userId: leaveRequests.userId, startDate: leaveRequests.startDate, endDate: leaveRequests.endDate })
     .from(leaveRequests)
@@ -129,6 +137,84 @@ export async function getAttendanceAnalytics(
   for (const r of leaveRows) {
     const days = leaveDaysWithinPeriod(r.startDate, r.endDate, periodStart, periodEnd);
     paidLeaveDaysByUserId.set(r.userId, (paidLeaveDaysByUserId.get(r.userId) ?? 0) + days);
+  }
+
+  // Correctness fix (P1 gap-audit finding) — approved leave excuses a
+  // no-show/late tally regardless of leave TYPE, unlike paidLeaveDaysByUserId
+  // above: an approved unpaid-leave day still means the staff member had
+  // permission not to be there, so it must exclude a no-show just as much
+  // as a paid leave day does. This is deliberately a separate query/map
+  // from leaveRows (not a relaxed reuse of it) since the two answer
+  // different questions — "how many paid leave days" vs. "was this staff
+  // member excused from being at work at all" — and conflating them would
+  // either under-count paid leave or under-excuse unpaid leave.
+  const allApprovedLeaveRows = await db
+    .select({ userId: leaveRequests.userId, startDate: leaveRequests.startDate, endDate: leaveRequests.endDate })
+    .from(leaveRequests)
+    .where(
+      and(
+        eq(leaveRequests.restaurantId, restaurantId),
+        inArray(leaveRequests.userId, userIds),
+        eq(leaveRequests.status, "approved"),
+        lte(leaveRequests.startDate, periodEnd),
+        gte(leaveRequests.endDate, periodStart),
+      ),
+    );
+  const leaveRangesByUserId = new Map<string, Array<{ startDate: string; endDate: string }>>();
+  for (const r of allApprovedLeaveRows) {
+    const list = leaveRangesByUserId.get(r.userId);
+    const range = { startDate: r.startDate, endDate: r.endDate };
+    if (list) list.push(range);
+    else leaveRangesByUserId.set(r.userId, [range]);
+  }
+
+  // Declared holidays overlapping the period — branchId null means
+  // restaurant-wide (see the holidays table's own schema comment), set
+  // means that one branch's own closure. Not filtered by `branchId` (the
+  // function's own branch-scoping parameter): a branch-scoped caller has
+  // already narrowed `userIds` to that branch's roster, but an individual
+  // SHIFT's own branchId (below) is what determines which holidays excuse
+  // it, same as it determines who's on the roster in the first place.
+  const holidayRows = await db
+    .select({ date: holidays.date, branchId: holidays.branchId })
+    .from(holidays)
+    .where(
+      and(eq(holidays.restaurantId, restaurantId), gte(holidays.date, periodStart), lte(holidays.date, periodEnd)),
+    );
+  const restaurantWideHolidayDates = new Set<string>();
+  const branchHolidayDatesByBranch = new Map<string, Set<string>>();
+  for (const h of holidayRows) {
+    if (h.branchId === null) {
+      restaurantWideHolidayDates.add(h.date);
+    } else {
+      const set = branchHolidayDatesByBranch.get(h.branchId);
+      if (set) set.add(h.date);
+      else branchHolidayDatesByBranch.set(h.branchId, new Set([h.date]));
+    }
+  }
+
+  /** "leave" wins over "holiday" when a day happens to be both — either way it's excused, but leave is the more specific, person-level reason to surface to a manager. */
+  function resolveExcusedReason(userId: string, shiftDate: string, shiftBranchId: string | null): "leave" | "holiday" | undefined {
+    if (isDateWithinLeaveRanges(shiftDate, leaveRangesByUserId.get(userId) ?? [])) return "leave";
+    if (isDateHoliday(shiftDate, shiftBranchId, restaurantWideHolidayDates, branchHolidayDatesByBranch)) return "holiday";
+    return undefined;
+  }
+
+  // Matching uses EVERY attendance record regardless of review status — a
+  // late/no-show call is about clock TIMES, not about whether a manager
+  // has since verified the shift's photo, so it's a deliberately separate
+  // concern from the rejected-exclusion applied below for the worked-time
+  // figures.
+  const matched = matchScheduleWithAttendance(shiftRows, attendanceRows, timezone);
+  const matchedByUserId = new Map<string, Array<{ variance: (typeof matched)[number]["variance"]; excusedReason?: "leave" | "holiday" }>>();
+  for (const m of matched) {
+    const entry = {
+      variance: m.variance,
+      excusedReason: resolveExcusedReason(m.shift.userId, m.shift.shiftDate, m.shift.branchId),
+    };
+    const list = matchedByUserId.get(m.shift.userId);
+    if (list) list.push(entry);
+    else matchedByUserId.set(m.shift.userId, [entry]);
   }
 
   const localDate = (d: Date) => restaurantDate(timezone, d);

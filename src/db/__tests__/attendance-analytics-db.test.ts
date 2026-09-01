@@ -77,6 +77,7 @@ describe.skipIf(!hasDb)("getAttendanceAnalytics (integration)", () => {
   });
 
   afterAll(async () => {
+    await db.delete(schema.holidays).where(eq(schema.holidays.restaurantId, restaurantId));
     await db.delete(schema.leaveRequests).where(eq(schema.leaveRequests.restaurantId, restaurantId));
     await db.delete(schema.scheduledShifts).where(eq(schema.scheduledShifts.restaurantId, restaurantId));
     await db.delete(schema.attendanceRecords).where(eq(schema.attendanceRecords.restaurantId, restaurantId));
@@ -182,6 +183,92 @@ describe.skipIf(!hasDb)("getAttendanceAnalytics (integration)", () => {
 
     await db.delete(schema.scheduledShifts).where(eq(schema.scheduledShifts.userId, userAId));
     await db.delete(schema.attendanceRecords).where(eq(schema.attendanceRecords.userId, userAId));
+  });
+
+  it("excludes a no-clock-in day from noShowCount/lateCount when the staff member has approved leave covering it — corruption bug fix", async () => {
+    // A scheduled shift with nothing clocked in, dated safely in the past
+    // so computeScheduleVariance resolves it to a genuine "no_show" against
+    // the real clock (see the comment on the plain no-show test above).
+    await db.insert(schema.scheduledShifts).values({
+      restaurantId,
+      userId: userAId,
+      shiftDate: "2026-02-10",
+      plannedStartAt: new Date("2026-02-10T09:00:00Z"),
+      plannedEndAt: new Date("2026-02-10T17:00:00Z"),
+    });
+    // Approved leave (even UNPAID) covering that exact day — the staff
+    // member had permission to be absent.
+    await db.insert(schema.leaveRequests).values({
+      restaurantId,
+      userId: userAId,
+      leaveType: "unpaid",
+      status: "approved",
+      startDate: "2026-02-10",
+      endDate: "2026-02-10",
+    });
+
+    const result = await getAttendanceAnalytics(restaurantId, "2026-02-01", "2026-02-28", TZ, null);
+    const alice = result.find((r) => r.userId === userAId)!;
+    expect(alice.scheduledShiftsCount).toBe(1);
+    // Before the fix this would have been 1 (a false no-show).
+    expect(alice.noShowCount).toBe(0);
+    expect(alice.excusedLeaveCount).toBe(1);
+    expect(alice.excusedHolidayCount).toBe(0);
+
+    await db.delete(schema.scheduledShifts).where(eq(schema.scheduledShifts.userId, userAId));
+    await db.delete(schema.leaveRequests).where(eq(schema.leaveRequests.userId, userAId));
+  });
+
+  it("excludes a no-clock-in day from noShowCount when it falls on a restaurant-wide declared holiday — corruption bug fix", async () => {
+    await db.insert(schema.scheduledShifts).values({
+      restaurantId,
+      userId: userBId,
+      shiftDate: "2026-02-11",
+      plannedStartAt: new Date("2026-02-11T09:00:00Z"),
+      plannedEndAt: new Date("2026-02-11T17:00:00Z"),
+    });
+    await db.insert(schema.holidays).values({
+      restaurantId,
+      branchId: null, // restaurant-wide
+      date: "2026-02-11",
+      name: "TEST Festival",
+    });
+
+    const result = await getAttendanceAnalytics(restaurantId, "2026-02-01", "2026-02-28", TZ, null);
+    const bob = result.find((r) => r.userId === userBId)!;
+    expect(bob.scheduledShiftsCount).toBe(1);
+    expect(bob.noShowCount).toBe(0);
+    expect(bob.excusedHolidayCount).toBe(1);
+    expect(bob.excusedLeaveCount).toBe(0);
+
+    await db.delete(schema.scheduledShifts).where(eq(schema.scheduledShifts.userId, userBId));
+    await db.delete(schema.holidays).where(eq(schema.holidays.restaurantId, restaurantId));
+  });
+
+  it("does NOT excuse a no-show when a holiday is declared for a DIFFERENT branch than the shift's own branch", async () => {
+    await db.insert(schema.scheduledShifts).values({
+      restaurantId,
+      userId: userAId,
+      branchId: branchAId,
+      shiftDate: "2026-02-12",
+      plannedStartAt: new Date("2026-02-12T09:00:00Z"),
+      plannedEndAt: new Date("2026-02-12T17:00:00Z"),
+    });
+    // Holiday declared for branch B only — shouldn't excuse branch A's shift.
+    await db.insert(schema.holidays).values({
+      restaurantId,
+      branchId: branchBId,
+      date: "2026-02-12",
+      name: "TEST Branch B closure",
+    });
+
+    const result = await getAttendanceAnalytics(restaurantId, "2026-02-01", "2026-02-28", TZ, null);
+    const alice = result.find((r) => r.userId === userAId)!;
+    expect(alice.noShowCount).toBe(1); // still a genuine, unexcused no-show
+    expect(alice.excusedHolidayCount).toBe(0);
+
+    await db.delete(schema.scheduledShifts).where(eq(schema.scheduledShifts.userId, userAId));
+    await db.delete(schema.holidays).where(eq(schema.holidays.restaurantId, restaurantId));
   });
 
   it("branch scoping: a specific branchId returns only that branch's staff plus restaurant-wide (unscoped) staff", async () => {
