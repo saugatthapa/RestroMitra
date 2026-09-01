@@ -1917,6 +1917,23 @@ export const coupons = pgTable(
     // time (see redeemCoupon in coupons.ts), not just this check.
     usageLimit: integer("usage_limit"),
     usageCount: integer("usage_count").notNull().default(0),
+    // Gap-audit follow-up (P1 revenue leakage) — four more eligibility
+    // conditions layered onto the same "resolveCoupon = advisory precheck,
+    // redeemCoupon = atomic source of truth" split the fields above already
+    // use. See coupons.ts's own doc comment for exactly how each is
+    // enforced.
+    //
+    // Per-customer usage cap — null = no per-customer limit (only the
+    // restaurant-wide usageLimit above applies). Enforced the SAME
+    // CAS-under-concurrency way as usageLimit, just against a per
+    // (coupon, customer) counter row (couponCustomerRedemptions) instead of
+    // this table's own usageCount — see redeemCoupon.
+    perCustomerLimit: integer("per_customer_limit"),
+    // Restricts the coupon to a customer's chronologically FIRST non
+    // -cancelled order at this restaurant — see resolveCoupon's own
+    // comment for how "first" is determined race-safely (by immutable
+    // order creation order, not a mutable flag).
+    firstOrderOnly: boolean("first_order_only").notNull().default(false),
     startsAt: timestamp("starts_at", { withTimezone: true }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     isActive: boolean("is_active").notNull().default(true),
@@ -1942,6 +1959,131 @@ export const coupons = pgTable(
       sql`${table.minOrderSubtotalInPaisa} IS NULL OR ${table.minOrderSubtotalInPaisa} >= 0`,
     ),
     check("coupons_usage_limit_non_negative", sql`${table.usageLimit} IS NULL OR ${table.usageLimit} >= 0`),
+    check(
+      "coupons_per_customer_limit_positive",
+      sql`${table.perCustomerLimit} IS NULL OR ${table.perCustomerLimit} > 0`,
+    ),
+  ],
+);
+
+// Branch restriction — a coupon with zero rows here is valid at every
+// branch (the common case, and the pre-existing behavior); one or more
+// rows restricts redemption to exactly those branches. A join table rather
+// than an array column so branch ownership is a plain FK (enforced by
+// Postgres, not just app-layer validation) and mirrors the
+// menuComboItems/couponRedemptions convention of "one row per membership"
+// already used elsewhere in this file.
+export const couponBranches = pgTable(
+  "coupon_branches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Denormalized alongside couponId (same reasoning as
+    // couponRedemptions.restaurantId) purely so every tenant-scoped query
+    // here can filter on restaurantId directly instead of joining out to
+    // coupons first.
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    couponId: uuid("coupon_id")
+      .notNull()
+      .references(() => coupons.id, { onDelete: "cascade" }),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("coupon_branches_restaurant_id_idx").on(table.restaurantId),
+    index("coupon_branches_coupon_id_idx").on(table.couponId),
+    uniqueIndex("coupon_branches_coupon_branch_unique").on(table.couponId, table.branchId),
+  ],
+);
+
+// Menu-item restriction — same "empty = unrestricted, non-empty = allow
+// -list" semantics as couponBranches above. A coupon can carry BOTH
+// specific menu items AND specific categories at once (couponCategories
+// below); an order item qualifies if it matches either list. See
+// resolveCoupon's own comment for exactly how the discount is computed
+// when only some cart items qualify.
+export const couponMenuItems = pgTable(
+  "coupon_menu_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    couponId: uuid("coupon_id")
+      .notNull()
+      .references(() => coupons.id, { onDelete: "cascade" }),
+    menuItemId: uuid("menu_item_id")
+      .notNull()
+      .references(() => menuItems.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("coupon_menu_items_restaurant_id_idx").on(table.restaurantId),
+    index("coupon_menu_items_coupon_id_idx").on(table.couponId),
+    uniqueIndex("coupon_menu_items_coupon_menu_item_unique").on(table.couponId, table.menuItemId),
+  ],
+);
+
+// Category restriction — same shape/semantics as couponMenuItems above,
+// one row per (coupon, category) the coupon is restricted to.
+export const couponCategories = pgTable(
+  "coupon_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    couponId: uuid("coupon_id")
+      .notNull()
+      .references(() => coupons.id, { onDelete: "cascade" }),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => categories.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("coupon_categories_restaurant_id_idx").on(table.restaurantId),
+    index("coupon_categories_coupon_id_idx").on(table.couponId),
+    uniqueIndex("coupon_categories_coupon_category_unique").on(table.couponId, table.categoryId),
+  ],
+);
+
+// Per-(coupon, customer) running redemption counter — the couponCustomerRedemptions
+// name mirrors couponRedemptions (the append-only global audit trail) but
+// this table is the opposite shape: ONE mutable row per (coupon, customer)
+// pair, maintained purely so redeemCoupon has something to CAS against
+// (same "one choke point" reasoning as coupons.usageCount itself). Never
+// read directly for reporting — couponRedemptions.customerId (below) is
+// the audit trail if that's ever needed; this table exists only to make
+// the per-customer cap race-safe.
+export const couponCustomerRedemptions = pgTable(
+  "coupon_customer_redemptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    couponId: uuid("coupon_id")
+      .notNull()
+      .references(() => coupons.id, { onDelete: "cascade" }),
+    // Cascades on customer delete — a deleted customer's per-customer
+    // counter is meaningless (nothing left to cap), same reasoning as
+    // loyaltyTransactions.customerId's cascade.
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    redemptionCount: integer("redemption_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("coupon_customer_redemptions_restaurant_id_idx").on(table.restaurantId),
+    index("coupon_customer_redemptions_customer_id_idx").on(table.customerId),
+    uniqueIndex("coupon_customer_redemptions_coupon_customer_unique").on(table.couponId, table.customerId),
+    check("coupon_customer_redemptions_count_non_negative", sql`${table.redemptionCount} >= 0`),
   ],
 );
 
@@ -1962,6 +2104,14 @@ export const couponRedemptions = pgTable(
     // stored rather than re-derived, since a percentage coupon's paisa
     // value depends on that specific order's subtotal at redemption time.
     discountInPaisa: integer("discount_in_paisa").notNull(),
+    // Snapshot of orders.customerId at redemption time — nullable (a
+    // guest/anonymous order has no linked customer, same as orders.customerId
+    // itself), "set null" on customer delete since this row is an audit
+    // record, not something that should vanish with the customer. This is
+    // ALSO what unredeemCoupon reads to know which couponCustomerRedemptions
+    // counter row to decrement, so it doesn't need the caller to re-supply
+    // customerId when releasing a coupon.
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
     redeemedByUserId: uuid("redeemed_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1969,6 +2119,7 @@ export const couponRedemptions = pgTable(
     index("coupon_redemptions_restaurant_id_idx").on(table.restaurantId),
     index("coupon_redemptions_coupon_id_idx").on(table.couponId),
     index("coupon_redemptions_order_id_idx").on(table.orderId),
+    index("coupon_redemptions_customer_id_idx").on(table.customerId),
     check("coupon_redemptions_discount_non_negative", sql`${table.discountInPaisa} >= 0`),
   ],
 );
