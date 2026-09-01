@@ -1025,6 +1025,8 @@ type StaffAttendanceAnalyticsRow = {
   lateCount: number;
   totalLateMinutes: number;
   totalEarlyDepartureMinutes: number;
+  excusedLeaveCount: number;
+  excusedHolidayCount: number;
 };
 
 function AttendanceAnalyticsPanel({ slug }: { slug: string }) {
@@ -1118,12 +1120,13 @@ function AttendanceAnalyticsPanel({ slug }: { slug: string }) {
                   <th className="px-3 py-2">Scheduled</th>
                   <th className="px-3 py-2">No-shows</th>
                   <th className="px-3 py-2">Late</th>
+                  <th className="px-3 py-2">Excused (leave/holiday)</th>
                 </tr>
               </thead>
               <tbody>
                 {!loading && staff.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-3 py-6 text-center text-neutral-400">
+                    <td colSpan={9} className="px-3 py-6 text-center text-neutral-400">
                       No active staff to show for this period.
                     </td>
                   </tr>
@@ -1151,6 +1154,17 @@ function AttendanceAnalyticsPanel({ slug }: { slug: string }) {
                           {s.lateCount}{" "}
                           <span className="text-xs text-neutral-400">({formatDuration(s.totalLateMinutes)})</span>
                         </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-neutral-600">
+                      {s.excusedLeaveCount + s.excusedHolidayCount > 0 ? (
+                        <span className="text-xs text-neutral-500">
+                          {s.excusedLeaveCount > 0 && `${s.excusedLeaveCount} leave`}
+                          {s.excusedLeaveCount > 0 && s.excusedHolidayCount > 0 && ", "}
+                          {s.excusedHolidayCount > 0 && `${s.excusedHolidayCount} holiday`}
+                        </span>
                       ) : (
                         "—"
                       )}

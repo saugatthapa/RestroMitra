@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { computeStaffAttendanceAnalytics, emptyStaffAttendanceAnalytics } from "./attendance-analytics";
+import {
+  computeStaffAttendanceAnalytics,
+  emptyStaffAttendanceAnalytics,
+  isDateWithinLeaveRanges,
+  isDateHoliday,
+} from "./attendance-analytics";
 
 const localDate = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -17,6 +22,8 @@ describe("emptyStaffAttendanceAnalytics", () => {
       lateCount: 0,
       totalLateMinutes: 0,
       totalEarlyDepartureMinutes: 0,
+      excusedLeaveCount: 0,
+      excusedHolidayCount: 0,
     });
   });
 });
@@ -87,6 +94,70 @@ describe("computeStaffAttendanceAnalytics", () => {
       lateCount: 1,
       totalLateMinutes: 10,
       totalEarlyDepartureMinutes: 0,
+      excusedLeaveCount: 0,
+      excusedHolidayCount: 0,
     });
+  });
+
+  it("excludes a matched shift from noShowCount/lateCount when excusedReason is 'leave' — approved leave means no obligation to show up", () => {
+    const matchedShifts = [
+      { variance: { status: "no_show" as const, lateMinutes: 0, earlyDepartureMinutes: 0 }, excusedReason: "leave" as const },
+      { variance: { status: "no_show" as const, lateMinutes: 0, earlyDepartureMinutes: 0 } }, // a genuine, unexcused no-show
+    ];
+    const result = computeStaffAttendanceAnalytics("u1", [], matchedShifts, 0, localDate);
+    expect(result.scheduledShiftsCount).toBe(2); // still counted as scheduled
+    expect(result.noShowCount).toBe(1); // only the unexcused one
+    expect(result.excusedLeaveCount).toBe(1);
+    expect(result.excusedHolidayCount).toBe(0);
+  });
+
+  it("excludes a matched shift from noShowCount/lateCount when excusedReason is 'holiday' — a branch closure means no obligation to show up", () => {
+    const matchedShifts = [
+      {
+        variance: { status: "completed" as const, lateMinutes: 25, earlyDepartureMinutes: 0 },
+        excusedReason: "holiday" as const,
+      },
+    ];
+    const result = computeStaffAttendanceAnalytics("u1", [], matchedShifts, 0, localDate);
+    expect(result.lateCount).toBe(0); // would have been late, but excused
+    expect(result.totalLateMinutes).toBe(0);
+    expect(result.excusedHolidayCount).toBe(1);
+    expect(result.excusedLeaveCount).toBe(0);
+    // still counts toward completedShiftsCount — they DID show up despite the holiday.
+    expect(result.completedShiftsCount).toBe(1);
+  });
+});
+
+describe("isDateWithinLeaveRanges", () => {
+  it("returns true when the date falls within an inclusive leave range", () => {
+    expect(isDateWithinLeaveRanges("2026-09-02", [{ startDate: "2026-09-01", endDate: "2026-09-03" }])).toBe(true);
+    expect(isDateWithinLeaveRanges("2026-09-01", [{ startDate: "2026-09-01", endDate: "2026-09-01" }])).toBe(true);
+    expect(isDateWithinLeaveRanges("2026-09-03", [{ startDate: "2026-09-01", endDate: "2026-09-03" }])).toBe(true);
+  });
+
+  it("returns false when the date is outside every range, and for an empty list", () => {
+    expect(isDateWithinLeaveRanges("2026-09-04", [{ startDate: "2026-09-01", endDate: "2026-09-03" }])).toBe(false);
+    expect(isDateWithinLeaveRanges("2026-09-01", [])).toBe(false);
+  });
+});
+
+describe("isDateHoliday", () => {
+  it("matches a restaurant-wide holiday regardless of the shift's branch", () => {
+    const restaurantWide = new Set(["2026-10-20"]);
+    const byBranch = new Map<string, ReadonlySet<string>>();
+    expect(isDateHoliday("2026-10-20", "branch-a", restaurantWide, byBranch)).toBe(true);
+    expect(isDateHoliday("2026-10-20", null, restaurantWide, byBranch)).toBe(true);
+  });
+
+  it("matches a branch-specific holiday only for a shift at that branch, not an unscoped shift or a different branch", () => {
+    const restaurantWide = new Set<string>();
+    const byBranch = new Map<string, ReadonlySet<string>>([["branch-a", new Set(["2026-10-21"])]]);
+    expect(isDateHoliday("2026-10-21", "branch-a", restaurantWide, byBranch)).toBe(true);
+    expect(isDateHoliday("2026-10-21", "branch-b", restaurantWide, byBranch)).toBe(false);
+    expect(isDateHoliday("2026-10-21", null, restaurantWide, byBranch)).toBe(false);
+  });
+
+  it("returns false for a date with no holiday declared", () => {
+    expect(isDateHoliday("2026-10-22", "branch-a", new Set(), new Map())).toBe(false);
   });
 });
