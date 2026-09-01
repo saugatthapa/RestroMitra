@@ -50,7 +50,7 @@ export async function POST(
     // all — see reorder/route.ts's own comment for the full rationale.
     // Shares the same `menu-write:user` bucket as every other menu
     // mutation route, since they're all the same abuse surface.
-    const limit = rateLimit(`menu-write:user:${session.user.id}`, {
+    const limit = await rateLimit(`menu-write:user:${session.user.id}`, {
       limit: 60,
       windowMs: 5 * 60 * 1000,
     });

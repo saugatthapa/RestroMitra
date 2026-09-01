@@ -69,14 +69,14 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
     const { token } = await ctx.params;
 
     const ip = getClientIp(request) ?? "unknown";
-    const ipLimit = rateLimit(`service-call:ip:${ip}`, { limit: 10, windowMs: 10 * 60 * 1000 });
+    const ipLimit = await rateLimit(`service-call:ip:${ip}`, { limit: 10, windowMs: 10 * 60 * 1000 });
     if (!ipLimit.allowed) {
       return NextResponse.json(
         { error: "Too many requests. Please wait a few minutes and try again." },
         { status: 429 },
       );
     }
-    const tokenLimit = rateLimit(`service-call:token:${token}`, {
+    const tokenLimit = await rateLimit(`service-call:token:${token}`, {
       limit: 6,
       windowMs: 10 * 60 * 1000,
     });

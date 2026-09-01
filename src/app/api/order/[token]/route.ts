@@ -36,14 +36,14 @@ export async function POST(
     const { token } = await ctx.params;
 
     const ip = getClientIp(request) ?? "unknown";
-    const ipLimit = rateLimit(`order:ip:${ip}`, { limit: 15, windowMs: 10 * 60 * 1000 });
+    const ipLimit = await rateLimit(`order:ip:${ip}`, { limit: 15, windowMs: 10 * 60 * 1000 });
     if (!ipLimit.allowed) {
       return NextResponse.json(
         { error: "Too many orders submitted. Please wait a few minutes and try again." },
         { status: 429 },
       );
     }
-    const tokenLimit = rateLimit(`order:token:${token}`, { limit: 20, windowMs: 10 * 60 * 1000 });
+    const tokenLimit = await rateLimit(`order:token:${token}`, { limit: 20, windowMs: 10 * 60 * 1000 });
     if (!tokenLimit.allowed) {
       return NextResponse.json(
         { error: "Too many orders from this table. Please ask staff for help." },

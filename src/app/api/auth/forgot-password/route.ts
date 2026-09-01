@@ -75,8 +75,8 @@ async function handleForgotPassword(request: Request) {
 
   // Same dual IP+phone keying as login — bounds both "one attacker hammers
   // many phone numbers from one IP" and "many IPs hammer one phone number".
-  const limitedByIp = rateLimit(`reset-request-ip:${ip}`, { limit: 10, windowMs: 60_000 });
-  const limitedByPhone = rateLimit(`reset-request-phone:${phone}`, { limit: 3, windowMs: 60_000 });
+  const limitedByIp = await rateLimit(`reset-request-ip:${ip}`, { limit: 10, windowMs: 60_000 });
+  const limitedByPhone = await rateLimit(`reset-request-phone:${phone}`, { limit: 3, windowMs: 60_000 });
   if (!limitedByIp.allowed || !limitedByPhone.allowed) {
     // Still the generic response, not a 429 with a distinct body — even
     // "you're rate limited" is a signal an enumerating caller could use to

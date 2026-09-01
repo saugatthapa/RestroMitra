@@ -513,16 +513,22 @@ src/
 - Passwords are hashed with bcrypt (cost 12); session tokens are high-entropy random
   values, SHA-256 hashed before being stored server-side (sessions are revocable —
   logout actually deletes the row, not just the cookie).
-- Auth endpoints are rate-limited (see `src/lib/rate-limit.ts` for an important caveat:
-  it's in-memory and single-instance only — swap for Redis/Upstash before running more
-  than one app instance). **This is a hard requirement, not a nice-to-have**: every
-  IP/user-keyed limit in this app (login attempts, gateway-callback abuse, public
-  order-page throttling) lives in one process's memory, with zero code-level guard
-  against a second instance. Deploying to a horizontally-scaled serverless platform
-  (Vercel's own model — a request can land on any of several concurrent function
-  instances) or running `pm2` in cluster mode silently multiplies every limit by the
-  instance/worker count instead of erroring — see the "Deploying" section below for
-  which of the documented platforms this actually holds for.
+- Auth endpoints are rate-limited (`src/lib/rate-limit.ts`). It runs in one of two
+  modes, chosen automatically: **in-memory** by default (a `Map`-based counter, scoped
+  to a single Node.js process), or **distributed**, backed by Upstash Redis's REST API,
+  the moment both `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set (see
+  `.env.example`) — no code changes needed either way, every call site just works.
+  Setting only one of the two env vars is treated as "not configured" and silently
+  keeps the in-memory behavior, so double-check both are present when a distributed
+  limit is expected. **Configuring Upstash is a hard requirement before running more
+  than one app instance, not a nice-to-have**: without it, every IP/user-keyed limit in
+  this app (login attempts, gateway-callback abuse, public order-page throttling) lives
+  in one process's memory, with zero code-level guard against a second instance.
+  Deploying to a horizontally-scaled serverless platform (Vercel's own model — a
+  request can land on any of several concurrent function instances) or running `pm2`
+  in cluster mode silently multiplies every limit by the instance/worker count instead
+  of erroring if Upstash isn't configured — see the "Deploying" section below for which
+  of the documented platforms this actually holds for.
 - The public QR ordering endpoint (`POST /api/order/[token]`) is unauthenticated by
   design — the qrToken itself is the access control — so it's rate-limited by both IP
   and table, and **never** trusts a price from the client: `computeOrderPricing()` in
@@ -568,21 +574,25 @@ src/
 ## Deploying
 
 Any Next.js-compatible host works technically — there's no Prisma-style native binary
-tying it to a specific platform — but **only a genuinely single-process deployment is
-actually correct for this app today**, because of the in-memory rate limiter above. The
-verified, currently-live target is a single-instance Hostinger Node.js app (hPanel →
-Node.js — see `DEPLOY_PHASE25.md` for the concrete steps); a single VPS process (with or
-without `pm2` in **fork** mode, which is still one process) is equally fine.
+tying it to a specific platform — but **a genuinely single-process deployment is the
+only one that's correct out of the box**, because `src/lib/rate-limit.ts` defaults to
+its in-memory backend (see the security note above) unless `UPSTASH_REDIS_REST_URL` /
+`UPSTASH_REDIS_REST_TOKEN` are configured. The verified, currently-live target is a
+single-instance Hostinger Node.js app (hPanel → Node.js — see `DEPLOY_PHASE25.md` for
+the concrete steps); a single VPS process (with or without `pm2` in **fork** mode,
+which is still one process) is equally fine, with or without Upstash configured.
 
-**Vercel and `pm2` cluster mode are NOT drop-in equivalents** — RC audit correction: an
-earlier version of this section presented them as interchangeable "any host works"
-alternates, which was wrong. Vercel's serverless model can and does run a given route's
-handler on more than one concurrent function instance, and `pm2 -i <n>` cluster mode
-runs `<n>` separate Node processes — either one silently multiplies every rate limit by
-however many instances/workers happen to be live, with no error or warning anywhere.
-Vercel steps are kept below for reference (the app itself runs fine there), but treat
-its rate-limiting as effectively disabled unless `src/lib/rate-limit.ts` is first
-swapped for a shared store (Redis/Upstash) — do not launch commercially on it as-is.
+**Vercel and `pm2` cluster mode are NOT drop-in equivalents unless Upstash is
+configured** — RC audit correction: an earlier version of this section presented them
+as interchangeable "any host works" alternates, which was wrong. Vercel's serverless
+model can and does run a given route's handler on more than one concurrent function
+instance, and `pm2 -i <n>` cluster mode runs `<n>` separate Node processes — either one
+silently multiplies every rate limit by however many instances/workers happen to be
+live, with no error or warning anywhere, **as long as the rate limiter is running in
+its default in-memory mode**. Vercel steps are kept below for reference (the app itself
+runs fine there); just set both Upstash env vars before launching commercially on
+Vercel or under `pm2` cluster mode — with them set, the rate limiter is shared
+correctly across every instance/worker, same as the single-process case.
 
 ### Deploying to Vercel
 

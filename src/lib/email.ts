@@ -103,7 +103,7 @@ export async function sendFallbackAlertEmail(
 ): Promise<void> {
   if (!isConfigured()) return;
 
-  const cooldown = rateLimit(`fallback-email:${restaurantId}`, {
+  const cooldown = await rateLimit(`fallback-email:${restaurantId}`, {
     limit: 1,
     windowMs: 10 * 60 * 1000,
   });

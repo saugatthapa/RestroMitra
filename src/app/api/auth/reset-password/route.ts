@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
 async function handleResetPassword(request: Request) {
   const ip = getClientIp(request) ?? "unknown";
-  const limited = rateLimit(`reset-complete-ip:${ip}`, { limit: 15, windowMs: 60_000 });
+  const limited = await rateLimit(`reset-complete-ip:${ip}`, { limit: 15, windowMs: 60_000 });
   if (!limited.allowed) {
     return NextResponse.json(
       { error: "Too many attempts. Please try again in a minute." },

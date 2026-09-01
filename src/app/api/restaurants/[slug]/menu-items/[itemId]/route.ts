@@ -40,7 +40,7 @@ export async function PATCH(
     // QA hardening (P2 backlog): shared `menu-write:user` rate-limit
     // bucket across every menu mutation route — see
     // menu-items/reorder/route.ts's comment for the full rationale.
-    const limit = rateLimit(`menu-write:user:${session.user.id}`, {
+    const limit = await rateLimit(`menu-write:user:${session.user.id}`, {
       limit: 60,
       windowMs: 5 * 60 * 1000,
     });
@@ -132,7 +132,7 @@ export async function DELETE(
     // QA hardening (P2 backlog): shared `menu-write:user` rate-limit
     // bucket across every menu mutation route — see
     // menu-items/reorder/route.ts's comment for the full rationale.
-    const limit = rateLimit(`menu-write:user:${session.user.id}`, {
+    const limit = await rateLimit(`menu-write:user:${session.user.id}`, {
       limit: 60,
       windowMs: 5 * 60 * 1000,
     });

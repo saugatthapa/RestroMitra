@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   try {
     const session = await requirePlatformPermission(PLATFORM_PERMISSIONS.IMPERSONATE_TENANT);
 
-    const limit = rateLimit(`impersonation-start:${session.user.id}`, {
+    const limit = await rateLimit(`impersonation-start:${session.user.id}`, {
       limit: 10,
       windowMs: 10 * 60 * 1000,
     });

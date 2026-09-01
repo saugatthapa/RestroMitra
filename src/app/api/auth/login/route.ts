@@ -51,11 +51,11 @@ async function handleLogin(request: Request) {
   // Rate limit by IP+phone so one bad actor can't lock out a legitimate
   // user's phone number by hammering it from many IPs, nor grind through
   // many phone numbers from one IP.
-  const limitedByIp = rateLimit(`login-ip:${ip}`, {
+  const limitedByIp = await rateLimit(`login-ip:${ip}`, {
     limit: 20,
     windowMs: 60_000,
   });
-  const limitedByPhone = rateLimit(`login-phone:${phone}`, {
+  const limitedByPhone = await rateLimit(`login-phone:${phone}`, {
     limit: 8,
     windowMs: 60_000,
   });

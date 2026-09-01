@@ -33,7 +33,7 @@ export async function POST(
     const session = await requirePlatformPermission(PLATFORM_PERMISSIONS.MANAGE_SUPPORT);
     const { restaurantId, userId } = await ctx.params;
 
-    const limit = rateLimit(`admin-revoke-sessions:${session.user.id}`, {
+    const limit = await rateLimit(`admin-revoke-sessions:${session.user.id}`, {
       limit: 20,
       windowMs: 10 * 60 * 1000,
     });

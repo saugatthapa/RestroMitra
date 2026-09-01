@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
 async function handleMfaVerify(request: Request) {
   const ip = getClientIp(request) ?? "unknown";
-  const limitedByIp = rateLimit(`mfa-verify-ip:${ip}`, { limit: 20, windowMs: 60_000 });
+  const limitedByIp = await rateLimit(`mfa-verify-ip:${ip}`, { limit: 20, windowMs: 60_000 });
   if (!limitedByIp.allowed) {
     return NextResponse.json(
       { error: "Too many attempts. Please try again in a minute." },
@@ -68,7 +68,7 @@ async function handleMfaVerify(request: Request) {
   // Rate limited per-challenge too, not just per-IP — bounds a brute
   // force attempt against ONE stolen challenge even if it's spread across
   // many IPs.
-  const limitedByChallenge = rateLimit(`mfa-verify-challenge:${challenge.id}`, {
+  const limitedByChallenge = await rateLimit(`mfa-verify-challenge:${challenge.id}`, {
     limit: 8,
     windowMs: 60_000,
   });
