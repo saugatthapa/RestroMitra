@@ -53,7 +53,9 @@ export async function explainTenantAccess(restaurantId: string): Promise<Entitle
     getAllFeatureFlags(),
   ]);
 
-  const overrideByKey = new Map(overrides.map((o) => [o.featureKey, o.granted]));
+  const overrideByKey = new Map(
+    overrides.map((o) => [o.featureKey, { granted: o.granted, expiresAt: o.expiresAt }]),
+  );
   const flagByKey = new Map(flags.map((f) => [f.key, f.defaultEnabled]));
 
   const allKeys = new Set<string>([
@@ -65,7 +67,8 @@ export async function explainTenantAccess(restaurantId: string): Promise<Entitle
   return [...allKeys].sort().map((key) =>
     resolveFeatureAccess(key, {
       planFeatureKeys: plan?.featureKeys ?? [],
-      override: overrideByKey.has(key) ? overrideByKey.get(key) : undefined,
+      override: overrideByKey.get(key)?.granted,
+      overrideExpiresAt: overrideByKey.get(key)?.expiresAt,
       flagDefault: flagByKey.has(key) ? flagByKey.get(key) : undefined,
     }),
   );
@@ -89,7 +92,7 @@ export async function hasFeature(restaurantId: string, featureKey: string): Prom
   const [plan, overrideRow, flag] = await Promise.all([
     restaurantRow ? getEffectivePlan(restaurantRow) : Promise.resolve(null),
     db
-      .select({ granted: entitlementOverrides.granted })
+      .select({ granted: entitlementOverrides.granted, expiresAt: entitlementOverrides.expiresAt })
       .from(entitlementOverrides)
       .where(
         and(
@@ -105,6 +108,7 @@ export async function hasFeature(restaurantId: string, featureKey: string): Prom
   return resolveFeatureAccess(featureKey, {
     planFeatureKeys: plan?.featureKeys ?? [],
     override: overrideRow?.granted,
+    overrideExpiresAt: overrideRow?.expiresAt,
     flagDefault: flag?.defaultEnabled,
   }).granted;
 }
@@ -144,10 +148,16 @@ export async function requireFeature(restaurantId: string, featureKey: string, m
  * Sets (or replaces) one tenant's forced yes/no on one feature key. Upsert
  * on the (restaurantId, featureKey) unique index — a second override for
  * the same tenant+key updates the existing row (new reason, new granted
- * value, new actor) rather than creating a duplicate; the audit_logs entry
- * the caller records alongside this is what preserves the history of each
- * change, same "state lives here, history lives in audit_logs" split as
- * entitlementOverrides' own schema comment.
+ * value, new actor, new expiry) rather than creating a duplicate; the
+ * audit_logs entry the caller records alongside this is what preserves the
+ * history of each change, same "state lives here, history lives in
+ * audit_logs" split as entitlementOverrides' own schema comment.
+ *
+ * `expiresAt` is a full replace, not a merge, same as every other field
+ * here: omitting it (or passing null) on a re-override clears any expiry
+ * the previous row had rather than preserving it — "set an override" always
+ * means "this is now the complete state of the override," never "patch one
+ * field of it."
  */
 export async function setEntitlementOverride(params: {
   restaurantId: string;
@@ -155,6 +165,8 @@ export async function setEntitlementOverride(params: {
   granted: boolean;
   reason: string;
   createdByUserId: string;
+  /** Null (the default) = no expiry, permanent until manually revoked. See entitlementOverrides.expiresAt's own schema comment. */
+  expiresAt?: Date | null;
 }) {
   const [row] = await db
     .insert(entitlementOverrides)
@@ -164,6 +176,7 @@ export async function setEntitlementOverride(params: {
       granted: params.granted,
       reason: params.reason,
       createdByUserId: params.createdByUserId,
+      expiresAt: params.expiresAt ?? null,
     })
     .onConflictDoUpdate({
       target: [entitlementOverrides.restaurantId, entitlementOverrides.featureKey],
@@ -171,6 +184,7 @@ export async function setEntitlementOverride(params: {
         granted: params.granted,
         reason: params.reason,
         createdByUserId: params.createdByUserId,
+        expiresAt: params.expiresAt ?? null,
         updatedAt: new Date(),
       },
     })

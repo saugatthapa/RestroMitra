@@ -75,4 +75,64 @@ describe("resolveFeatureAccess", () => {
     });
     expect(result).toEqual({ featureKey: "pos_billing", granted: true, source: "plan" });
   });
+
+  describe("override expiry", () => {
+    it("an override with a past expiresAt is not active — falls back to the plan default, same as a manually revoked override", () => {
+      const now = new Date("2026-06-15T00:00:00Z");
+      const result = resolveFeatureAccess(
+        "inventory",
+        {
+          planFeatureKeys: ["inventory"],
+          override: false, // would otherwise force-deny a plan-granted key
+          overrideExpiresAt: new Date("2026-06-01T00:00:00Z"),
+        },
+        now,
+      );
+      expect(result).toEqual({ featureKey: "inventory", granted: true, source: "plan" });
+    });
+
+    it("an expired override falls all the way through to flag/none when the plan doesn't cover the key either", () => {
+      const now = new Date("2026-06-15T00:00:00Z");
+      const result = resolveFeatureAccess(
+        "ai_assistant_v2_beta",
+        {
+          planFeatureKeys: [],
+          override: true,
+          overrideExpiresAt: new Date("2026-01-01T00:00:00Z"),
+        },
+        now,
+      );
+      expect(result).toEqual({ featureKey: "ai_assistant_v2_beta", granted: false, source: "none" });
+    });
+
+    it("an override with a future expiresAt is still active, and echoes the expiry back on the result", () => {
+      const now = new Date("2026-06-15T00:00:00Z");
+      const expiresAt = new Date("2026-12-31T23:59:59.999Z");
+      const result = resolveFeatureAccess(
+        "inventory",
+        { planFeatureKeys: [], override: true, overrideExpiresAt: expiresAt },
+        now,
+      );
+      expect(result).toEqual({ featureKey: "inventory", granted: true, source: "override", expiresAt });
+    });
+
+    it("a null expiresAt (no expiry) is permanent — the historical default, preserved for overrides that never set one", () => {
+      const result = resolveFeatureAccess("inventory", {
+        planFeatureKeys: [],
+        override: true,
+        overrideExpiresAt: null,
+      });
+      expect(result).toEqual({ featureKey: "inventory", granted: true, source: "override", expiresAt: null });
+    });
+
+    it("an override expiring at exactly `now` is treated as already expired (inclusive boundary)", () => {
+      const now = new Date("2026-06-15T00:00:00Z");
+      const result = resolveFeatureAccess(
+        "inventory",
+        { planFeatureKeys: ["inventory"], override: false, overrideExpiresAt: now },
+        now,
+      );
+      expect(result.source).toBe("plan");
+    });
+  });
 });

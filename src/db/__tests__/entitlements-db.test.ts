@@ -122,6 +122,74 @@ describe.skipIf(!hasDb)("entitlements-db (integration)", () => {
     expect(posBillingRows[0].granted).toBe(true);
   });
 
+  // P2 gap fix — entitlement overrides can now carry an optional expiresAt.
+  // These prove resolveFeatureAccess's "computed, not swept" expiry check
+  // (entitlements.ts) actually holds end-to-end against the real DB: an
+  // expired row is left in place (nothing deletes it) but stops being
+  // treated as active, same as if it had been manually cleared.
+  describe("expiresAt", () => {
+    afterAll(async () => {
+      await entitlementsDb.clearEntitlementOverride(restaurantId, "reservations");
+    });
+
+    it("an override with a past expiresAt is not active — falls back to the plan/flag default (reservations: none)", async () => {
+      await entitlementsDb.setEntitlementOverride({
+        restaurantId,
+        featureKey: "reservations",
+        granted: true,
+        reason: "Expiry test — already-expired override.",
+        createdByUserId: ownerUserId,
+        expiresAt: new Date(Date.now() - 60_000),
+      });
+
+      expect(await entitlementsDb.hasFeature(restaurantId, "reservations")).toBe(false);
+
+      const explained = await entitlementsDb.explainTenantAccess(restaurantId);
+      const reservations = explained.find((e) => e.featureKey === "reservations");
+      expect(reservations).toMatchObject({ granted: false, source: "none" });
+
+      // The row itself is still there, untouched — expiry is a resolution-
+      // time comparison, not a sweep/delete.
+      const rows = await entitlementsDb.getEntitlementOverridesForRestaurant(restaurantId);
+      expect(rows.find((r) => r.featureKey === "reservations")).toBeDefined();
+    });
+
+    it("an override with a future expiresAt is still active (reservations: granted, source override)", async () => {
+      const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await entitlementsDb.setEntitlementOverride({
+        restaurantId,
+        featureKey: "reservations",
+        granted: true,
+        reason: "Expiry test — future expiry.",
+        createdByUserId: ownerUserId,
+        expiresAt: future,
+      });
+
+      expect(await entitlementsDb.hasFeature(restaurantId, "reservations")).toBe(true);
+
+      const explained = await entitlementsDb.explainTenantAccess(restaurantId);
+      const reservations = explained.find((e) => e.featureKey === "reservations");
+      expect(reservations).toMatchObject({ granted: true, source: "override" });
+      expect(reservations?.expiresAt).toBeInstanceOf(Date);
+    });
+
+    it("an override with no expiresAt stays active — null means permanent, the pre-existing default behavior", async () => {
+      await entitlementsDb.setEntitlementOverride({
+        restaurantId,
+        featureKey: "reservations",
+        granted: true,
+        reason: "Expiry test — no expiry.",
+        createdByUserId: ownerUserId,
+      });
+
+      expect(await entitlementsDb.hasFeature(restaurantId, "reservations")).toBe(true);
+
+      const rows = await entitlementsDb.getEntitlementOverridesForRestaurant(restaurantId);
+      const reservationsRow = rows.find((r) => r.featureKey === "reservations");
+      expect(reservationsRow?.expiresAt).toBeNull();
+    });
+  });
+
   it("clearEntitlementOverride removes the override and reverts to the plan/flag default", async () => {
     await entitlementsDb.clearEntitlementOverride(restaurantId, "pos_billing");
     const explained = await entitlementsDb.explainTenantAccess(restaurantId);

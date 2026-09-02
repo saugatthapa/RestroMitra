@@ -10,7 +10,14 @@ type EntitlementResult = {
   featureKey: string;
   granted: boolean;
   source: EntitlementSource;
+  /** Only meaningful when source is "override" — the API omits it (undefined) for every other source, and sends null for a permanent override. Serialized as an ISO string over JSON. */
+  expiresAt?: string | null;
 };
+
+/** "31 Dec 2026" — short enough for a table cell, unambiguous enough for a platform admin scanning several tenants' overrides. */
+function formatExpiryDate(value: string) {
+  return new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
 
 const SOURCE_LABELS: Record<EntitlementSource, string> = {
   override: "Admin override",
@@ -47,6 +54,10 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
   const [overrideKey, setOverrideKey] = useState<string | null>(null);
   const [overrideGranted, setOverrideGranted] = useState(true);
   const [overrideReason, setOverrideReason] = useState("");
+  // "YYYY-MM-DD" from a <input type="date">, or "" for no expiry (the
+  // common case — a permanent override). Kept as the raw picker string and
+  // only converted to an ISO datetime at submit time.
+  const [overrideExpiresAt, setOverrideExpiresAt] = useState("");
   const [overrideBusy, setOverrideBusy] = useState(false);
   const [overrideError, setOverrideError] = useState<string | null>(null);
 
@@ -82,9 +93,15 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
         featureKey: overrideKey,
         granted: overrideGranted,
         reason: overrideReason,
+        // Treat the picked calendar date as expiring at the END of that
+        // day (not its start) — "unlock until Dec 31" reads as "still on
+        // through Dec 31," and this is forgiving of the admin's own
+        // timezone vs. the server's when the two don't match exactly.
+        expiresAt: overrideExpiresAt ? `${overrideExpiresAt}T23:59:59.999Z` : "",
       });
       setOverrideKey(null);
       setOverrideReason("");
+      setOverrideExpiresAt("");
       await load();
     } catch (err) {
       setOverrideError(err instanceof ApiError ? err.message : "Could not set that override.");
@@ -119,6 +136,7 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
                 <th className="px-4 py-2.5">Feature</th>
                 <th className="px-4 py-2.5">Access</th>
                 <th className="px-4 py-2.5">Source</th>
+                <th className="px-4 py-2.5">Expires</th>
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
@@ -145,6 +163,9 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
                       {SOURCE_LABELS[e.source]}
                     </span>
                   </td>
+                  <td className="px-4 py-2.5 text-neutral-500">
+                    {e.source === "override" ? (e.expiresAt ? formatExpiryDate(e.expiresAt) : "No expiry") : "—"}
+                  </td>
                   <td className="px-4 py-2.5 text-right">
                     {e.source === "override" ? (
                       <button
@@ -162,6 +183,7 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
                           setOverrideKey(e.featureKey);
                           setOverrideGranted(!e.granted);
                           setOverrideReason("");
+                          setOverrideExpiresAt("");
                           setOverrideError(null);
                         }}
                         className="text-xs font-medium text-orange-700 hover:text-orange-800"
@@ -215,6 +237,19 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
                 autoFocus
                 className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
               />
+            </label>
+            <label className="mt-3 block text-sm">
+              <span className="mb-1 block text-neutral-700">Expires (optional)</span>
+              <input
+                type="date"
+                value={overrideExpiresAt}
+                min={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setOverrideExpiresAt(e.target.value)}
+                className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+              />
+              <span className="mt-1 block text-xs text-neutral-400">
+                Leave blank for no expiry — the override stays until manually cleared.
+              </span>
             </label>
             {overrideError && <p className="mt-2 text-sm text-red-600">{overrideError}</p>}
             <div className="mt-4 flex justify-end gap-2">

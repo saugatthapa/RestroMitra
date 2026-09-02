@@ -526,6 +526,13 @@
       "when": 1788351109341,
       "tag": "0074_loyalty_transactions_reference_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1788351318397,
+      "tag": "0075_entitlement_override_expiry",
+      "breakpoints": true
     }
   ]
 }

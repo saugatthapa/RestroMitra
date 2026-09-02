@@ -1,0 +1,1 @@
+ALTER TABLE "entitlement_overrides" ADD COLUMN "expires_at" timestamp with time zone;

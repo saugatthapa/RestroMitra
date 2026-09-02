@@ -75,6 +75,7 @@ export async function POST(
     const parsed = await parseJsonBody(request, setEntitlementOverrideSchema);
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
+    const expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
 
     const override = await setEntitlementOverride({
       restaurantId,
@@ -82,6 +83,7 @@ export async function POST(
       granted: data.granted,
       reason: data.reason,
       createdByUserId: session.user.id,
+      expiresAt,
     });
 
     await recordAuditLog({
@@ -91,7 +93,12 @@ export async function POST(
       resourceType: "entitlement_override",
       resourceId: override.id,
       ipAddress: getClientIp(request),
-      metadata: { featureKey: data.featureKey, granted: data.granted, reason: data.reason },
+      metadata: {
+        featureKey: data.featureKey,
+        granted: data.granted,
+        reason: data.reason,
+        expiresAt: expiresAt ? expiresAt.toISOString() : null,
+      },
     });
 
     return NextResponse.json({ override }, { status: 201 });

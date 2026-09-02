@@ -4153,7 +4153,8 @@ export const featureFlags = pgTable("feature_flags", {
  * — same "state lives here, history lives in audit_logs" convention as
  * restaurants.isActive (see tenant-suspension) rather than an append-only
  * table, since "what's the override right now" is the only question the
- * entitlement engine ever needs answered at request time.
+ * entitlement engine ever needs answered at request time. Optionally
+ * time-boxed via expiresAt — see that column's own comment.
  */
 export const entitlementOverrides = pgTable(
   "entitlement_overrides",
@@ -4171,6 +4172,18 @@ export const entitlementOverrides = pgTable(
     createdByUserId: uuid("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
+    // Null = no expiry — a permanent override, until manually revoked (the
+    // only behavior this table had before this column existed, preserved
+    // as the default). Non-null = a temporary grant/revoke that should
+    // stop applying once this passes (e.g. "unlock advanced AI until Dec
+    // 31"). Nothing sweeps or deletes a row once its expiresAt passes —
+    // resolveFeatureAccess() (entitlements.ts) treats an expired override
+    // as absent at resolution time, same "computed, not stored-state"
+    // convention as coupons.expiresAt (coupons.ts) and platform_
+    // announcements' startsAt/endsAt (isAnnouncementCurrentlyShowable) —
+    // so the row is left in place as a record of what was granted and
+    // when, and a platform admin can still see/re-extend it later.
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
