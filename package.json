@@ -56,5 +56,10 @@
     "tsx": "^4.23.12",
     "typescript": "^5",
     "vitest": "4.1.11"
+  },
+  "overrides": {
+    "s3rver": {
+      "busboy": "^1.6.0"
+    }
   }
 }
