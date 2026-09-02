@@ -1,0 +1,2 @@
+ALTER TABLE "menu_items" ADD CONSTRAINT "menu_items_tax_rate_basis_points_le_10000" CHECK ("menu_items"."tax_rate_basis_points" <= 10000);--> statement-breakpoint
+ALTER TABLE "orders" ADD CONSTRAINT "orders_service_charge_basis_points_le_10000" CHECK ("orders"."service_charge_basis_points" <= 10000);

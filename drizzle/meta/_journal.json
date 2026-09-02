@@ -512,6 +512,13 @@
       "when": 1788333588401,
       "tag": "0072_support_tickets",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1788350897558,
+      "tag": "0073_cap_tax_and_service_charge_basis_points",
+      "breakpoints": true
     }
   ]
 }

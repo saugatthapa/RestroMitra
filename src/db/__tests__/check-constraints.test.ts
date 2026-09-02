@@ -127,6 +127,69 @@ describe.skipIf(!hasDb)("CHECK constraints (integration)", () => {
     ).rejects.toMatchObject({ cause: { code: "23514" } });
   });
 
+  it("rejects a tax rate above 100% (menu_items_tax_rate_basis_points_le_10000)", async () => {
+    const [category] = await db
+      .insert(schema.categories)
+      .values({ restaurantId, name: "TEST Category" })
+      .returning({ id: schema.categories.id });
+
+    await expect(
+      db.insert(schema.menuItems).values({
+        restaurantId,
+        categoryId: category.id,
+        name: "TEST Item Bad Tax Rate",
+        basePriceInPaisa: 100_00,
+        taxRateBasisPoints: 10001, // invalid — over 100%
+      }),
+    ).rejects.toMatchObject({ cause: { code: "23514" } });
+
+    // Boundary: exactly 100% (10000 bps) is valid.
+    const [validItem] = await db
+      .insert(schema.menuItems)
+      .values({
+        restaurantId,
+        categoryId: category.id,
+        name: "TEST Item Boundary Tax Rate",
+        basePriceInPaisa: 100_00,
+        taxRateBasisPoints: 10000,
+      })
+      .returning();
+    expect(validItem.taxRateBasisPoints).toBe(10000);
+  });
+
+  it("rejects a service charge rate above 100% (orders_service_charge_basis_points_le_10000)", async () => {
+    await expect(
+      db.insert(schema.orders).values({
+        restaurantId,
+        branchId,
+        orderNumber: `TEST-CHK-${Math.random().toString(36).slice(2, 10)}`,
+        source: "pos",
+        status: "pending",
+        subtotalInPaisa: 100_00,
+        taxInPaisa: 0,
+        totalInPaisa: 100_00,
+        serviceChargeBasisPoints: 10001, // invalid — over 100%
+      }),
+    ).rejects.toMatchObject({ cause: { code: "23514" } });
+
+    // Boundary: exactly 100% (10000 bps) is valid.
+    const [validOrder] = await db
+      .insert(schema.orders)
+      .values({
+        restaurantId,
+        branchId,
+        orderNumber: `TEST-CHK-${Math.random().toString(36).slice(2, 10)}`,
+        source: "pos",
+        status: "pending",
+        subtotalInPaisa: 100_00,
+        taxInPaisa: 0,
+        totalInPaisa: 100_00,
+        serviceChargeBasisPoints: 10000,
+      })
+      .returning();
+    expect(validOrder.serviceChargeBasisPoints).toBe(10000);
+  });
+
   it("still allows every ordinary, valid insert unaffected by these constraints", async () => {
     // Guards against an overly-strict constraint silently breaking normal
     // operation — the exact failure mode the audit's own "do not add

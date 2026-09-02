@@ -724,6 +724,11 @@ export const menuItems = pgTable(
     // anything that writes to this table outside that path, matching the
     // convention already used elsewhere (e.g. purchases_total_non_negative).
     check("menu_items_base_price_non_negative", sql`${table.basePriceInPaisa} >= 0`),
+    // P2 gap audit — a tax rate is a percentage; anything above 10000 basis
+    // points (100%) is a logical/business error, not a valid rate. Every
+    // other amount/quantity column in this schema already has a floor —
+    // this is this column's missing ceiling.
+    check("menu_items_tax_rate_basis_points_le_10000", sql`${table.taxRateBasisPoints} <= 10000`),
   ],
 );
 
@@ -1119,6 +1124,14 @@ export const orders = pgTable(
       ${table.discountInPaisa} >= 0 AND ${table.serviceChargeInPaisa} >= 0 AND
       ${table.totalInPaisa} >= 0
     `),
+    // P2 gap audit — a service charge rate is a percentage; anything above
+    // 10000 basis points (100%) is a logical/business error, not a valid
+    // rate. Every other amount/quantity column in this schema already has
+    // a floor — this is this column's missing ceiling.
+    check(
+      "orders_service_charge_basis_points_le_10000",
+      sql`${table.serviceChargeBasisPoints} <= 10000`,
+    ),
     // Defense-in-depth backstop (gap-audit P1) — the exact orders/
     // branches mismatch called out in RESTROMITRA_MASTER_GAP_AUDIT.md.
     // See branches' branches_id_restaurant_id_unique comment above.
