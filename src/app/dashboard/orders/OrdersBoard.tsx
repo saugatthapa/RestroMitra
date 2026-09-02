@@ -292,7 +292,7 @@ export function OrdersBoard({
   }
 
   if (loading) {
-    return <p className="text-sm text-neutral-500">Loading orders…</p>;
+    return <p className="text-sm text-ink-muted">Loading orders…</p>;
   }
 
   const completedTodayCount = orders.filter((o) => o.status === "completed").length;
@@ -300,7 +300,7 @@ export function OrdersBoard({
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
 
       {canExport && (
         <div className="flex justify-end">
@@ -311,22 +311,22 @@ export function OrdersBoard({
       )}
 
       {!isOnline && (
-        <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+        <div className="flex items-center gap-2 rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-medium text-amber-300">
           <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
           You&apos;re offline — status changes will be saved on this device and applied
           automatically once you&apos;re back online.
         </div>
       )}
       {queuedUpdates.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/15 p-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold text-amber-800">
+            <p className="text-xs font-semibold text-amber-300">
               {queuedUpdates.length} change{queuedUpdates.length === 1 ? "" : "s"} waiting to sync
             </p>
             <button
               onClick={runSync}
               disabled={!isOnline || syncing}
-              className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 disabled:opacity-50"
+              className="rounded-lg border border-amber-500/40 bg-surface-2 px-2.5 py-1 text-xs font-medium text-amber-300 disabled:opacity-50"
             >
               {syncing ? "Syncing…" : "Sync now"}
             </button>
@@ -335,19 +335,19 @@ export function OrdersBoard({
             {queuedUpdates.map((u) => (
               <li
                 key={u.clientRequestId}
-                className="flex items-center justify-between gap-2 text-xs text-amber-700"
+                className="flex items-center justify-between gap-2 text-xs text-amber-400"
               >
                 <span>
                   #{u.orderNumber} → {ORDER_STATUS_LABELS[u.toStatus]}
                 </span>
                 <span className="flex items-center gap-2">
-                  <span className={u.status === "error" ? "font-medium text-red-600" : ""}>
+                  <span className={u.status === "error" ? "font-medium text-red-400" : ""}>
                     {u.status === "error" ? "Sync failed — will retry" : "Waiting"}
                   </span>
                   {u.status === "error" && (
                     <button
                       onClick={() => discardQueuedUpdate(u)}
-                      className="rounded border border-red-300 px-1.5 py-0.5 font-medium text-red-700 hover:bg-red-50"
+                      className="rounded border border-red-500/40 px-1.5 py-0.5 font-medium text-red-400 hover:bg-red-500/15"
                     >
                       Discard
                     </button>
@@ -359,7 +359,7 @@ export function OrdersBoard({
         </div>
       )}
       {queuedMessage && (
-        <p className="rounded-lg bg-green-50 px-3 py-2 text-xs font-medium text-green-700">
+        <p className="rounded-lg bg-green-500/15 px-3 py-2 text-xs font-medium text-green-400">
           {queuedMessage}
         </p>
       )}
@@ -370,19 +370,19 @@ export function OrdersBoard({
             .filter((o) => o.status === status)
             .sort((a, b) => new Date(a.placedAt).getTime() - new Date(b.placedAt).getTime());
           return (
-            <div key={status} className="rounded-2xl border border-neutral-200 bg-white p-3">
+            <div key={status} className="rounded-2xl border border-hairline bg-surface-2 p-3">
               <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-semibold text-neutral-900">
+                <p className="text-sm font-semibold text-ink">
                   {ORDER_STATUS_LABELS[status]}
                 </p>
-                <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500">
+                <span className="rounded-full bg-surface-1 px-2 py-0.5 text-xs text-ink-muted">
                   {columnOrders.length}
                 </span>
               </div>
 
               <div className="space-y-2">
                 {columnOrders.length === 0 && (
-                  <p className="text-xs text-neutral-400">Nothing here.</p>
+                  <p className="text-xs text-ink-faint">Nothing here.</p>
                 )}
                 {columnOrders.map((order) => {
                   const forward = nextForwardStatus(order.status);
@@ -392,22 +392,22 @@ export function OrdersBoard({
                   return (
                     <div
                       key={order.id}
-                      className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-xs"
+                      className="rounded-xl border border-hairline bg-surface-1 p-3 text-xs"
                     >
                       <div className="mb-1 flex items-center justify-between">
                         <Link
                           href={`/dashboard/orders/${order.id}`}
-                          className="font-semibold text-neutral-900 hover:text-orange-700 hover:underline"
+                          className="font-semibold text-ink hover:text-orange-300 hover:underline"
                         >
                           #{order.orderNumber}
                         </Link>
-                        <span className="text-neutral-400">{elapsedSince(order.placedAt)}</span>
+                        <span className="text-ink-faint">{elapsedSince(order.placedAt)}</span>
                       </div>
-                      <p className="text-neutral-500">
+                      <p className="text-ink-muted">
                         {order.table ? order.table.name : "Takeaway"}
                         {order.customerName ? ` · ${order.customerName}` : ""}
                       </p>
-                      <ul className="mt-1 space-y-0.5 text-neutral-600">
+                      <ul className="mt-1 space-y-0.5 text-ink-secondary">
                         {order.items.map((item) => (
                           <li key={item.id}>
                             {item.quantity}× {item.menuItemNameSnapshot}
@@ -416,11 +416,11 @@ export function OrdersBoard({
                         ))}
                       </ul>
                       <div className="mt-1 flex items-center gap-2">
-                        <p className="font-semibold text-neutral-900">
+                        <p className="font-semibold text-ink">
                           {formatNPR(order.totalInPaisa)}
                         </p>
                         {isUnpaid && (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                          <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
                             {PAYMENT_STATUS_LABELS[order.paymentStatus]}
                           </span>
                         )}
@@ -450,7 +450,7 @@ export function OrdersBoard({
                             <button
                               disabled={busy}
                               onClick={() => handleCancel(order)}
-                              className="rounded-full border border-neutral-300 px-2.5 py-1 text-[11px] font-medium text-neutral-500 hover:text-red-600 disabled:opacity-50"
+                              className="rounded-full border border-hairline-strong px-2.5 py-1 text-[11px] font-medium text-ink-muted hover:text-red-400 disabled:opacity-50"
                             >
                               Cancel
                             </button>
@@ -466,7 +466,7 @@ export function OrdersBoard({
         })}
       </div>
 
-      <p className="text-xs text-neutral-400">
+      <p className="text-xs text-ink-faint">
         {completedTodayCount} completed · {cancelledCount} cancelled (last 48 hours)
       </p>
 

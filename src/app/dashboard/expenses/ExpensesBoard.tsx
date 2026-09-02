@@ -45,10 +45,10 @@ function todayIso() {
 }
 
 const STATUS_TONE: Record<ExpenseStatus, string> = {
-  pending_approval: "bg-amber-50 text-amber-700",
-  approved: "bg-blue-50 text-blue-700",
-  rejected: "bg-red-50 text-red-700",
-  paid: "bg-emerald-50 text-emerald-700",
+  pending_approval: "bg-amber-500/15 text-amber-400",
+  approved: "bg-blue-500/15 text-blue-400",
+  rejected: "bg-red-500/15 text-red-400",
+  paid: "bg-emerald-500/15 text-emerald-400",
 };
 
 function StatusBadge({ status }: { status: ExpenseStatus }) {
@@ -138,7 +138,7 @@ export function ExpensesBoard({
 
   if (!canCreate && !canManage && !canApprove && !canPay) {
     return (
-      <p className="text-sm text-neutral-400">
+      <p className="text-sm text-ink-faint">
         Your role doesn&apos;t have access to expense tracking.
       </p>
     );
@@ -146,11 +146,11 @@ export function ExpensesBoard({
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
 
-      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-neutral-200 bg-white p-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-hairline bg-surface-2 p-4">
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Category</span>
+          <span className="mb-1 block text-ink-secondary">Category</span>
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
@@ -165,7 +165,7 @@ export function ExpensesBoard({
           </select>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Status</span>
+          <span className="mb-1 block text-ink-secondary">Status</span>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as ExpenseStatus | "")}
@@ -180,17 +180,17 @@ export function ExpensesBoard({
           </select>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">From</span>
+          <span className="mb-1 block text-ink-secondary">From</span>
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input !w-auto" />
           {dateSystem === "BS" && from && (
-            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(from)}</span>
+            <span className="mt-1 block text-xs text-ink-faint">{formatBsHint(from)}</span>
           )}
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">To</span>
+          <span className="mb-1 block text-ink-secondary">To</span>
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input !w-auto" />
           {dateSystem === "BS" && to && (
-            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(to)}</span>
+            <span className="mt-1 block text-xs text-ink-faint">{formatBsHint(to)}</span>
           )}
         </label>
         <div className="ml-auto flex gap-2">
@@ -225,18 +225,18 @@ export function ExpensesBoard({
       )}
 
       <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
-        <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-          <p className="text-xs text-neutral-500">Total paid (filtered)</p>
-          <p className="text-2xl font-semibold text-neutral-900">{formatRupees(total)}</p>
+        <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
+          <p className="text-xs text-ink-muted">Total paid (filtered)</p>
+          <p className="text-2xl font-semibold text-ink">{formatRupees(total)}</p>
           {pendingCount > 0 && (canApprove || canManage) && (
-            <p className="mt-1 text-xs font-medium text-amber-700">
+            <p className="mt-1 text-xs font-medium text-amber-400">
               {pendingCount} awaiting approval
             </p>
           )}
           {totalsByCategory.length > 0 && (
             <ul className="mt-3 space-y-1 text-sm">
               {totalsByCategory.map(([cat, amount]) => (
-                <li key={cat} className="flex items-center justify-between text-neutral-600">
+                <li key={cat} className="flex items-center justify-between text-ink-secondary">
                   <span>{cat}</span>
                   <span>{formatRupees(amount)}</span>
                 </li>
@@ -247,11 +247,11 @@ export function ExpensesBoard({
       </div>
 
       {loading ? (
-        <p className="text-sm text-neutral-500">Loading expenses…</p>
+        <p className="text-sm text-ink-muted">Loading expenses…</p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+        <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
           <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+            <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
               <tr>
                 <th className="px-3 py-2">Date</th>
                 <th className="px-3 py-2">Category</th>
@@ -264,7 +264,7 @@ export function ExpensesBoard({
             <tbody>
               {expenses.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-neutral-400">
+                  <td colSpan={6} className="px-3 py-6 text-center text-ink-faint">
                     No expenses recorded for this filter.
                   </td>
                 </tr>
@@ -372,27 +372,27 @@ function ExpenseRow({
 
   return (
     <>
-      <tr className={`border-t border-neutral-100 ${expense.isVoided ? "opacity-50" : ""}`}>
-        <td className="px-3 py-2 text-neutral-500">
+      <tr className={`border-t border-hairline/60 ${expense.isVoided ? "opacity-50" : ""}`}>
+        <td className="px-3 py-2 text-ink-muted">
           {formatDate(`${expense.expenseDate}T00:00:00`, dateSystem)}
         </td>
         <td className="px-3 py-2">{expense.categoryName}</td>
-        <td className="px-3 py-2 text-neutral-900">
+        <td className="px-3 py-2 text-ink">
           {expense.description}
           {expense.branchName && (
-            <span className="ml-2 text-xs text-neutral-400">· {expense.branchName}</span>
+            <span className="ml-2 text-xs text-ink-faint">· {expense.branchName}</span>
           )}
-          {expense.isVoided && <span className="ml-2 text-xs text-neutral-400">(voided)</span>}
-          {expense.note && <p className="text-xs text-neutral-400">{expense.note}</p>}
+          {expense.isVoided && <span className="ml-2 text-xs text-ink-faint">(voided)</span>}
+          {expense.note && <p className="text-xs text-ink-faint">{expense.note}</p>}
           {expense.status === "rejected" && expense.rejectionReason && (
-            <p className="text-xs text-red-600">Rejected: {expense.rejectionReason}</p>
+            <p className="text-xs text-red-400">Rejected: {expense.rejectionReason}</p>
           )}
           {expense.status === "paid" && expense.paymentMethod && (
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-ink-faint">
               Paid via {EXPENSE_PAYMENT_METHOD_LABELS[expense.paymentMethod]}
             </p>
           )}
-          {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+          {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
         </td>
         <td className="px-3 py-2 font-medium">{formatRupees(expense.amountInPaisa)}</td>
         <td className="px-3 py-2">
@@ -402,21 +402,21 @@ function ExpenseRow({
           <div className="flex flex-wrap justify-end gap-2">
             {expense.status === "pending_approval" && canApprove && (
               <>
-                <button disabled={busy} onClick={approve} className="text-xs font-medium text-emerald-700 hover:underline">
+                <button disabled={busy} onClick={approve} className="text-xs font-medium text-emerald-400 hover:underline">
                   Approve
                 </button>
-                <button disabled={busy} onClick={() => setShowReject((v) => !v)} className="text-xs font-medium text-red-700 hover:underline">
+                <button disabled={busy} onClick={() => setShowReject((v) => !v)} className="text-xs font-medium text-red-400 hover:underline">
                   Reject
                 </button>
               </>
             )}
             {expense.status === "approved" && canPay && (
-              <button disabled={busy} onClick={() => setShowPay((v) => !v)} className="text-xs font-medium text-emerald-700 hover:underline">
+              <button disabled={busy} onClick={() => setShowPay((v) => !v)} className="text-xs font-medium text-emerald-400 hover:underline">
                 Mark paid
               </button>
             )}
             {canManage && (
-              <button onClick={onEdit} className="text-xs font-medium text-orange-700 hover:underline">
+              <button onClick={onEdit} className="text-xs font-medium text-orange-400 hover:underline">
                 Edit
               </button>
             )}
@@ -424,7 +424,7 @@ function ExpenseRow({
         </td>
       </tr>
       {showReject && (
-        <tr className="border-t border-neutral-100 bg-red-50/40">
+        <tr className="border-t border-hairline/60 bg-red-500/15">
           <td colSpan={6} className="px-3 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <input
@@ -444,7 +444,7 @@ function ExpenseRow({
         </tr>
       )}
       {showPay && (
-        <tr className="border-t border-neutral-100 bg-emerald-50/40">
+        <tr className="border-t border-hairline/60 bg-emerald-500/15">
           <td colSpan={6} className="px-3 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <select value={payMethod} onChange={(e) => setPayMethod(e.target.value as ExpensePaymentMethod)} className="input !w-auto">
@@ -461,7 +461,7 @@ function ExpenseRow({
                 Cancel
               </button>
             </div>
-            <p className="mt-2 text-xs text-neutral-500">
+            <p className="mt-2 text-xs text-ink-muted">
               Only confirm this once the money has actually gone out — there&apos;s no automatic
               verification for eSewa/Khalti/bank transfers sent from the dashboard, the same as cash.
             </p>
@@ -524,18 +524,18 @@ function AddExpenseForm({
 
   if (categories.length === 0) {
     return (
-      <p className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm text-neutral-500">
+      <p className="rounded-2xl border border-hairline bg-surface-2 p-4 text-sm text-ink-muted">
         No expense categories yet — add one under &quot;Categories&quot; first.
       </p>
     );
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+    <form onSubmit={submit} className="rounded-2xl border border-hairline bg-surface-2 p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Category</span>
+          <span className="mb-1 block text-ink-secondary">Category</span>
           <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="input">
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
@@ -545,7 +545,7 @@ function AddExpenseForm({
           </select>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Amount (Rs)</span>
+          <span className="mb-1 block text-ink-secondary">Amount (Rs)</span>
           <input
             required
             type="number"
@@ -557,7 +557,7 @@ function AddExpenseForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Date</span>
+          <span className="mb-1 block text-ink-secondary">Date</span>
           <input
             required
             type="date"
@@ -566,11 +566,11 @@ function AddExpenseForm({
             className="input"
           />
           {dateSystem === "BS" && (
-            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(expenseDate)}</span>
+            <span className="mt-1 block text-xs text-ink-faint">{formatBsHint(expenseDate)}</span>
           )}
         </label>
         <label className="text-sm sm:col-span-2">
-          <span className="mb-1 block text-neutral-600">Description</span>
+          <span className="mb-1 block text-ink-secondary">Description</span>
           <input
             required
             value={description}
@@ -581,7 +581,7 @@ function AddExpenseForm({
         </label>
         {branches.length > 1 && (
           <label className="text-sm">
-            <span className="mb-1 block text-neutral-600">Branch (optional)</span>
+            <span className="mb-1 block text-ink-secondary">Branch (optional)</span>
             <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="input">
               <option value="">All branches</option>
               {branches.map((b) => (
@@ -593,14 +593,14 @@ function AddExpenseForm({
           </label>
         )}
         <label className="text-sm sm:col-span-2">
-          <span className="mb-1 block text-neutral-600">Note (optional)</span>
+          <span className="mb-1 block text-ink-secondary">Note (optional)</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
         </label>
       </div>
 
       {canPay && (
-        <div className="mt-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3">
-          <label className="flex items-center gap-2 text-sm text-neutral-700">
+        <div className="mt-3 rounded-xl border border-hairline bg-surface-1 p-3">
+          <label className="flex items-center gap-2 text-sm text-ink-secondary">
             <input
               type="checkbox"
               checked={markPaidNow}
@@ -610,7 +610,7 @@ function AddExpenseForm({
           </label>
           {markPaidNow && (
             <label className="mt-2 block text-sm">
-              <span className="mb-1 block text-neutral-600">Payment method</span>
+              <span className="mb-1 block text-ink-secondary">Payment method</span>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value as ExpensePaymentMethod)}
@@ -625,14 +625,14 @@ function AddExpenseForm({
             </label>
           )}
           {!markPaidNow && (
-            <p className="mt-1 text-xs text-neutral-500">
+            <p className="mt-1 text-xs text-ink-muted">
               Left unchecked, this is submitted as approved and awaiting payment.
             </p>
           )}
         </div>
       )}
       {!canPay && (
-        <p className="mt-3 text-xs text-neutral-500">
+        <p className="mt-3 text-xs text-ink-muted">
           This will be submitted for approval — a manager, accountant, or the owner will review it.
         </p>
       )}
@@ -705,11 +705,11 @@ function EditExpenseRow({
   }
 
   return (
-    <tr className="border-t border-neutral-100 bg-neutral-50">
+    <tr className="border-t border-hairline/60 bg-surface-1">
       <td colSpan={6} className="px-3 py-3">
-        {error && <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="mb-2 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
         {locked && (
-          <p className="mb-2 text-xs text-amber-700">
+          <p className="mb-2 text-xs text-amber-400">
             This expense is already paid — the amount and category are locked. Void it and record a
             new one if either was wrong.
           </p>
@@ -744,7 +744,7 @@ function EditExpenseRow({
               className="input"
             />
             {dateSystem === "BS" && (
-              <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(expenseDate)}</span>
+              <span className="mt-1 block text-xs text-ink-faint">{formatBsHint(expenseDate)}</span>
             )}
           </div>
           <input
@@ -780,7 +780,7 @@ function EditExpenseRow({
             <button
               disabled={saving}
               onClick={toggleVoid}
-              className="ml-auto text-xs font-medium text-red-700 hover:underline"
+              className="ml-auto text-xs font-medium text-red-400 hover:underline"
             >
               {expense.isVoided ? "Un-void this entry" : "Void this entry"}
             </button>
@@ -829,8 +829,8 @@ function CategoriesPanel({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+    <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
       <form onSubmit={add} className="mb-3 flex gap-2">
         <input
           required
@@ -850,15 +850,15 @@ function CategoriesPanel({
             onClick={() => toggleActive(c)}
             className={`rounded-full border px-3 py-1 text-xs ${
               c.isActive
-                ? "border-neutral-200 text-neutral-700"
-                : "border-neutral-200 bg-neutral-100 text-neutral-400 line-through"
+                ? "border-hairline text-ink-secondary"
+                : "border-hairline bg-surface-1 text-ink-faint line-through"
             }`}
           >
             {c.name}
           </button>
         ))}
       </div>
-      <p className="mt-2 text-xs text-neutral-400">
+      <p className="mt-2 text-xs text-ink-faint">
         Click a category to activate/deactivate it. A category used by an existing expense can&apos;t
         be deleted, only deactivated (it still shows on old expenses, just hidden from new ones).
       </p>

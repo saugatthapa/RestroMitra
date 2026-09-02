@@ -19,7 +19,7 @@ export function MobileNav({ links }: { links: NavLink[] }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label="Toggle menu"
-        className="flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 text-neutral-700 transition-colors duration-200 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600"
+        className="flex h-9 w-9 items-center justify-center rounded-lg border border-hairline text-ink-secondary transition-colors duration-200 hover:border-orange-500/40 hover:bg-orange-500/15 hover:text-orange-400"
       >
         <svg viewBox="0 0 20 20" fill="none" className="h-4.5 w-4.5">
           {open ? (
@@ -36,19 +36,19 @@ export function MobileNav({ links }: { links: NavLink[] }) {
       </button>
 
       {open && (
-        <div className="absolute inset-x-0 top-full z-40 border-b border-neutral-200 bg-white/95 px-4 pb-4 pt-2 shadow-lg backdrop-blur">
+        <div className="absolute inset-x-0 top-full z-40 border-b border-hairline bg-surface-2/95 px-4 pb-4 pt-2 shadow-lg backdrop-blur">
           <nav className="flex flex-col gap-1">
             {links.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
-                className="rounded-lg px-3 py-2.5 text-sm font-medium text-neutral-700 transition-all duration-200 hover:translate-x-1 hover:bg-orange-50 hover:text-orange-700"
+                className="rounded-lg px-3 py-2.5 text-sm font-medium text-ink-secondary transition-all duration-200 hover:translate-x-1 hover:bg-orange-500/15 hover:text-orange-300"
               >
                 {link.label}
               </a>
             ))}
-            <div className="mt-2 flex flex-col gap-2 border-t border-neutral-100 pt-3">
+            <div className="mt-2 flex flex-col gap-2 border-t border-hairline/60 pt-3">
               <Link
                 href="/login"
                 onClick={() => setOpen(false)}

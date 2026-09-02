@@ -174,10 +174,10 @@ export default async function DashboardLayout({
         />
       )}
       {showOwnerMfaWarning && (
-        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-800 md:px-6">
+        <div className="border-b border-amber-500/30 bg-amber-500/15 px-4 py-2 text-center text-xs font-medium text-amber-300 md:px-6">
           Two-factor authentication isn&apos;t enabled on your account yet. It&apos;s
           strongly recommended for restaurant owners.{" "}
-          <Link href="/dashboard/account" className="underline hover:text-amber-900">
+          <Link href="/dashboard/account" className="underline hover:text-amber-200">
             Enable it now
           </Link>{" "}
           — sensitive actions like refunds, payroll, billing changes, staff role

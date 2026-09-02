@@ -13,9 +13,9 @@ type AtRiskTenant = {
 };
 
 const BAND_CLASSES: Record<HealthBand, string> = {
-  healthy: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  watch: "bg-amber-50 text-amber-700 border-amber-200",
-  at_risk: "bg-red-50 text-red-700 border-red-200",
+  healthy: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  watch: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  at_risk: "bg-red-500/15 text-red-400 border-red-500/30",
 };
 
 /**
@@ -61,35 +61,35 @@ export function AtRiskTenants() {
   }, []);
 
   if (forbidden) return null;
-  if (error) return <p className="mb-6 text-sm text-red-600">{error}</p>;
+  if (error) return <p className="mb-6 text-sm text-red-400">{error}</p>;
   if (!tenants) return null;
 
   return (
-    <div className="mb-8 rounded-xl border border-red-200 bg-white p-4">
+    <div className="mb-8 rounded-xl border border-red-500/30 bg-surface-2 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-neutral-900">At-risk tenants</h2>
-        <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
+        <h2 className="text-sm font-semibold text-ink">At-risk tenants</h2>
+        <span className="rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-semibold text-red-300">
           {tenants.length}
         </span>
       </div>
       {tenants.length === 0 ? (
-        <p className="text-sm text-neutral-400">No tenants currently at risk.</p>
+        <p className="text-sm text-ink-faint">No tenants currently at risk.</p>
       ) : (
         <div className="space-y-2">
           {tenants.map((t) => (
             <Link
               key={t.restaurantId}
               href={`/admin/restaurants/${t.restaurantId}`}
-              className="flex items-center justify-between rounded-lg border border-neutral-100 px-3 py-2 text-sm hover:bg-neutral-50"
+              className="flex items-center justify-between rounded-lg border border-hairline/60 px-3 py-2 text-sm hover:bg-surface-1"
             >
               <div>
-                <p className="font-medium text-neutral-900">{t.restaurantName}</p>
-                <p className="text-xs text-neutral-400">
+                <p className="font-medium text-ink">{t.restaurantName}</p>
+                <p className="text-xs text-ink-faint">
                   {t.healthScore.reasons.map((r) => r.label).join(" · ") || "No specific reasons"}
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold tabular-nums text-neutral-900">{t.healthScore.score}</span>
+                <span className="text-sm font-semibold tabular-nums text-ink">{t.healthScore.score}</span>
                 <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${BAND_CLASSES[t.healthScore.band]}`}>
                   {HEALTH_BAND_LABELS[t.healthScore.band]}
                 </span>

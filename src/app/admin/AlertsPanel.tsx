@@ -66,39 +66,39 @@ export function AlertsPanel() {
   }, []);
 
   if (forbidden) return null;
-  if (error) return <p className="mb-6 text-sm text-red-600">{error}</p>;
+  if (error) return <p className="mb-6 text-sm text-red-400">{error}</p>;
   if (!data) return null;
 
   const totalAlerts = data.aiFailures.length + data.systemErrors.length;
   if (totalAlerts === 0) return null;
 
   return (
-    <div className="mb-8 rounded-xl border border-amber-200 bg-amber-50 p-4">
+    <div className="mb-8 rounded-xl border border-amber-500/30 bg-amber-500/15 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-amber-900">Recent alerts</h2>
-        <span className="rounded-full bg-amber-200 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+        <h2 className="text-sm font-semibold text-amber-300">Recent alerts</h2>
+        <span className="rounded-full bg-amber-200 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
           {totalAlerts}
         </span>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-800">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-300">
             AI provider failures
           </h3>
           {data.aiFailures.length === 0 ? (
-            <p className="text-xs text-amber-700">No recent AI provider failures.</p>
+            <p className="text-xs text-amber-400">No recent AI provider failures.</p>
           ) : (
             <div className="max-h-56 space-y-2 overflow-y-auto">
               {data.aiFailures.map((f) => (
-                <div key={f.id} className="rounded-lg bg-white/70 px-3 py-2 text-xs">
-                  <p className="font-medium text-neutral-800">
+                <div key={f.id} className="rounded-lg bg-surface-2/70 px-3 py-2 text-xs">
+                  <p className="font-medium text-ink">
                     {f.provider} ({f.model}){" "}
-                    <Link href={`/admin/restaurants/${f.restaurantId}`} className="text-neutral-500 hover:underline">
+                    <Link href={`/admin/restaurants/${f.restaurantId}`} className="text-ink-muted hover:underline">
                       · {f.restaurantName}
                     </Link>
                   </p>
-                  <p className="text-neutral-600">{f.errorMessage ?? "No error message recorded."}</p>
-                  <p className="text-neutral-400">{formatDateTime(f.createdAt)}</p>
+                  <p className="text-ink-secondary">{f.errorMessage ?? "No error message recorded."}</p>
+                  <p className="text-ink-faint">{formatDateTime(f.createdAt)}</p>
                 </div>
               ))}
             </div>
@@ -106,17 +106,17 @@ export function AlertsPanel() {
         </div>
 
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-800">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-300">
             System errors
           </h3>
           {data.systemErrors.length === 0 ? (
-            <p className="text-xs text-amber-700">No recent unhandled system errors.</p>
+            <p className="text-xs text-amber-400">No recent unhandled system errors.</p>
           ) : (
             <div className="max-h-56 space-y-2 overflow-y-auto">
               {data.systemErrors.map((e, i) => (
-                <div key={i} className="rounded-lg bg-white/70 px-3 py-2 text-xs">
-                  <p className="text-neutral-700">{e.message}</p>
-                  <p className="text-neutral-400">{formatDateTime(e.createdAt)}</p>
+                <div key={i} className="rounded-lg bg-surface-2/70 px-3 py-2 text-xs">
+                  <p className="text-ink-secondary">{e.message}</p>
+                  <p className="text-ink-faint">{formatDateTime(e.createdAt)}</p>
                 </div>
               ))}
             </div>

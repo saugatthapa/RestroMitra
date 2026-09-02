@@ -25,9 +25,9 @@ export function ConfirmModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
-        <p className="text-base font-semibold text-neutral-900">{title}</p>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-600">{message}</p>
+      <div className="w-full max-w-sm rounded-2xl bg-surface-2 p-5 shadow-xl">
+        <p className="text-base font-semibold text-ink">{title}</p>
+        <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{message}</p>
         <div className="mt-5 flex gap-2">
           <button onClick={onCancel} disabled={busy} className="btn-secondary flex-1 disabled:opacity-60">
             {cancelLabel}

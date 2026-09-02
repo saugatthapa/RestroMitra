@@ -25,12 +25,12 @@ export function PricingCards({ plans }: { plans: Plan[] }) {
 
   return (
     <div>
-      <div className="mx-auto flex w-fit items-center gap-1 rounded-full border border-neutral-200 bg-neutral-100 p-1 text-sm font-medium text-neutral-500">
+      <div className="mx-auto flex w-fit items-center gap-1 rounded-full border border-hairline bg-surface-1 p-1 text-sm font-medium text-ink-muted">
         <button
           type="button"
           onClick={() => setCycle("monthly")}
           className={`rounded-full px-4 py-1.5 transition ${
-            cycle === "monthly" ? "bg-white text-neutral-900 shadow-sm" : "hover:text-neutral-700"
+            cycle === "monthly" ? "bg-surface-2 text-ink shadow-sm" : "hover:text-ink-secondary"
           }`}
         >
           Monthly
@@ -39,11 +39,11 @@ export function PricingCards({ plans }: { plans: Plan[] }) {
           type="button"
           onClick={() => setCycle("yearly")}
           className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 transition ${
-            cycle === "yearly" ? "bg-white text-neutral-900 shadow-sm" : "hover:text-neutral-700"
+            cycle === "yearly" ? "bg-surface-2 text-ink shadow-sm" : "hover:text-ink-secondary"
           }`}
         >
           Yearly
-          <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+          <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
             2 months free
           </span>
         </button>
@@ -55,8 +55,8 @@ export function PricingCards({ plans }: { plans: Plan[] }) {
             key={plan.key}
             className={`relative flex flex-col rounded-2xl border p-6 transition duration-300 ${
               plan.highlight
-                ? "border-orange-300 bg-orange-50/40 shadow-lg shadow-orange-900/10 sm:-translate-y-2"
-                : "border-neutral-200 bg-white hover:-translate-y-1 hover:border-orange-200 hover:shadow-lg hover:shadow-orange-900/5"
+                ? "border-orange-500/40 bg-orange-500/15 shadow-lg shadow-orange-900/10 sm:-translate-y-2"
+                : "border-hairline bg-surface-2 hover:-translate-y-1 hover:border-orange-500/30 hover:shadow-lg hover:shadow-orange-900/5"
             }`}
           >
             {plan.highlight && (
@@ -64,16 +64,16 @@ export function PricingCards({ plans }: { plans: Plan[] }) {
                 Most popular
               </span>
             )}
-            <h3 className="text-lg font-bold text-neutral-900">{plan.name}</h3>
-            <p className="mt-1 text-sm text-neutral-500">{plan.tagline}</p>
+            <h3 className="text-lg font-bold text-ink">{plan.name}</h3>
+            <p className="mt-1 text-sm text-ink-muted">{plan.tagline}</p>
 
             <p className="mt-5">
-              <span className="text-4xl font-extrabold tracking-tight text-neutral-900">
+              <span className="text-4xl font-extrabold tracking-tight text-ink">
                 {formatRupees(cycle === "monthly" ? plan.priceInPaisaMonthly : monthlyEquivalentWhenYearlyInPaisa(plan))}
               </span>
-              <span className="text-sm font-medium text-neutral-500">/mo</span>
+              <span className="text-sm font-medium text-ink-muted">/mo</span>
             </p>
-            <p className="mt-1 h-4 text-xs text-neutral-400">
+            <p className="mt-1 h-4 text-xs text-ink-faint">
               {cycle === "yearly" ? `${formatRupees(yearlyPriceInPaisa(plan))} billed yearly` : "billed monthly"}
             </p>
 
@@ -84,7 +84,7 @@ export function PricingCards({ plans }: { plans: Plan[] }) {
               Start free trial
             </Link>
 
-            <ul className="mt-6 flex-1 space-y-2.5 text-sm text-neutral-600">
+            <ul className="mt-6 flex-1 space-y-2.5 text-sm text-ink-secondary">
               {plan.features.map((feature) => (
                 <li key={feature} className="flex items-start gap-2">
                   <span className="mt-0.5 flex-none text-orange-500">✓</span>

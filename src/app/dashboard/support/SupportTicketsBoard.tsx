@@ -18,10 +18,10 @@ type Ticket = {
 };
 
 const STATUS_BADGE: Record<TicketStatus, string> = {
-  open: "bg-sky-50 text-sky-700",
-  in_progress: "bg-amber-50 text-amber-700",
-  resolved: "bg-emerald-50 text-emerald-700",
-  closed: "bg-neutral-100 text-neutral-500",
+  open: "bg-sky-500/15 text-sky-400",
+  in_progress: "bg-amber-500/15 text-amber-400",
+  resolved: "bg-emerald-500/15 text-emerald-400",
+  closed: "bg-surface-1 text-ink-muted",
 };
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
@@ -91,9 +91,9 @@ export function SupportTicketsBoard({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white">
-      <div className="flex items-center justify-between border-b border-neutral-200 p-5">
-        <h2 className="text-sm font-semibold text-neutral-900">Your tickets</h2>
+    <div className="rounded-lg border border-hairline bg-surface-2">
+      <div className="flex items-center justify-between border-b border-hairline p-5">
+        <h2 className="text-sm font-semibold text-ink">Your tickets</h2>
         {!creating && (
           <button
             type="button"
@@ -109,8 +109,8 @@ export function SupportTicketsBoard({ slug }: { slug: string }) {
       </div>
 
       {creating && (
-        <form onSubmit={handleCreate} className="space-y-3 border-b border-neutral-200 p-5">
-          {createError && <p className="text-sm text-red-600">{createError}</p>}
+        <form onSubmit={handleCreate} className="space-y-3 border-b border-hairline p-5">
+          {createError && <p className="text-sm text-red-400">{createError}</p>}
           <input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
@@ -148,7 +148,7 @@ export function SupportTicketsBoard({ slug }: { slug: string }) {
             <button
               type="button"
               onClick={() => setCreating(false)}
-              className="rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-50"
+              className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink-secondary hover:bg-surface-1"
             >
               Cancel
             </button>
@@ -156,11 +156,11 @@ export function SupportTicketsBoard({ slug }: { slug: string }) {
         </form>
       )}
 
-      {error && <p className="p-5 text-sm text-red-600">{error}</p>}
+      {error && <p className="p-5 text-sm text-red-400">{error}</p>}
 
-      <div className="divide-y divide-neutral-100">
+      <div className="divide-y divide-hairline/60">
         {!loading && tickets.length === 0 && (
-          <p className="p-5 text-center text-sm text-neutral-400">
+          <p className="p-5 text-center text-sm text-ink-faint">
             No support tickets yet. Filed a ticket? It&apos;ll show up here once submitted.
           </p>
         )}
@@ -168,16 +168,16 @@ export function SupportTicketsBoard({ slug }: { slug: string }) {
           <Link
             key={t.id}
             href={`/dashboard/support/${t.id}`}
-            className="flex items-center justify-between gap-4 p-5 hover:bg-neutral-50"
+            className="flex items-center justify-between gap-4 p-5 hover:bg-surface-1"
           >
             <div>
               <div className="mb-1 flex items-center gap-2">
-                <span className="text-sm font-medium text-neutral-900">{t.subject}</span>
+                <span className="text-sm font-medium text-ink">{t.subject}</span>
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[t.status]}`}>
                   {STATUS_LABEL[t.status]}
                 </span>
               </div>
-              <p className="text-xs text-neutral-400">
+              <p className="text-xs text-ink-faint">
                 Filed by {t.createdByFullName ?? "Unknown"} · Last activity {formatDateTime(t.updatedAt)}
               </p>
             </div>

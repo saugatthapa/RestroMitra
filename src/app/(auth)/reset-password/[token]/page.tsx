@@ -43,8 +43,8 @@ export default function ResetPasswordPage({
 
   if (done) {
     return (
-      <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
-        <p className="flex items-start gap-2 rounded-lg bg-green-50 px-3 py-2.5 text-sm text-green-800">
+      <div className="rounded-2xl border border-hairline bg-surface-2 p-6 shadow-sm">
+        <p className="flex items-start gap-2 rounded-lg bg-green-500/15 px-3 py-2.5 text-sm text-green-300">
           <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
             <AuthIcon.Check />
           </span>
@@ -55,9 +55,9 @@ export default function ResetPasswordPage({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
-      <h1 className="text-lg font-semibold text-neutral-900">Choose a new password</h1>
-      <p className="mt-1 text-sm text-neutral-500">
+    <div className="rounded-2xl border border-hairline bg-surface-2 p-6 shadow-sm">
+      <h1 className="text-lg font-semibold text-ink">Choose a new password</h1>
+      <p className="mt-1 text-sm text-ink-muted">
         You&apos;ll be logged out everywhere and can sign in fresh with your new password.
       </p>
 
@@ -75,10 +75,10 @@ export default function ResetPasswordPage({
           onChange={setConfirmPassword}
           autoComplete="new-password"
         />
-        {mismatch && <p className="text-xs text-red-600">Passwords don&apos;t match.</p>}
+        {mismatch && <p className="text-xs text-red-400">Passwords don&apos;t match.</p>}
 
         {error && (
-          <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="flex items-start gap-2 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">
             <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
               <AuthIcon.ShieldCheck />
             </span>
@@ -91,8 +91,8 @@ export default function ResetPasswordPage({
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-neutral-500">
-        <Link href="/login" className="font-medium text-orange-600 hover:text-orange-700">
+      <p className="mt-6 text-center text-sm text-ink-muted">
+        <Link href="/login" className="font-medium text-orange-400 hover:text-orange-300">
           ← Back to sign in
         </Link>
       </p>

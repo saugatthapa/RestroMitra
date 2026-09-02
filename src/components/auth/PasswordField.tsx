@@ -26,7 +26,7 @@ function scorePassword(password: string): { tier: 0 | 1 | 2 | 3; label: string }
   return { tier: 1, label: "Meets requirements — could be stronger" };
 }
 
-const TIER_COLOR = ["bg-neutral-200", "bg-red-400", "bg-amber-400", "bg-green-500"];
+const TIER_COLOR = ["bg-surface-3", "bg-red-400", "bg-amber-400", "bg-green-500"];
 
 export function PasswordField({
   label,
@@ -58,7 +58,7 @@ export function PasswordField({
             type="button"
             onClick={() => setVisible((v) => !v)}
             aria-label={visible ? "Hide password" : "Show password"}
-            className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+            className="rounded-md p-1.5 text-ink-faint hover:bg-surface-1 hover:text-ink-secondary"
           >
             {visible ? <AuthIcon.EyeOff /> : <AuthIcon.Eye />}
           </button>
@@ -81,14 +81,14 @@ export function PasswordField({
               <span
                 key={step}
                 className={`h-1 flex-1 rounded-full transition-colors ${
-                  step <= tier ? TIER_COLOR[tier] : "bg-neutral-200"
+                  step <= tier ? TIER_COLOR[tier] : "bg-surface-3"
                 }`}
               />
             ))}
           </div>
           <p
             className={`mt-1 text-xs ${
-              tier === 0 ? "text-red-600" : tier === 1 ? "text-amber-600" : "text-green-700"
+              tier === 0 ? "text-red-400" : tier === 1 ? "text-amber-400" : "text-green-400"
             }`}
           >
             {strengthLabel}

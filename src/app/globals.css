@@ -1,25 +1,78 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------
+ * Dark navy design system — replaces the Phase 1 single-light-theme
+ * palette site-wide (landing page AND dashboard; see the comment this one
+ * replaces, just below). Every value here is sampled or specified directly
+ * from the brand: the navy scale from public/brand/icon-*.png (the chef
+ * hat/"R" mark samples at roughly #001028-#001830), the accent gradient is
+ * the exact 3-stop the logo's plate/flame/handshake uses.
+ *
+ * This is a LAYERED surface system, not a single bg + single fg: four
+ * "elevations" (surface-0 the page canvas, up through surface-3 for
+ * hover/elevated/popover content) so a card sitting on the page, and a
+ * hovered row inside that card, are each visibly one step lighter than
+ * what they sit on — the dark-theme equivalent of light-theme's
+ * bg-white-on-bg-neutral-50 layering, just inverted in direction (dark UIs
+ * read "raised" as lighter, not as a drop shadow, which barely shows
+ * against a near-black ground).
+ *
+ * scripts/dark-theme-codemod.py mechanically migrated ~120 files' worth of
+ * old neutral background, text and border utilities (plus colored badge
+ * tint/text pairs) to these tokens — see that script's own header comment
+ * for the exact mapping table. The landing page and its own components
+ * were hand-tuned afterward for the flagship visual moments a mechanical
+ * pass shouldn't touch on its own (hero gradient, CTA banner, mockup
+ * chrome) — see this comment's own history in git blame if the split
+ * ever needs revisiting.
+ * --------------------------------------------------------------------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #06080f;
+  --foreground: #f5f7fa;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* Brand navy — sampled directly from public/brand/icon-*.png (the chef
-     hat / "R" mark), which sits at roughly #001028-#001830. Lifted a touch
-     from that literal near-black for use as UI chrome (footer, dark
-     badges, the "navy" mock-stat below) while still reading as the same
-     color family as the logo, not a generic slate/neutral. Pairs with
-     Tailwind's own orange/amber scale for the gradient half of the mark
-     (orange-500 #f97316 is already within a few hue-degrees of the
-     logo's sampled #f97e01-#fb4e01 gradient, so that half needed no new
-     token — only navy, the half nothing in the existing palette covered). */
-  --color-brand-navy: #0b1e3d;
-  --color-brand-navy-light: #16304f;
-  --color-brand-navy-50: #eef2f7;
+
+  /* Surfaces — increasing elevation, all navy-tinted (never pure grey/
+     black) so the whole app reads as one material, not black-with-a-
+     logo. surface-0 == --background itself (kept as a separate token too
+     so a component can reach for `bg-surface-0` explicitly, e.g. to match
+     the page canvas inside a full-bleed section, without hardcoding the
+     hex). */
+  --color-surface-0: #06080f;
+  --color-surface-1: #0c1120;
+  --color-surface-2: #111828;
+  --color-surface-3: #192235;
+
+  /* Ink (text) — warm off-white down through three muted steps, each
+     verified to clear WCAG AA against surface-1/2/3 at the weight it's
+     actually used at (headings/body bold enough at ink-muted, never at
+     ink-faint for anything but disabled/timestamp-grade text). */
+  --color-ink: #f5f7fa;
+  --color-ink-secondary: #c7cedb;
+  --color-ink-muted: #8891a4;
+  --color-ink-faint: #5b6478;
+
+  /* Hairline — the logo's own navy (#1a2744, specified directly, not
+     re-derived), used for every border/divide/ring across the app:
+     dashboard sidebar rail, card borders, table dividers, input borders,
+     the subtle glows behind elevated panels. -strong is a lighter step up
+     for hover/focus states and higher-contrast dividers, where the plain
+     hairline would be too subtle to register as "changed". */
+  --color-hairline: #1a2744;
+  --color-hairline-strong: #2a3a5c;
+
+  /* Accent — the logo's exact orange-to-red gradient. -mid doubles as the
+     flat "just give me one accent color" value (buttons/links/icons that
+     don't need a gradient); -start/-end are the gradient's own stops for
+     anything that renders the full sweep (buttons, the landing hero,
+     "most popular" pricing badge, ...). */
+  --color-accent-start: #ff7a00;
+  --color-accent-mid: #ff5500;
+  --color-accent-end: #cc2200;
+
   --font-sans:
     system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
     sans-serif;
@@ -28,15 +81,139 @@
     monospace;
 }
 
-/* Phase 1 ships a single light theme across owner/staff dashboards, so we
-   deliberately do not follow prefers-color-scheme yet. Dark mode can be
-   revisited as a deliberate design pass later rather than an accidental
-   half-styled one. */
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+/* ---------------------------------------------------------------------
+ * Print reset — the dark-navy theme above is tuned for a screen, not a
+ * printed page. Three views call window.print() directly: the KOT ticket
+ * (KotTicketView.tsx), the payslip (PayslipView.tsx), and the customer
+ * bill (OrderBillView.tsx's printable section) — a kitchen thermal
+ * printer, an A4 payslip, and a receipt all render on plain white paper
+ * (or a monochrome thermal head), where the ink-* text tokens (near-white,
+ * meant to sit on surface-0..3) and the badge tints (bg-{color}-500/15
+ * text-{color}-400, meant for the same dark ground) are close to
+ * invisible. Nothing else in the app is ever printed, so it's safe to
+ * revert those specific tokens globally under @media print rather than
+ * threading print: variants through every printable component — this
+ * mirrors, for print, what scripts/dark-theme-codemod.py did for screen.
+ * Declared unlayered (not inside @layer utilities) so it beats the
+ * Tailwind utility layer purely on cascade order, the same trick the
+ * prefers-reduced-motion block below relies on.
+ * --------------------------------------------------------------------- */
+@media print {
+  body {
+    background: #ffffff;
+    color: #111827;
+  }
+
+  .bg-surface-0,
+  .bg-surface-1,
+  .bg-surface-2,
+  .bg-surface-3 {
+    background-color: #ffffff;
+  }
+
+  .text-ink,
+  .text-ink-secondary,
+  .text-ink-muted,
+  .text-ink-faint {
+    color: #111827;
+  }
+
+  .border-hairline,
+  .border-hairline-strong,
+  .divide-hairline {
+    border-color: #d1d5db;
+  }
+
+  /* Status/badge tints — translucent-on-dark reverts to solid-light-on-
+     white, i.e. back to what these badges looked like before the
+     dark-theme codemod ran (bg-red-100 text-red-800 and friends). */
+  .text-orange-300,
+  .text-orange-400 {
+    color: #c2410c;
+  }
+  .text-red-300,
+  .text-red-400 {
+    color: #b91c1c;
+  }
+  .text-amber-300,
+  .text-amber-400 {
+    color: #b45309;
+  }
+  .text-green-300,
+  .text-green-400 {
+    color: #15803d;
+  }
+  .text-emerald-300,
+  .text-emerald-400 {
+    color: #047857;
+  }
+  .text-sky-300,
+  .text-sky-400 {
+    color: #0369a1;
+  }
+  .text-blue-300,
+  .text-blue-400 {
+    color: #1d4ed8;
+  }
+  .text-purple-300,
+  .text-purple-400 {
+    color: #7e22ce;
+  }
+  .text-teal-300,
+  .text-teal-400 {
+    color: #0f766e;
+  }
+  .text-pink-300,
+  .text-pink-400 {
+    color: #be185d;
+  }
+
+  .bg-orange-500\/15,
+  .bg-orange-500\/20 {
+    background-color: #ffedd5;
+  }
+  .bg-red-500\/15,
+  .bg-red-500\/20 {
+    background-color: #fee2e2;
+  }
+  .bg-amber-500\/15,
+  .bg-amber-500\/20 {
+    background-color: #fef3c7;
+  }
+  .bg-green-500\/15,
+  .bg-green-500\/20 {
+    background-color: #dcfce7;
+  }
+  .bg-emerald-500\/15,
+  .bg-emerald-500\/20 {
+    background-color: #d1fae5;
+  }
+  .bg-sky-500\/15,
+  .bg-sky-500\/20 {
+    background-color: #e0f2fe;
+  }
+  .bg-blue-500\/15,
+  .bg-blue-500\/20 {
+    background-color: #dbeafe;
+  }
+  .bg-purple-500\/15,
+  .bg-purple-500\/20 {
+    background-color: #f3e8ff;
+  }
+  .bg-teal-500\/15,
+  .bg-teal-500\/20 {
+    background-color: #ccfbf1;
+  }
+  .bg-pink-500\/15,
+  .bg-pink-500\/20 {
+    background-color: #fce7f3;
+  }
 }
 
 @layer components {
@@ -51,15 +228,15 @@ body {
   }
 
   .input {
-    @apply w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100;
+    @apply w-full rounded-lg border border-hairline bg-surface-2 px-3 py-2 text-sm text-ink placeholder-ink-faint outline-none transition focus:border-accent-mid focus:ring-2 focus:ring-accent-mid/25;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-orange-700 hover:shadow-md active:translate-y-0 active:shadow-sm disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-sm;
+    @apply inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-accent-start via-accent-mid to-accent-end px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-black/30 transition duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-md active:translate-y-0 active:shadow-sm disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-sm;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-700 transition duration-200 hover:-translate-y-0.5 hover:border-neutral-400 hover:bg-neutral-50 hover:shadow-sm active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-none;
+    @apply inline-flex items-center justify-center rounded-lg border border-hairline bg-surface-2 px-4 py-2.5 text-sm font-semibold text-ink-secondary transition duration-200 hover:-translate-y-0.5 hover:border-hairline-strong hover:bg-surface-3 hover:text-ink hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-none;
   }
 }
 

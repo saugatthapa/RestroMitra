@@ -19,8 +19,8 @@ export default async function KDSPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-900">Kitchen (KDS)</h1>
-          <p className="text-sm text-neutral-500">
+          <h1 className="text-xl font-semibold text-ink">Kitchen (KDS)</h1>
+          <p className="text-sm text-ink-muted">
             Live tickets for {active.name}, grouped by station — confirmed orders waiting to
             start, orders in progress, and orders ready for pickup/service.
           </p>

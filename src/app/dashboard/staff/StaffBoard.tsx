@@ -53,9 +53,9 @@ type AttendanceRecord = {
 };
 
 const ATTENDANCE_STATUS_BADGE_CLASS: Record<AttendanceStatus, string> = {
-  needs_review: "bg-amber-50 text-amber-700",
-  verified: "bg-green-50 text-green-700",
-  rejected: "bg-red-50 text-red-700",
+  needs_review: "bg-amber-500/15 text-amber-400",
+  verified: "bg-green-500/15 text-green-400",
+  rejected: "bg-red-500/15 text-red-400",
 };
 
 function AttendanceStatusBadge({ status }: { status: AttendanceStatus }) {
@@ -155,15 +155,15 @@ export function StaffBoard({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 border-b border-neutral-200">
+      <div className="flex flex-wrap gap-2 border-b border-hairline">
         {visibleTabs.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${
               tab === t
-                ? "border-orange-600 text-orange-700"
-                : "border-transparent text-neutral-500 hover:text-neutral-800"
+                ? "border-orange-600 text-orange-400"
+                : "border-transparent text-ink-muted hover:text-ink"
             }`}
           >
             {t}
@@ -227,14 +227,14 @@ function RosterTab({
   }, [slug]);
 
   if (!canManageStaff) {
-    return <p className="text-sm text-neutral-400">Your role doesn&apos;t have access to the staff roster.</p>;
+    return <p className="text-sm text-ink-faint">Your role doesn&apos;t have access to the staff roster.</p>;
   }
 
-  if (loading) return <p className="text-sm text-neutral-500">Loading staff…</p>;
+  if (loading) return <p className="text-sm text-ink-muted">Loading staff…</p>;
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
 
       <div className="flex justify-end gap-2">
         <a href={`${base(slug)}/staff/export`} download className="btn-secondary text-xs">
@@ -257,9 +257,9 @@ function RosterTab({
         />
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+      <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+          <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
             <tr>
               <th className="px-3 py-2">Name</th>
               <th className="px-3 py-2">Phone</th>
@@ -338,9 +338,9 @@ function StaffRow({
   }
 
   return (
-    <tr className="border-t border-neutral-100">
-      <td className="px-3 py-2 font-medium text-neutral-900">{member.fullName}</td>
-      <td className="px-3 py-2 text-neutral-500">{member.phone}</td>
+    <tr className="border-t border-hairline/60">
+      <td className="px-3 py-2 font-medium text-ink">{member.fullName}</td>
+      <td className="px-3 py-2 text-ink-muted">{member.phone}</td>
       <td className="px-3 py-2">
         {editable ? (
           <select
@@ -356,7 +356,7 @@ function StaffRow({
             ))}
           </select>
         ) : (
-          <span className="capitalize text-neutral-700">{member.role.replace("_", " ")}</span>
+          <span className="capitalize text-ink-secondary">{member.role.replace("_", " ")}</span>
         )}
       </td>
       {branches.length > 1 && (
@@ -376,15 +376,15 @@ function StaffRow({
               ))}
             </select>
           ) : (
-            <span className="text-neutral-500">{member.branchName ?? "All branches"}</span>
+            <span className="text-ink-muted">{member.branchName ?? "All branches"}</span>
           )}
         </td>
       )}
       <td className="px-3 py-2">
         {member.isActive ? (
-          <span className="text-green-700">Active</span>
+          <span className="text-green-400">Active</span>
         ) : (
-          <span className="text-neutral-400">Inactive</span>
+          <span className="text-ink-faint">Inactive</span>
         )}
       </td>
       <td className="px-3 py-2 text-right">
@@ -393,14 +393,14 @@ function StaffRow({
             <button
               disabled={saving}
               onClick={() => setResettingPassword(true)}
-              className="text-xs font-medium text-neutral-500 hover:text-neutral-800 hover:underline"
+              className="text-xs font-medium text-ink-muted hover:text-ink hover:underline"
             >
               Reset password
             </button>
             <button
               disabled={saving}
               onClick={toggleActive}
-              className="text-xs font-medium text-orange-700 hover:underline"
+              className="text-xs font-medium text-orange-400 hover:underline"
             >
               {member.isActive ? "Deactivate" : "Reactivate"}
             </button>
@@ -451,11 +451,11 @@ function ResetStaffPasswordModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-5 shadow-lg">
+      <div className="w-full max-w-md rounded-2xl border border-hairline bg-surface-2 p-5 shadow-lg">
         {done ? (
           <>
-            <p className="mb-1 text-sm font-semibold text-neutral-900">Password reset</p>
-            <p className="mb-4 text-sm text-neutral-600">
+            <p className="mb-1 text-sm font-semibold text-ink">Password reset</p>
+            <p className="mb-4 text-sm text-ink-secondary">
               {member.fullName}&apos;s password has been changed. Share the new password with them
               directly — they&apos;ve been logged out everywhere and will need it to log back in.
             </p>
@@ -467,15 +467,15 @@ function ResetStaffPasswordModal({
           </>
         ) : (
           <form onSubmit={submit}>
-            <p className="mb-1 text-sm font-semibold text-neutral-900">Reset {member.fullName}&apos;s password</p>
-            <p className="mb-3 text-xs text-neutral-500">
+            <p className="mb-1 text-sm font-semibold text-ink">Reset {member.fullName}&apos;s password</p>
+            <p className="mb-3 text-xs text-ink-muted">
               Use this when a staff member is locked out and can&apos;t reset it themselves (no
               email on file, or the reset link never arrives). This immediately logs them out
               everywhere.
             </p>
-            {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+            {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
             <label className="block text-sm">
-              <span className="mb-1 block text-neutral-600">New password</span>
+              <span className="mb-1 block text-ink-secondary">New password</span>
               <input
                 required
                 type="text"
@@ -569,11 +569,11 @@ function AddStaffForm({
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+    <form onSubmit={submit} className="rounded-2xl border border-hairline bg-surface-2 p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Phone</span>
+          <span className="mb-1 block text-ink-secondary">Phone</span>
           <input
             required
             value={phone}
@@ -583,7 +583,7 @@ function AddStaffForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Role</span>
+          <span className="mb-1 block text-ink-secondary">Role</span>
           <select value={role} onChange={(e) => setRole(e.target.value as AssignableStaffRole)} className="input">
             {ASSIGNABLE_STAFF_ROLES.map((r) => (
               <option key={r} value={r}>
@@ -594,7 +594,7 @@ function AddStaffForm({
         </label>
         {branches.length > 1 && (
           <label className="text-sm">
-            <span className="mb-1 block text-neutral-600">Branch</span>
+            <span className="mb-1 block text-ink-secondary">Branch</span>
             <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="input">
               <option value="">All branches</option>
               {branches.map((b) => (
@@ -606,11 +606,11 @@ function AddStaffForm({
           </label>
         )}
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Full name (new accounts only)</span>
+          <span className="mb-1 block text-ink-secondary">Full name (new accounts only)</span>
           <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="input" />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Password (new accounts only)</span>
+          <span className="mb-1 block text-ink-secondary">Password (new accounts only)</span>
           <input
             type="password"
             value={password}
@@ -619,22 +619,22 @@ function AddStaffForm({
           />
         </label>
       </div>
-      <p className="mt-2 text-xs text-neutral-400">
+      <p className="mt-2 text-xs text-ink-faint">
         If this phone number already has a RestroKendra account, they&apos;re just granted a role here —
         name and password are ignored. Otherwise a new account is created with the name and password
         above.
       </p>
 
       {canManagePayroll && (
-        <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-3">
-          <label className="flex items-center gap-2 text-sm font-medium text-neutral-800">
+        <div className="mt-4 rounded-xl border border-hairline bg-surface-1 p-3">
+          <label className="flex items-center gap-2 text-sm font-medium text-ink">
             <input type="checkbox" checked={setSalary} onChange={(e) => setSetSalary(e.target.checked)} />
             Set up their salary now
           </label>
           {setSalary && (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label className="text-sm">
-                <span className="mb-1 block text-neutral-600">Salary type</span>
+                <span className="mb-1 block text-ink-secondary">Salary type</span>
                 <select
                   value={salaryType}
                   onChange={(e) => setSalaryType(e.target.value as SalaryType)}
@@ -648,7 +648,7 @@ function AddStaffForm({
                 </select>
               </label>
               <label className="text-sm">
-                <span className="mb-1 block text-neutral-600">
+                <span className="mb-1 block text-ink-secondary">
                   {salaryType === "monthly" ? "Amount per month (Rs)" : salaryType === "daily" ? "Amount per day (Rs)" : "Amount per hour (Rs)"}
                 </span>
                 <input
@@ -663,7 +663,7 @@ function AddStaffForm({
                 />
               </label>
               <label className="text-sm">
-                <span className="mb-1 block text-neutral-600">Usual payment method</span>
+                <span className="mb-1 block text-ink-secondary">Usual payment method</span>
                 <select
                   value={salaryMethod}
                   onChange={(e) => setSalaryMethod(e.target.value as PayoutMethod)}
@@ -679,11 +679,11 @@ function AddStaffForm({
               {salaryMethod === "bank_transfer" && (
                 <>
                   <label className="text-sm">
-                    <span className="mb-1 block text-neutral-600">Bank name</span>
+                    <span className="mb-1 block text-ink-secondary">Bank name</span>
                     <input value={bankName} onChange={(e) => setBankName(e.target.value)} className="input" />
                   </label>
                   <label className="text-sm">
-                    <span className="mb-1 block text-neutral-600">Account number</span>
+                    <span className="mb-1 block text-ink-secondary">Account number</span>
                     <input
                       value={bankAccountNumber}
                       onChange={(e) => setBankAccountNumber(e.target.value)}
@@ -691,7 +691,7 @@ function AddStaffForm({
                     />
                   </label>
                   <label className="text-sm">
-                    <span className="mb-1 block text-neutral-600">Account holder name</span>
+                    <span className="mb-1 block text-ink-secondary">Account holder name</span>
                     <input
                       value={bankAccountHolder}
                       onChange={(e) => setBankAccountHolder(e.target.value)}
@@ -702,7 +702,7 @@ function AddStaffForm({
               )}
             </div>
           )}
-          <p className="mt-2 text-xs text-neutral-400">
+          <p className="mt-2 text-xs text-ink-faint">
             You can skip this and set it up later from the Payroll tab.
           </p>
         </div>
@@ -904,21 +904,21 @@ function AttendanceTab({
   const needsReviewCount = records.filter((r) => r.status === "needs_review").length;
   const visibleRecords = needsReviewOnly ? records.filter((r) => r.status === "needs_review") : records;
 
-  if (loading) return <p className="text-sm text-neutral-500">Loading attendance…</p>;
+  if (loading) return <p className="text-sm text-ink-muted">Loading attendance…</p>;
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-        <p className="mb-2 text-sm font-semibold text-neutral-900">My shift</p>
+      <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
+        <p className="mb-2 text-sm font-semibold text-ink">My shift</p>
         {selfieRequired && (
-          <p className="mb-2 text-xs text-neutral-500">
+          <p className="mb-2 text-xs text-ink-muted">
             This restaurant requires a selfie to clock in and out.
           </p>
         )}
         {workplacePhotoRequired && (
-          <p className="mb-2 text-xs text-neutral-500">
+          <p className="mb-2 text-xs text-ink-muted">
             This restaurant also requires a workplace photo to clock in and out.
           </p>
         )}
@@ -927,7 +927,7 @@ function AttendanceTab({
             once it already is, or when this deployment has no photo
             storage to upload it to. */}
         {!workplacePhotoRequired && objectStorageConfigured && (
-          <label className="mb-2 flex items-center gap-2 text-xs text-neutral-600">
+          <label className="mb-2 flex items-center gap-2 text-xs text-ink-secondary">
             <input
               type="checkbox"
               checked={attachWorkplacePhoto}
@@ -955,17 +955,17 @@ function AttendanceTab({
       </div>
 
       {canManageAttendanceSettings && (
-        <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-          <p className="mb-1 text-sm font-semibold text-neutral-900">Photo-verified attendance</p>
+        <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
+          <p className="mb-1 text-sm font-semibold text-ink">Photo-verified attendance</p>
           {objectStorageConfigured ? (
             <>
-              <p className="mb-2 text-xs text-neutral-500">
+              <p className="mb-2 text-xs text-ink-muted">
                 Two separate, independent checks: a selfie proves WHO is clocking in; a workplace photo
                 proves they&apos;re actually AT the restaurant. Turn on either, both, or neither. Staff are
                 shown a consent notice the first time either applies to them.
               </p>
-              {settingsError && <p className="mb-2 text-sm text-red-600">{settingsError}</p>}
-              <label className="mb-1 flex items-center gap-2 text-sm text-neutral-700">
+              {settingsError && <p className="mb-2 text-sm text-red-400">{settingsError}</p>}
+              <label className="mb-1 flex items-center gap-2 text-sm text-ink-secondary">
                 <input
                   type="checkbox"
                   checked={selfieRequired}
@@ -974,7 +974,7 @@ function AttendanceTab({
                 />
                 Require a selfie to clock in/out
               </label>
-              <label className="flex items-center gap-2 text-sm text-neutral-700">
+              <label className="flex items-center gap-2 text-sm text-ink-secondary">
                 <input
                   type="checkbox"
                   checked={workplacePhotoRequired}
@@ -985,7 +985,7 @@ function AttendanceTab({
               </label>
             </>
           ) : (
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-ink-muted">
               Not available yet — this deployment hasn&apos;t configured photo storage.
             </p>
           )}
@@ -1017,7 +1017,7 @@ function AttendanceTab({
       {canViewAll && <AttendanceAnalyticsPanel slug={slug} />}
 
       {canViewAll && needsReviewCount > 0 && (
-        <label className="flex items-center gap-2 text-sm text-neutral-700">
+        <label className="flex items-center gap-2 text-sm text-ink-secondary">
           <input
             type="checkbox"
             checked={needsReviewOnly}
@@ -1027,9 +1027,9 @@ function AttendanceTab({
         </label>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+      <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+          <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
             <tr>
               {canViewAll && <th className="px-3 py-2">Staff</th>}
               <th className="px-3 py-2">Clock in</th>
@@ -1044,24 +1044,24 @@ function AttendanceTab({
           <tbody>
             {visibleRecords.length === 0 && (
               <tr>
-                <td colSpan={canViewAll ? 8 : 5} className="px-3 py-6 text-center text-neutral-400">
+                <td colSpan={canViewAll ? 8 : 5} className="px-3 py-6 text-center text-ink-faint">
                   {records.length === 0 ? "No attendance records yet." : "No shifts need review right now."}
                 </td>
               </tr>
             )}
             {visibleRecords.map((r) => (
-              <tr key={r.id} className="border-t border-neutral-100">
-                {canViewAll && <td className="px-3 py-2 font-medium text-neutral-900">{r.fullName}</td>}
+              <tr key={r.id} className="border-t border-hairline/60">
+                {canViewAll && <td className="px-3 py-2 font-medium text-ink">{r.fullName}</td>}
                 <td className="px-3 py-2">{formatDate(r.clockInAt, dateSystem, { withTime: true })}</td>
                 <td className="px-3 py-2">
                   {r.clockOutAt ? (
                     formatDate(r.clockOutAt, dateSystem, { withTime: true })
                   ) : (
-                    <span className="font-medium text-green-700">Still clocked in</span>
+                    <span className="font-medium text-green-400">Still clocked in</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-neutral-500">{formatDuration(computeDurationMinutes(r))}</td>
-                <td className="px-3 py-2 text-neutral-500">{r.note || "—"}</td>
+                <td className="px-3 py-2 text-ink-muted">{formatDuration(computeDurationMinutes(r))}</td>
+                <td className="px-3 py-2 text-ink-muted">{r.note || "—"}</td>
                 <td className="px-3 py-2">
                   <div className="flex gap-2 text-xs">
                     {r.hasClockInPhoto && (
@@ -1069,7 +1069,7 @@ function AttendanceTab({
                         type="button"
                         disabled={photoLoadingId === `${r.id}:clock_in`}
                         onClick={() => viewPhoto(r.id, "clock_in")}
-                        className="text-orange-700 underline hover:text-orange-800"
+                        className="text-orange-400 underline hover:text-orange-200"
                         title="Selfie at clock-in"
                       >
                         In
@@ -1080,7 +1080,7 @@ function AttendanceTab({
                         type="button"
                         disabled={photoLoadingId === `${r.id}:clock_out`}
                         onClick={() => viewPhoto(r.id, "clock_out")}
-                        className="text-orange-700 underline hover:text-orange-800"
+                        className="text-orange-400 underline hover:text-orange-200"
                         title="Selfie at clock-out"
                       >
                         Out
@@ -1092,7 +1092,7 @@ function AttendanceTab({
                         type="button"
                         disabled={photoLoadingId === `${r.id}:clock_in_workplace`}
                         onClick={() => viewPhoto(r.id, "clock_in_workplace")}
-                        className="text-teal-700 underline hover:text-teal-800"
+                        className="text-teal-400 underline hover:text-teal-200"
                         title="Workplace photo at clock-in"
                       >
                         Workplace (in)
@@ -1103,7 +1103,7 @@ function AttendanceTab({
                         type="button"
                         disabled={photoLoadingId === `${r.id}:clock_out_workplace`}
                         onClick={() => viewPhoto(r.id, "clock_out_workplace")}
-                        className="text-teal-700 underline hover:text-teal-800"
+                        className="text-teal-400 underline hover:text-teal-200"
                         title="Workplace photo at clock-out"
                       >
                         Workplace (out)
@@ -1112,7 +1112,7 @@ function AttendanceTab({
                     {!r.hasClockInPhoto &&
                       !r.hasClockOutPhoto &&
                       !r.hasClockInWorkplacePhoto &&
-                      !r.hasClockOutWorkplacePhoto && <span className="text-neutral-300">—</span>}
+                      !r.hasClockOutWorkplacePhoto && <span className="text-ink-faint">—</span>}
                   </div>
                 </td>
                 {canViewAll && (
@@ -1125,7 +1125,7 @@ function AttendanceTab({
                     <button
                       type="button"
                       onClick={() => setReviewingRecord(r)}
-                      className="text-orange-700 underline hover:text-orange-800"
+                      className="text-orange-400 underline hover:text-orange-200"
                     >
                       Review
                     </button>
@@ -1210,44 +1210,44 @@ function AttendanceAnalyticsPanel({ slug }: { slug: string }) {
   }, [expanded]);
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm">
+    <div className="rounded-2xl border border-hairline bg-surface-2 p-3 shadow-sm">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between text-left text-sm font-medium text-neutral-800"
+        className="flex w-full items-center justify-between text-left text-sm font-medium text-ink"
       >
         <span>Attendance analytics</span>
-        <span className="text-xs text-neutral-400">{expanded ? "Hide" : "Show"}</span>
+        <span className="text-xs text-ink-faint">{expanded ? "Hide" : "Show"}</span>
       </button>
 
       {expanded && (
         <div className="mt-3 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-1.5 text-sm text-neutral-600">
+            <label className="flex items-center gap-1.5 text-sm text-ink-secondary">
               From
               <input
                 type="date"
                 value={periodStart}
                 max={periodEnd}
                 onChange={(e) => setPeriodStart(e.target.value)}
-                className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                className="rounded-md border border-hairline-strong px-2 py-1 text-sm"
               />
             </label>
-            <label className="flex items-center gap-1.5 text-sm text-neutral-600">
+            <label className="flex items-center gap-1.5 text-sm text-ink-secondary">
               To
               <input
                 type="date"
                 value={periodEnd}
                 min={periodStart}
                 onChange={(e) => setPeriodEnd(e.target.value)}
-                className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                className="rounded-md border border-hairline-strong px-2 py-1 text-sm"
               />
             </label>
             <button
               type="button"
               onClick={load}
               disabled={loading}
-              className="rounded-md bg-neutral-900 px-3 py-1 text-sm text-white disabled:opacity-50"
+              className="rounded-md bg-surface-0 px-3 py-1 text-sm text-white disabled:opacity-50"
             >
               {loading ? "Loading…" : "Refresh"}
             </button>
@@ -1260,11 +1260,11 @@ function AttendanceAnalyticsPanel({ slug }: { slug: string }) {
             </a>
           </div>
 
-          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+          {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
 
-          <div className="overflow-x-auto rounded-xl border border-neutral-100">
+          <div className="overflow-x-auto rounded-xl border border-hairline/60">
             <table className="w-full text-sm">
-              <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+              <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
                 <tr>
                   <th className="px-3 py-2">Staff</th>
                   <th className="px-3 py-2">Worked</th>
@@ -1280,41 +1280,41 @@ function AttendanceAnalyticsPanel({ slug }: { slug: string }) {
               <tbody>
                 {!loading && staff.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-3 py-6 text-center text-neutral-400">
+                    <td colSpan={9} className="px-3 py-6 text-center text-ink-faint">
                       No active staff to show for this period.
                     </td>
                   </tr>
                 )}
                 {staff.map((s) => (
-                  <tr key={s.userId} className="border-t border-neutral-100">
-                    <td className="px-3 py-2 font-medium text-neutral-900">{s.fullName}</td>
-                    <td className="px-3 py-2 text-neutral-600">{formatDuration(s.totalMinutes)}</td>
-                    <td className="px-3 py-2 text-neutral-600">{s.daysPresent}</td>
-                    <td className="px-3 py-2 text-neutral-600">{s.paidLeaveDays || "—"}</td>
-                    <td className="px-3 py-2 text-neutral-600">
+                  <tr key={s.userId} className="border-t border-hairline/60">
+                    <td className="px-3 py-2 font-medium text-ink">{s.fullName}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{formatDuration(s.totalMinutes)}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{s.daysPresent}</td>
+                    <td className="px-3 py-2 text-ink-secondary">{s.paidLeaveDays || "—"}</td>
+                    <td className="px-3 py-2 text-ink-secondary">
                       {s.rejectedShiftsCount > 0 ? (
-                        <span className="text-amber-600">{s.rejectedShiftsCount}</span>
+                        <span className="text-amber-400">{s.rejectedShiftsCount}</span>
                       ) : (
                         "—"
                       )}
                     </td>
-                    <td className="px-3 py-2 text-neutral-600">{s.scheduledShiftsCount || "—"}</td>
-                    <td className="px-3 py-2 text-neutral-600">
-                      {s.noShowCount > 0 ? <span className="text-red-600">{s.noShowCount}</span> : "—"}
+                    <td className="px-3 py-2 text-ink-secondary">{s.scheduledShiftsCount || "—"}</td>
+                    <td className="px-3 py-2 text-ink-secondary">
+                      {s.noShowCount > 0 ? <span className="text-red-400">{s.noShowCount}</span> : "—"}
                     </td>
-                    <td className="px-3 py-2 text-neutral-600">
+                    <td className="px-3 py-2 text-ink-secondary">
                       {s.lateCount > 0 ? (
                         <>
                           {s.lateCount}{" "}
-                          <span className="text-xs text-neutral-400">({formatDuration(s.totalLateMinutes)})</span>
+                          <span className="text-xs text-ink-faint">({formatDuration(s.totalLateMinutes)})</span>
                         </>
                       ) : (
                         "—"
                       )}
                     </td>
-                    <td className="px-3 py-2 text-neutral-600">
+                    <td className="px-3 py-2 text-ink-secondary">
                       {s.excusedLeaveCount + s.excusedHolidayCount > 0 ? (
-                        <span className="text-xs text-neutral-500">
+                        <span className="text-xs text-ink-muted">
                           {s.excusedLeaveCount > 0 && `${s.excusedLeaveCount} leave`}
                           {s.excusedLeaveCount > 0 && s.excusedHolidayCount > 0 && ", "}
                           {s.excusedHolidayCount > 0 && `${s.excusedHolidayCount} holiday`}
@@ -1410,34 +1410,34 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
     }
   }
 
-  if (loading) return <p className="text-sm text-neutral-500">Loading payroll…</p>;
+  if (loading) return <p className="text-sm text-ink-muted">Loading payroll…</p>;
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
 
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm">
-        <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-hairline bg-surface-2 p-3 shadow-sm">
+        <span className="text-xs font-medium uppercase tracking-wide text-ink-muted">
           Owed this period
         </span>
-        <label className="flex items-center gap-1.5 text-sm text-neutral-600">
+        <label className="flex items-center gap-1.5 text-sm text-ink-secondary">
           From
           <input
             type="date"
             value={periodStart}
             max={periodEnd}
             onChange={(e) => setPeriodStart(e.target.value)}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+            className="rounded-md border border-hairline-strong px-2 py-1 text-sm"
           />
         </label>
-        <label className="flex items-center gap-1.5 text-sm text-neutral-600">
+        <label className="flex items-center gap-1.5 text-sm text-ink-secondary">
           To
           <input
             type="date"
             value={periodEnd}
             min={periodStart}
             onChange={(e) => setPeriodEnd(e.target.value)}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+            className="rounded-md border border-hairline-strong px-2 py-1 text-sm"
           />
         </label>
         <a
@@ -1449,9 +1449,9 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
         </a>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+      <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+          <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
             <tr>
               <th className="px-3 py-2">Name</th>
               <th className="px-3 py-2">Role</th>
@@ -1463,41 +1463,41 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
           </thead>
           <tbody>
             {staff.map((s) => (
-              <tr key={s.userRoleId} className="border-t border-neutral-100">
-                <td className="px-3 py-2 font-medium text-neutral-900">{s.fullName}</td>
-                <td className="px-3 py-2 capitalize text-neutral-700">{s.role.replace("_", " ")}</td>
-                <td className="px-3 py-2 text-neutral-600">
+              <tr key={s.userRoleId} className="border-t border-hairline/60">
+                <td className="px-3 py-2 font-medium text-ink">{s.fullName}</td>
+                <td className="px-3 py-2 capitalize text-ink-secondary">{s.role.replace("_", " ")}</td>
+                <td className="px-3 py-2 text-ink-secondary">
                   {s.salary ? (
                     <>
                       {formatNPR(s.salary.amountInPaisa)}{" "}
-                      <span className="text-xs text-neutral-400">/ {SALARY_TYPE_LABELS[s.salary.salaryType].toLowerCase()}</span>
+                      <span className="text-xs text-ink-faint">/ {SALARY_TYPE_LABELS[s.salary.salaryType].toLowerCase()}</span>
                     </>
                   ) : (
-                    <span className="text-neutral-400">Not set</span>
+                    <span className="text-ink-faint">Not set</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-neutral-600">
+                <td className="px-3 py-2 text-ink-secondary">
                   {s.computation ? (
                     <>
                       {formatNPR(s.computation.owedAmountInPaisa)}
                       {s.computation.salaryType !== "monthly" && (
-                        <span className="ml-1 text-xs text-neutral-400">
+                        <span className="ml-1 text-xs text-ink-faint">
                           ({formatComputationDetail(s.computation)})
                         </span>
                       )}
                     </>
                   ) : (
-                    <span className="text-neutral-400">—</span>
+                    <span className="text-ink-faint">—</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-neutral-500">
+                <td className="px-3 py-2 text-ink-muted">
                   {s.lastPaidAt ? formatDate(s.lastPaidAt, dateSystem) : "Never"}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {canManagePayroll && (
                     <button
                       onClick={() => setPayingFor(s)}
-                      className="text-xs font-medium text-orange-700 hover:underline"
+                      className="text-xs font-medium text-orange-400 hover:underline"
                     >
                       Pay
                     </button>
@@ -1507,7 +1507,7 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
             ))}
             {staff.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-neutral-400">
+                <td colSpan={6} className="px-3 py-6 text-center text-ink-faint">
                   No active staff yet.
                 </td>
               </tr>
@@ -1530,9 +1530,9 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
         />
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+      <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+          <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
             <tr>
               <th className="px-3 py-2">Date</th>
               <th className="px-3 py-2">Staff</th>
@@ -1545,20 +1545,20 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
           <tbody>
             {payments.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-neutral-400">
+                <td colSpan={6} className="px-3 py-6 text-center text-ink-faint">
                   No payroll payments recorded yet.
                 </td>
               </tr>
             )}
             {payments.map((p) => (
-              <tr key={p.id} className="border-t border-neutral-100">
-                <td className="px-3 py-2 text-neutral-500">{formatDate(p.paidAt, dateSystem)}</td>
-                <td className="px-3 py-2 font-medium text-neutral-900">
+              <tr key={p.id} className="border-t border-hairline/60">
+                <td className="px-3 py-2 text-ink-muted">{formatDate(p.paidAt, dateSystem)}</td>
+                <td className="px-3 py-2 font-medium text-ink">
                   {p.staffNameSnapshot}
-                  {p.isVoided && <span className="ml-2 text-xs font-medium text-red-600">Voided</span>}
+                  {p.isVoided && <span className="ml-2 text-xs font-medium text-red-400">Voided</span>}
                 </td>
-                <td className="px-3 py-2 text-neutral-500">{p.payPeriodLabel || "—"}</td>
-                <td className="px-3 py-2 text-neutral-500">{PAYOUT_METHOD_LABELS[p.paymentMethod]}</td>
+                <td className="px-3 py-2 text-ink-muted">{p.payPeriodLabel || "—"}</td>
+                <td className="px-3 py-2 text-ink-muted">{PAYOUT_METHOD_LABELS[p.paymentMethod]}</td>
                 <td className="px-3 py-2">{formatNPR(p.amountInPaisa)}</td>
                 <td className="px-3 py-2 text-right">
                   <div className="flex justify-end gap-3">
@@ -1566,14 +1566,14 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
                       href={`/print/payslip/${p.id}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs font-medium text-neutral-500 hover:text-neutral-900 hover:underline"
+                      className="text-xs font-medium text-ink-muted hover:text-ink hover:underline"
                     >
                       Payslip
                     </a>
                     {canManagePayroll && !p.isVoided && (
                       <button
                         onClick={() => voidPayment(p)}
-                        className="text-xs font-medium text-neutral-500 hover:text-red-600 hover:underline"
+                        className="text-xs font-medium text-ink-muted hover:text-red-400 hover:underline"
                       >
                         Void
                       </button>
@@ -1666,16 +1666,16 @@ function PaySalaryModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <form
         onSubmit={submit}
-        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-5 shadow-lg"
+        className="w-full max-w-md rounded-2xl border border-hairline bg-surface-2 p-5 shadow-lg"
       >
-        <p className="mb-1 text-sm font-semibold text-neutral-900">Pay {staff.fullName}</p>
-        <p className="mb-3 text-xs text-neutral-500">
+        <p className="mb-1 text-sm font-semibold text-ink">Pay {staff.fullName}</p>
+        <p className="mb-3 text-xs text-ink-muted">
           {staff.salary
             ? `Usual salary: ${formatNPR(staff.salary.amountInPaisa)} / ${SALARY_TYPE_LABELS[staff.salary.salaryType].toLowerCase()}`
             : "No standing salary set — enter the amount to pay below."}
         </p>
         {staff.computation && (
-          <p className="mb-3 rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
+          <p className="mb-3 rounded-lg bg-surface-1 px-3 py-2 text-xs text-ink-secondary">
             For {periodStart} to {periodEnd}: {staff.computation.salaryType === "hourly"
               ? formatDuration(staff.computation.attendanceMinutes)
               : staff.computation.salaryType === "daily"
@@ -1691,11 +1691,11 @@ function PaySalaryModal({
             {formatNPR(staff.computation.owedAmountInPaisa)}.
           </p>
         )}
-        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
 
         <div className="space-y-3">
           <label className="block text-sm">
-            <span className="mb-1 block text-neutral-600">Amount (Rs)</span>
+            <span className="mb-1 block text-ink-secondary">Amount (Rs)</span>
             <input
               required
               type="number"
@@ -1708,7 +1708,7 @@ function PaySalaryModal({
             />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-neutral-600">Paid via</span>
+            <span className="mb-1 block text-ink-secondary">Paid via</span>
             <select value={method} onChange={(e) => setMethod(e.target.value as PayoutMethod)} className="input">
               {PAYOUT_METHODS.map((m) => (
                 <option key={m} value={m}>
@@ -1718,7 +1718,7 @@ function PaySalaryModal({
             </select>
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-neutral-600">Period (optional, e.g. &quot;August 2026&quot;)</span>
+            <span className="mb-1 block text-ink-secondary">Period (optional, e.g. &quot;August 2026&quot;)</span>
             <input
               value={payPeriodLabel}
               onChange={(e) => setPayPeriodLabel(e.target.value)}
@@ -1727,23 +1727,23 @@ function PaySalaryModal({
             />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-neutral-600">Note (optional)</span>
+            <span className="mb-1 block text-ink-secondary">Note (optional)</span>
             <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
           </label>
 
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <span className="text-sm text-neutral-600">Deductions (optional)</span>
+              <span className="text-sm text-ink-secondary">Deductions (optional)</span>
               <button
                 type="button"
                 onClick={addDeduction}
-                className="text-xs font-medium text-neutral-500 hover:text-neutral-900 hover:underline"
+                className="text-xs font-medium text-ink-muted hover:text-ink hover:underline"
               >
                 + Add deduction
               </button>
             </div>
             {deductions.length > 0 && (
-              <p className="mb-2 text-xs text-neutral-400">
+              <p className="mb-2 text-xs text-ink-faint">
                 The amount above is the net amount you&apos;re actually paying. Any deductions listed
                 here are shown on the payslip as withheld from gross pay — they don&apos;t change what
                 you enter above.
@@ -1770,7 +1770,7 @@ function PaySalaryModal({
                   <button
                     type="button"
                     onClick={() => removeDeduction(i)}
-                    className="px-2 text-xs font-medium text-neutral-400 hover:text-red-600"
+                    className="px-2 text-xs font-medium text-ink-faint hover:text-red-400"
                   >
                     ✕
                   </button>
@@ -1781,11 +1781,11 @@ function PaySalaryModal({
         </div>
 
         {method === "cash" ? (
-          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p className="mt-3 rounded-lg bg-amber-500/15 px-3 py-2 text-xs text-amber-300">
             Cash payment — enter the exact amount you handed over above.
           </p>
         ) : (
-          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p className="mt-3 rounded-lg bg-amber-500/15 px-3 py-2 text-xs text-amber-300">
             RestroKendra can&apos;t automatically verify {PAYOUT_METHOD_LABELS[method].toLowerCase()} transfers — only
             confirm this once the money has actually been sent.
           </p>

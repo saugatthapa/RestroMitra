@@ -163,9 +163,9 @@ export function PlansBoard() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-neutral-200 bg-white">
-        <div className="flex items-center justify-between border-b border-neutral-200 p-5">
-          <h2 className="text-sm font-semibold text-neutral-900">Plan catalog</h2>
+      <div className="rounded-lg border border-hairline bg-surface-2">
+        <div className="flex items-center justify-between border-b border-hairline p-5">
+          <h2 className="text-sm font-semibold text-ink">Plan catalog</h2>
           {!creating && (
             <button
               type="button"
@@ -181,34 +181,34 @@ export function PlansBoard() {
           )}
         </div>
 
-        {error && <p className="p-5 text-sm text-red-600">{error}</p>}
+        {error && <p className="p-5 text-sm text-red-400">{error}</p>}
         {loading ? (
-          <p className="p-5 text-sm text-neutral-500">Loading…</p>
+          <p className="p-5 text-sm text-ink-muted">Loading…</p>
         ) : plans.length === 0 ? (
-          <p className="p-5 text-sm text-neutral-500">No plans yet.</p>
+          <p className="p-5 text-sm text-ink-muted">No plans yet.</p>
         ) : (
-          <ul className="divide-y divide-neutral-100">
+          <ul className="divide-y divide-hairline/60">
             {plans.map((plan) => (
               <li key={plan.key} className="p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="flex items-center gap-2 text-sm font-medium text-neutral-900">
+                    <p className="flex items-center gap-2 text-sm font-medium text-ink">
                       {plan.name}
-                      <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-mono text-neutral-500">
+                      <span className="rounded bg-surface-1 px-1.5 py-0.5 text-[10px] font-mono text-ink-muted">
                         {plan.key}
                       </span>
                       {plan.highlight && (
-                        <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
+                        <span className="rounded-full bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-orange-400">
                           Highlighted
                         </span>
                       )}
                       {!plan.isActive && (
-                        <span className="rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600">
+                        <span className="rounded-full bg-surface-3 px-1.5 py-0.5 text-[10px] font-semibold text-ink-secondary">
                           Retired
                         </span>
                       )}
                     </p>
-                    <p className="mt-0.5 text-xs text-neutral-500">
+                    <p className="mt-0.5 text-xs text-ink-muted">
                       {formatRupees(plan.priceInPaisaMonthly)}/mo · staff{" "}
                       {plan.maxStaff === null ? "unlimited" : plan.maxStaff} · branches{" "}
                       {plan.maxBranches === null ? "unlimited" : plan.maxBranches} · AI reqs/mo{" "}
@@ -223,7 +223,7 @@ export function PlansBoard() {
                         setEditForm(planToFormState(plan));
                         setEditError(null);
                       }}
-                      className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+                      className="rounded-md border border-hairline-strong px-3 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-1"
                     >
                       Edit
                     </button>
@@ -231,7 +231,7 @@ export function PlansBoard() {
                       type="button"
                       disabled={toggleBusyKey === plan.key}
                       onClick={() => toggleActive(plan)}
-                      className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-md border border-hairline-strong px-3 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-1 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {plan.isActive ? "Retire" : "Reinstate"}
                     </button>
@@ -239,9 +239,9 @@ export function PlansBoard() {
                 </div>
 
                 {editKey === plan.key && editForm && (
-                  <form onSubmit={handleEditSave} className="mt-4 rounded-md border border-neutral-200 bg-neutral-50 p-4">
+                  <form onSubmit={handleEditSave} className="mt-4 rounded-md border border-hairline bg-surface-1 p-4">
                     <PlanFields form={editForm} onChange={setEditForm} onToggleFeatureKey={toggleFeatureKey} />
-                    {editError && <p className="mt-3 text-sm text-red-600">{editError}</p>}
+                    {editError && <p className="mt-3 text-sm text-red-400">{editError}</p>}
                     <div className="mt-4 flex justify-end gap-2">
                       <button
                         type="button"
@@ -250,7 +250,7 @@ export function PlansBoard() {
                           setEditForm(null);
                         }}
                         disabled={editBusy}
-                        className="rounded-md border border-neutral-300 px-4 py-1.5 text-sm font-medium text-neutral-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-md border border-hairline-strong px-4 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Cancel
                       </button>
@@ -271,10 +271,10 @@ export function PlansBoard() {
       </div>
 
       {creating && (
-        <form onSubmit={handleCreate} className="rounded-lg border border-neutral-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-neutral-900">New plan</h2>
+        <form onSubmit={handleCreate} className="rounded-lg border border-hairline bg-surface-2 p-5">
+          <h2 className="text-sm font-semibold text-ink">New plan</h2>
           <label className="mt-4 block text-sm">
-            <span className="mb-1 block text-neutral-700">
+            <span className="mb-1 block text-ink-secondary">
               Key (permanent — used in URLs, events, and audit history)
             </span>
             <input
@@ -282,19 +282,19 @@ export function PlansBoard() {
               onChange={(e) => setCreateForm({ ...createForm, key: e.target.value })}
               required
               placeholder="e.g. scale"
-              className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+              className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
             />
           </label>
           <div className="mt-3">
             <PlanFields form={createForm} onChange={setCreateForm} onToggleFeatureKey={toggleFeatureKey} />
           </div>
-          {createError && <p className="mt-3 text-sm text-red-600">{createError}</p>}
+          {createError && <p className="mt-3 text-sm text-red-400">{createError}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setCreating(false)}
               disabled={createBusy}
-              className="rounded-md border border-neutral-300 px-4 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md border border-hairline-strong px-4 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-1 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Cancel
             </button>
@@ -325,27 +325,27 @@ function PlanFields({
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
-          <span className="mb-1 block text-neutral-700">Name</span>
+          <span className="mb-1 block text-ink-secondary">Name</span>
           <input
             value={form.name}
             onChange={(e) => onChange({ ...form, name: e.target.value })}
             required
-            className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+            className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-neutral-700">Tagline</span>
+          <span className="mb-1 block text-ink-secondary">Tagline</span>
           <input
             value={form.tagline}
             onChange={(e) => onChange({ ...form, tagline: e.target.value })}
             required
-            className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+            className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
           />
         </label>
       </div>
       <div className="grid gap-3 sm:grid-cols-5">
         <label className="block text-sm">
-          <span className="mb-1 block text-neutral-700">Price (Rs/mo)</span>
+          <span className="mb-1 block text-ink-secondary">Price (Rs/mo)</span>
           <input
             type="number"
             min={0}
@@ -353,63 +353,63 @@ function PlanFields({
             value={form.priceInPaisaMonthly}
             onChange={(e) => onChange({ ...form, priceInPaisaMonthly: e.target.value })}
             required
-            className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+            className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-neutral-700">Max staff (blank = unlimited)</span>
+          <span className="mb-1 block text-ink-secondary">Max staff (blank = unlimited)</span>
           <input
             type="number"
             min={0}
             value={form.maxStaff}
             onChange={(e) => onChange({ ...form, maxStaff: e.target.value })}
-            className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+            className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-neutral-700">Max branches (blank = unlimited)</span>
+          <span className="mb-1 block text-ink-secondary">Max branches (blank = unlimited)</span>
           <input
             type="number"
             min={0}
             value={form.maxBranches}
             onChange={(e) => onChange({ ...form, maxBranches: e.target.value })}
-            className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+            className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-neutral-700">AI reqs/mo (blank = unlimited)</span>
+          <span className="mb-1 block text-ink-secondary">AI reqs/mo (blank = unlimited)</span>
           <input
             type="number"
             min={0}
             value={form.aiMonthlyRequestLimit}
             onChange={(e) => onChange({ ...form, aiMonthlyRequestLimit: e.target.value })}
-            className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+            className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-neutral-700">Sort order</span>
+          <span className="mb-1 block text-ink-secondary">Sort order</span>
           <input
             type="number"
             value={form.sortOrder}
             onChange={(e) => onChange({ ...form, sortOrder: e.target.value })}
-            className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+            className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
           />
         </label>
       </div>
       <label className="block text-sm">
-        <span className="mb-1 block text-neutral-700">Marketing features (one per line)</span>
+        <span className="mb-1 block text-ink-secondary">Marketing features (one per line)</span>
         <textarea
           value={form.features}
           onChange={(e) => onChange({ ...form, features: e.target.value })}
           rows={4}
-          className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+          className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
         />
       </label>
       <div className="text-sm">
-        <span className="mb-1 block text-neutral-700">Entitled features (gated by the entitlement engine)</span>
+        <span className="mb-1 block text-ink-secondary">Entitled features (gated by the entitlement engine)</span>
         <div className="grid gap-1.5 sm:grid-cols-2">
           {FEATURE_KEY_LIST.map((key) => (
-            <label key={key} className="flex items-center gap-2 text-xs text-neutral-600">
+            <label key={key} className="flex items-center gap-2 text-xs text-ink-secondary">
               <input
                 type="checkbox"
                 checked={form.featureKeys.includes(key)}
@@ -421,7 +421,7 @@ function PlanFields({
         </div>
       </div>
       <div className="flex flex-wrap gap-4">
-        <label className="flex items-center gap-2 text-sm text-neutral-700">
+        <label className="flex items-center gap-2 text-sm text-ink-secondary">
           <input
             type="checkbox"
             checked={form.highlight}
@@ -429,7 +429,7 @@ function PlanFields({
           />
           Highlight as &quot;Most popular&quot;
         </label>
-        <label className="flex items-center gap-2 text-sm text-neutral-700">
+        <label className="flex items-center gap-2 text-sm text-ink-secondary">
           <input
             type="checkbox"
             checked={form.isActive}

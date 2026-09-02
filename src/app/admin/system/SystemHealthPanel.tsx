@@ -131,15 +131,15 @@ export function SystemHealthPanel() {
     }
   }
 
-  if (error && !data) return <p className="text-sm text-red-600">{error}</p>;
-  if (!data) return <p className="text-sm text-neutral-400">Loading…</p>;
+  if (error && !data) return <p className="text-sm text-red-400">{error}</p>;
+  if (!data) return <p className="text-sm text-ink-faint">Loading…</p>;
 
   const { health, maintenanceMode } = data;
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-neutral-200 bg-white p-5">
-        <h2 className="mb-4 text-sm font-semibold text-neutral-900">Operational health</h2>
+      <div className="rounded-xl border border-hairline bg-surface-2 p-5">
+        <h2 className="mb-4 text-sm font-semibold text-ink">Operational health</h2>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Stat label="Database" value={health.db.ok ? "OK" : "Unreachable"} accent={health.db.ok} />
           <Stat label="DB latency" value={`${health.db.latencyMs} ms`} />
@@ -149,12 +149,12 @@ export function SystemHealthPanel() {
           <Stat label="App uptime" value={formatUptime(health.appUptimeSeconds)} />
         </div>
         <div className="mt-4">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
             Subscription status breakdown
           </h3>
           <div className="flex flex-wrap gap-2 text-xs">
             {Object.entries(health.restaurants.byStatus).map(([status, n]) => (
-              <span key={status} className="rounded-full bg-neutral-100 px-2.5 py-1 text-neutral-700">
+              <span key={status} className="rounded-full bg-surface-1 px-2.5 py-1 text-ink-secondary">
                 {status}: {n}
               </span>
             ))}
@@ -162,9 +162,9 @@ export function SystemHealthPanel() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-neutral-200 bg-white p-5">
-        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Maintenance mode</h2>
-        <p className="mb-4 text-xs text-neutral-500">
+      <div className="rounded-xl border border-hairline bg-surface-2 p-5">
+        <h2 className="mb-1 text-sm font-semibold text-ink">Maintenance mode</h2>
+        <p className="mb-4 text-xs text-ink-muted">
           When enabled, every restaurant&apos;s dashboard and API requests are blocked with a
           maintenance notice — except platform admins and active impersonation sessions, who stay
           fully able to work. Every action taken while this is on is tagged in the audit log.
@@ -172,21 +172,21 @@ export function SystemHealthPanel() {
 
         {maintenanceMode.enabled ? (
           <div>
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/15 p-3 text-sm text-amber-300">
               <p className="font-medium">Maintenance mode is ON</p>
               {maintenanceMode.message && <p className="mt-1">&quot;{maintenanceMode.message}&quot;</p>}
-              <p className="mt-1 text-xs text-amber-700">
+              <p className="mt-1 text-xs text-amber-400">
                 Reason: {maintenanceMode.reason} · Enabled by {maintenanceMode.enabledByName ?? "—"}
                 {maintenanceMode.enabledAt &&
                   ` · ${new Date(maintenanceMode.enabledAt).toLocaleString()}`}
               </p>
             </div>
-            {toggleError && <p className="mb-2 text-sm text-red-600">{toggleError}</p>}
+            {toggleError && <p className="mb-2 text-sm text-red-400">{toggleError}</p>}
             <button
               type="button"
               disabled={busy}
               onClick={disableMaintenance}
-              className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-60"
+              className="rounded-md bg-surface-0 px-4 py-2 text-sm font-medium text-white hover:bg-surface-3 disabled:opacity-60"
             >
               {busy ? "Disabling…" : "Disable maintenance mode"}
             </button>
@@ -207,12 +207,12 @@ export function SystemHealthPanel() {
               rows={2}
               className="input mb-2"
             />
-            {toggleError && <p className="mb-2 text-sm text-red-600">{toggleError}</p>}
+            {toggleError && <p className="mb-2 text-sm text-red-400">{toggleError}</p>}
             <button
               type="button"
               disabled={busy}
               onClick={enableMaintenance}
-              className="rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+              className="rounded-md border border-red-500/30 bg-surface-2 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/15 disabled:opacity-60"
             >
               {busy ? "Enabling…" : "Enable maintenance mode"}
             </button>
@@ -220,17 +220,17 @@ export function SystemHealthPanel() {
         )}
       </div>
 
-      <div className="rounded-xl border border-neutral-200 bg-white p-5">
-        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Attendance photo retention</h2>
-        <p className="mb-4 text-xs text-neutral-500">
+      <div className="rounded-xl border border-hairline bg-surface-2 p-5">
+        <h2 className="mb-1 text-sm font-semibold text-ink">Attendance photo retention</h2>
+        <p className="mb-4 text-xs text-ink-muted">
           Permanently deletes every attendance selfie past its restaurant&apos;s retention window (set via
           ATTENDANCE_PHOTO_RETENTION_DAYS — 90 days by default) and clears the DB record pointing to it.
           This app has no built-in scheduler, so run this periodically from an external cron, or trigger it
           manually here.
         </p>
-        {purgeError && <p className="mb-2 text-sm text-red-600">{purgeError}</p>}
+        {purgeError && <p className="mb-2 text-sm text-red-400">{purgeError}</p>}
         {purgeResult && (
-          <p className="mb-2 rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
+          <p className="mb-2 rounded-lg bg-surface-1 px-3 py-2 text-xs text-ink-secondary">
             Retention: {purgeResult.retentionDays} days · {purgeResult.recordsPurged} record(s) matched ·{" "}
             {purgeResult.photosDeleted} photo(s) deleted
             {purgeResult.failures > 0 && ` · ${purgeResult.failures} failure(s) — see server logs`}
@@ -240,7 +240,7 @@ export function SystemHealthPanel() {
           type="button"
           disabled={purgeBusy}
           onClick={purgeAttendancePhotos}
-          className="rounded-md border border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
+          className="rounded-md border border-hairline px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-1 disabled:opacity-60"
         >
           {purgeBusy ? "Purging…" : "Purge expired attendance photos now"}
         </button>
@@ -252,9 +252,9 @@ export function SystemHealthPanel() {
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div>
-      <p className="text-xs text-neutral-500">{label}</p>
+      <p className="text-xs text-ink-muted">{label}</p>
       <p
-        className={`text-lg font-semibold tabular-nums ${accent === false ? "text-red-600" : "text-neutral-900"}`}
+        className={`text-lg font-semibold tabular-nums ${accent === false ? "text-red-400" : "text-ink"}`}
       >
         {value}
       </p>

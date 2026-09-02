@@ -66,8 +66,8 @@ function formatRupees(paisa: number) {
 function Row({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
     <div className="flex items-center justify-between py-1 text-sm">
-      <span className={muted ? "text-neutral-400" : "text-neutral-600"}>{label}</span>
-      <span className={`tabular-nums font-medium ${muted ? "text-neutral-400" : "text-neutral-900"}`}>{value}</span>
+      <span className={muted ? "text-ink-faint" : "text-ink-secondary"}>{label}</span>
+      <span className={`tabular-nums font-medium ${muted ? "text-ink-faint" : "text-ink"}`}>{value}</span>
     </div>
   );
 }
@@ -137,9 +137,9 @@ export function DailyClosingBoard({ slug }: { slug: string }) {
 
   if (!snapshot) {
     return error ? (
-      <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      <p className="rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>
     ) : (
-      <p className="text-sm text-neutral-400">Loading…</p>
+      <p className="text-sm text-ink-faint">Loading…</p>
     );
   }
 
@@ -147,30 +147,30 @@ export function DailyClosingBoard({ slug }: { slug: string }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <label className="text-sm">
-          <span className="mr-2 text-neutral-600">Date</span>
+          <span className="mr-2 text-ink-secondary">Date</span>
           <input
             type="date"
             value={date}
             onChange={(e) => loadPreview(e.target.value)}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+            className="rounded-md border border-hairline-strong px-2 py-1 text-sm"
           />
         </label>
         {alreadyClosed ? (
-          <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-600">
+          <span className="rounded-full bg-surface-1 px-2.5 py-1 text-xs font-medium text-ink-secondary">
             Closed
           </span>
         ) : (
-          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+          <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-400">
             Not yet closed
           </span>
         )}
       </div>
 
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <section className="rounded-lg border border-neutral-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-neutral-900">Sales</h2>
+        <section className="rounded-lg border border-hairline bg-surface-2 p-4">
+          <h2 className="text-sm font-semibold text-ink">Sales</h2>
           <Row label="Gross sales" value={formatRupees(snapshot.sales.grossSalesInPaisa)} />
           <Row label="Discounts" value={formatRupees(snapshot.sales.discountInPaisa)} />
           <Row label="Service charge" value={formatRupees(snapshot.sales.serviceChargeInPaisa)} />
@@ -180,10 +180,10 @@ export function DailyClosingBoard({ slug }: { slug: string }) {
           <Row label="Orders" value={String(snapshot.sales.orderCount)} muted />
         </section>
 
-        <section className="rounded-lg border border-neutral-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-neutral-900">Payment methods</h2>
+        <section className="rounded-lg border border-hairline bg-surface-2 p-4">
+          <h2 className="text-sm font-semibold text-ink">Payment methods</h2>
           {snapshot.paymentBreakdown.length === 0 ? (
-            <p className="mt-2 text-sm text-neutral-400">No payments recorded.</p>
+            <p className="mt-2 text-sm text-ink-faint">No payments recorded.</p>
           ) : (
             snapshot.paymentBreakdown.map((p) => (
               <Row key={p.method} label={p.method} value={formatRupees(p.totalInPaisa)} />
@@ -191,8 +191,8 @@ export function DailyClosingBoard({ slug }: { slug: string }) {
           )}
         </section>
 
-        <section className="rounded-lg border border-neutral-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-neutral-900">Expenses</h2>
+        <section className="rounded-lg border border-hairline bg-surface-2 p-4">
+          <h2 className="text-sm font-semibold text-ink">Expenses</h2>
           <Row label="Operating expenses" value={formatRupees(snapshot.expenses.operatingExpensesInPaisa)} />
           <Row label="Cash expenses" value={formatRupees(snapshot.expenses.cashExpensesInPaisa)} />
           <Row
@@ -201,10 +201,10 @@ export function DailyClosingBoard({ slug }: { slug: string }) {
           />
         </section>
 
-        <section className="rounded-lg border border-neutral-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-neutral-900">Register</h2>
+        <section className="rounded-lg border border-hairline bg-surface-2 p-4">
+          <h2 className="text-sm font-semibold text-ink">Register</h2>
           {snapshot.register.shiftsClosedCount === 0 ? (
-            <p className="mt-2 text-sm text-neutral-400">No register shifts closed this day.</p>
+            <p className="mt-2 text-sm text-ink-faint">No register shifts closed this day.</p>
           ) : (
             <>
               <Row label="Opening cash" value={formatRupees(snapshot.register.openingCashInPaisa!)} />
@@ -218,8 +218,8 @@ export function DailyClosingBoard({ slug }: { slug: string }) {
           )}
         </section>
 
-        <section className="rounded-lg border border-neutral-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-neutral-900">Inventory</h2>
+        <section className="rounded-lg border border-hairline bg-surface-2 p-4">
+          <h2 className="text-sm font-semibold text-ink">Inventory</h2>
           <Row label="Purchases" value={formatRupees(snapshot.inventory.purchasesInPaisa)} />
           <Row label="Wastage cost" value={formatRupees(snapshot.inventory.wastageCostInPaisa)} />
           <Row
@@ -228,8 +228,8 @@ export function DailyClosingBoard({ slug }: { slug: string }) {
           />
         </section>
 
-        <section className="rounded-lg border border-neutral-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-neutral-900">Profit snapshot</h2>
+        <section className="rounded-lg border border-hairline bg-surface-2 p-4">
+          <h2 className="text-sm font-semibold text-ink">Profit snapshot</h2>
           <Row label="Revenue" value={formatRupees(snapshot.profit.revenueInPaisa)} />
           <Row label="COGS" value={formatRupees(snapshot.profit.cogsInPaisa)} />
           <Row label="Gross profit" value={formatRupees(snapshot.profit.grossProfitInPaisa)} />
@@ -239,18 +239,18 @@ export function DailyClosingBoard({ slug }: { slug: string }) {
       </div>
 
       {!alreadyClosed && (
-        <div className="rounded-lg border border-neutral-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-neutral-900">Close this day</h2>
-          <p className="mt-1 text-xs text-neutral-500">
+        <div className="rounded-lg border border-hairline bg-surface-2 p-5">
+          <h2 className="text-sm font-semibold text-ink">Close this day</h2>
+          <p className="mt-1 text-xs text-ink-muted">
             Freezes the numbers above and locks late edits to this day&apos;s financial records — a manager
             override is required afterward.
           </p>
           <label className="mt-3 block max-w-md text-sm">
-            <span className="mb-1 block text-neutral-700">Notes (optional)</span>
+            <span className="mb-1 block text-ink-secondary">Notes (optional)</span>
             <input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+              className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm"
             />
           </label>
           <button
@@ -264,14 +264,14 @@ export function DailyClosingBoard({ slug }: { slug: string }) {
         </div>
       )}
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-neutral-900">Recently closed days</h2>
+      <div className="rounded-lg border border-hairline bg-surface-2 p-5">
+        <h2 className="text-sm font-semibold text-ink">Recently closed days</h2>
         {history.length === 0 ? (
-          <p className="mt-2 text-sm text-neutral-400">No days closed yet.</p>
+          <p className="mt-2 text-sm text-ink-faint">No days closed yet.</p>
         ) : (
           <table className="mt-2 w-full text-sm">
             <thead>
-              <tr className="text-left text-xs text-neutral-400">
+              <tr className="text-left text-xs text-ink-faint">
                 <th className="pb-1 font-normal">Date</th>
                 <th className="pb-1 font-normal">Revenue</th>
                 <th className="pb-1 font-normal">Net profit</th>
@@ -280,13 +280,13 @@ export function DailyClosingBoard({ slug }: { slug: string }) {
             </thead>
             <tbody>
               {history.map((h) => (
-                <tr key={h.id} className="border-t border-neutral-100">
+                <tr key={h.id} className="border-t border-hairline/60">
                   <td className="py-1.5">{h.businessDate}</td>
                   <td className="py-1.5 tabular-nums">{formatRupees(h.revenueInPaisa)}</td>
                   <td className="py-1.5 tabular-nums">{formatRupees(h.netProfitInPaisa)}</td>
                   <td className="py-1.5 tabular-nums">
                     {h.cashVarianceInPaisa === null ? (
-                      <span className="text-neutral-400">—</span>
+                      <span className="text-ink-faint">—</span>
                     ) : (
                       formatRupees(h.cashVarianceInPaisa)
                     )}

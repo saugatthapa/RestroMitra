@@ -4,8 +4,8 @@ export default function FeatureFlagsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-neutral-900">Feature flags</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-semibold text-ink">Feature flags</h1>
+        <p className="text-sm text-ink-muted">
           Global defaults for capabilities not (only) governed by a plan. Per-tenant exceptions
           live on each restaurant&apos;s own page, under Entitlements.
         </p>

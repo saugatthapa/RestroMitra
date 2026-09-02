@@ -45,12 +45,12 @@ function formatTime(iso: string) {
 }
 
 const STATUS_BADGE_CLASS: Record<ReservationStatus, string> = {
-  requested: "bg-neutral-200 text-neutral-700",
-  confirmed: "bg-blue-100 text-blue-800",
-  seated: "bg-green-100 text-green-800",
-  completed: "bg-neutral-100 text-neutral-500",
-  cancelled: "bg-red-100 text-red-700",
-  no_show: "bg-red-100 text-red-700",
+  requested: "bg-surface-3 text-ink-secondary",
+  confirmed: "bg-blue-500/20 text-blue-300",
+  seated: "bg-green-500/20 text-green-300",
+  completed: "bg-surface-1 text-ink-muted",
+  cancelled: "bg-red-500/20 text-red-400",
+  no_show: "bg-red-500/20 text-red-400",
 };
 
 export function ReservationsBoard({
@@ -102,7 +102,7 @@ export function ReservationsBoard({
 
   if (!canManageReservations) {
     return (
-      <p className="text-sm text-neutral-400">
+      <p className="text-sm text-ink-faint">
         Your role doesn&apos;t have access to reservations.
       </p>
     );
@@ -110,14 +110,14 @@ export function ReservationsBoard({
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
 
-      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-neutral-200 bg-white p-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-hairline bg-surface-2 p-4">
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Date</span>
+          <span className="mb-1 block text-ink-secondary">Date</span>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input !w-auto" />
           {dateSystem === "BS" && (
-            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(date)}</span>
+            <span className="mt-1 block text-xs text-ink-faint">{formatBsHint(date)}</span>
           )}
         </label>
         <div className="ml-auto">
@@ -140,11 +140,11 @@ export function ReservationsBoard({
       )}
 
       {loading ? (
-        <p className="text-sm text-neutral-500">Loading reservations…</p>
+        <p className="text-sm text-ink-muted">Loading reservations…</p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+        <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
           <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+            <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
               <tr>
                 <th className="px-3 py-2">Time</th>
                 <th className="px-3 py-2">Party</th>
@@ -157,7 +157,7 @@ export function ReservationsBoard({
             <tbody>
               {reservations.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-neutral-400">
+                  <td colSpan={6} className="px-3 py-6 text-center text-ink-faint">
                     No reservations for this date.
                   </td>
                 </tr>
@@ -203,12 +203,12 @@ function ReservationRow({
 }) {
   const actions = nextStatuses(reservation.status);
   return (
-    <tr className="border-t border-neutral-100">
-      <td className="px-3 py-2 text-neutral-500">{formatTime(reservation.reservationTime)}</td>
+    <tr className="border-t border-hairline/60">
+      <td className="px-3 py-2 text-ink-muted">{formatTime(reservation.reservationTime)}</td>
       <td className="px-3 py-2">
-        <p className="font-medium text-neutral-900">{reservation.customerName}</p>
-        <p className="text-xs text-neutral-400">{reservation.customerPhone}</p>
-        {reservation.notes && <p className="text-xs text-neutral-400">{reservation.notes}</p>}
+        <p className="font-medium text-ink">{reservation.customerName}</p>
+        <p className="text-xs text-ink-faint">{reservation.customerPhone}</p>
+        {reservation.notes && <p className="text-xs text-ink-faint">{reservation.notes}</p>}
       </td>
       <td className="px-3 py-2">{reservation.partySize}</td>
       <td className="px-3 py-2">{reservation.table?.name ?? "—"}</td>
@@ -225,12 +225,12 @@ function ReservationRow({
             <button
               key={next}
               onClick={() => onChangeStatus(next)}
-              className="text-xs font-medium text-orange-700 hover:underline"
+              className="text-xs font-medium text-orange-400 hover:underline"
             >
               {RESERVATION_STATUS_LABELS[next]}
             </button>
           ))}
-          <button onClick={onEdit} className="text-xs font-medium text-neutral-500 hover:underline">
+          <button onClick={onEdit} className="text-xs font-medium text-ink-muted hover:underline">
             Edit
           </button>
         </div>
@@ -285,15 +285,15 @@ function AddReservationForm({
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+    <form onSubmit={submit} className="rounded-2xl border border-hairline bg-surface-2 p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Name</span>
+          <span className="mb-1 block text-ink-secondary">Name</span>
           <input required value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="input" />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Phone</span>
+          <span className="mb-1 block text-ink-secondary">Phone</span>
           <input
             required
             value={customerPhone}
@@ -303,7 +303,7 @@ function AddReservationForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Party size</span>
+          <span className="mb-1 block text-ink-secondary">Party size</span>
           <input
             required
             type="number"
@@ -314,7 +314,7 @@ function AddReservationForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Date &amp; time</span>
+          <span className="mb-1 block text-ink-secondary">Date &amp; time</span>
           <input
             required
             type="datetime-local"
@@ -323,11 +323,11 @@ function AddReservationForm({
             className="input"
           />
           {dateSystem === "BS" && time && (
-            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(time.slice(0, 10))}</span>
+            <span className="mt-1 block text-xs text-ink-faint">{formatBsHint(time.slice(0, 10))}</span>
           )}
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Table (optional)</span>
+          <span className="mb-1 block text-ink-secondary">Table (optional)</span>
           <select value={tableId} onChange={(e) => setTableId(e.target.value)} className="input">
             <option value="">Not assigned yet</option>
             {tables.map((t) => (
@@ -338,7 +338,7 @@ function AddReservationForm({
           </select>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Notes (optional)</span>
+          <span className="mb-1 block text-ink-secondary">Notes (optional)</span>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className="input" />
         </label>
       </div>
@@ -393,9 +393,9 @@ function EditReservationRow({
   }
 
   return (
-    <tr className="border-t border-neutral-100 bg-neutral-50">
+    <tr className="border-t border-hairline/60 bg-surface-1">
       <td colSpan={6} className="px-3 py-3">
-        {error && <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="mb-2 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
         <div className="grid gap-3 sm:grid-cols-3">
           <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="input" />
           <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="input" />
@@ -414,7 +414,7 @@ function EditReservationRow({
               className="input"
             />
             {dateSystem === "BS" && time && (
-              <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(time.slice(0, 10))}</span>
+              <span className="mt-1 block text-xs text-ink-faint">{formatBsHint(time.slice(0, 10))}</span>
             )}
           </div>
           <select value={tableId} onChange={(e) => setTableId(e.target.value)} className="input">

@@ -24,8 +24,8 @@ export default async function TablesPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-neutral-900">Tables &amp; QR</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-semibold text-ink">Tables &amp; QR</h1>
+        <p className="text-sm text-ink-muted">
           Create a table, print its QR code, and place it on the physical table. Customers
           scan it to browse the menu and order directly — no app or login needed.
         </p>

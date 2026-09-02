@@ -22,20 +22,20 @@ type AdminRestaurant = {
   owner: { fullName: string; phone: string } | null;
 };
 
-const SUSPENDED_BADGE_CLASS = "bg-red-100 text-red-800";
+const SUSPENDED_BADGE_CLASS = "bg-red-500/20 text-red-300";
 
 function statusBadgeClass(status: SubscriptionStatus) {
   switch (status) {
     case "active":
-      return "bg-emerald-50 text-emerald-700";
+      return "bg-emerald-500/15 text-emerald-400";
     case "trialing":
-      return "bg-orange-50 text-orange-700";
+      return "bg-orange-500/15 text-orange-400";
     case "past_due":
-      return "bg-amber-50 text-amber-700";
+      return "bg-amber-500/15 text-amber-400";
     case "paused":
-      return "bg-neutral-100 text-neutral-700";
+      return "bg-surface-1 text-ink-secondary";
     default:
-      return "bg-red-50 text-red-700";
+      return "bg-red-500/15 text-red-400";
   }
 }
 
@@ -117,11 +117,11 @@ export function AdminOverview() {
         </select>
       </div>
 
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
 
-      <div className={`overflow-hidden rounded-xl border border-neutral-200 bg-white ${loading ? "opacity-60" : ""}`}>
+      <div className={`overflow-hidden rounded-xl border border-hairline bg-surface-2 ${loading ? "opacity-60" : ""}`}>
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+          <thead className="bg-surface-1 text-left text-xs font-semibold tracking-wide text-ink-muted uppercase">
             <tr>
               <th className="px-4 py-3">Restaurant</th>
               <th className="px-4 py-3">Owner</th>
@@ -132,21 +132,21 @@ export function AdminOverview() {
           </thead>
           <tbody>
             {restaurants.map((r) => (
-              <tr key={r.id} className="border-t border-neutral-100 hover:bg-neutral-50">
+              <tr key={r.id} className="border-t border-hairline/60 hover:bg-surface-1">
                 <td className="px-4 py-3">
-                  <Link href={`/admin/restaurants/${r.id}`} className="font-medium text-neutral-900 hover:underline">
+                  <Link href={`/admin/restaurants/${r.id}`} className="font-medium text-ink hover:underline">
                     {r.name}
                   </Link>
-                  <p className="text-xs text-neutral-400">{r.slug}</p>
+                  <p className="text-xs text-ink-faint">{r.slug}</p>
                 </td>
-                <td className="px-4 py-3 text-neutral-600">
+                <td className="px-4 py-3 text-ink-secondary">
                   {r.owner ? (
                     <>
                       {r.owner.fullName}
-                      <p className="text-xs text-neutral-400">{r.owner.phone}</p>
+                      <p className="text-xs text-ink-faint">{r.owner.phone}</p>
                     </>
                   ) : (
-                    <span className="text-neutral-400">—</span>
+                    <span className="text-ink-faint">—</span>
                   )}
                 </td>
                 <td className="px-4 py-3">
@@ -161,8 +161,8 @@ export function AdminOverview() {
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-neutral-600">{r.planName ?? "—"}</td>
-                <td className="px-4 py-3 text-neutral-500">
+                <td className="px-4 py-3 text-ink-secondary">{r.planName ?? "—"}</td>
+                <td className="px-4 py-3 text-ink-muted">
                   {r.trialEndsAt
                     ? new Date(r.trialEndsAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
                     : "—"}
@@ -171,7 +171,7 @@ export function AdminOverview() {
             ))}
             {!loading && restaurants.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-neutral-400">
+                <td colSpan={5} className="px-4 py-8 text-center text-ink-faint">
                   No restaurants match this filter.
                 </td>
               </tr>
@@ -185,9 +185,9 @@ export function AdminOverview() {
 
 function StatTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-3">
-      <p className="text-xs font-medium text-neutral-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-neutral-900">{value}</p>
+    <div className="rounded-xl border border-hairline bg-surface-2 p-3">
+      <p className="text-xs font-medium text-ink-muted">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-ink">{value}</p>
     </div>
   );
 }

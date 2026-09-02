@@ -29,8 +29,8 @@ export default async function AuditLogPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-neutral-900">Activity Log</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-semibold text-ink">Activity Log</h1>
+        <p className="text-sm text-ink-muted">
           A record of sensitive actions taken across {active.name} — refunds, staff and
           permission changes, settings changes, and more.
         </p>

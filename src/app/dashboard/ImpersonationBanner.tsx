@@ -69,11 +69,11 @@ export function ImpersonationBanner({
       <span>
         Viewing <strong>{restaurantName}</strong> as {mode === "write" ? "read/write" : "read-only"}
       </span>
-      <span className="text-amber-900/80">Reason: {reason}</span>
-      <span className="text-amber-900/80">
+      <span className="text-amber-300/80">Reason: {reason}</span>
+      <span className="text-amber-300/80">
         Started {new Date(startedAt).toLocaleTimeString()} · Expires in {remaining}
       </span>
-      {error && <span className="font-semibold text-red-900">{error}</span>}
+      {error && <span className="font-semibold text-red-300">{error}</span>}
       <button
         type="button"
         onClick={handleExit}

@@ -27,15 +27,15 @@ export default async function PosPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-neutral-900">POS</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-semibold text-ink">POS</h1>
+        <p className="text-sm text-ink-muted">
           Key in an order for a walk-in, phone, or dine-in table at {active.name} — priced from
           the live menu, same as QR ordering.
         </p>
       </div>
 
       {canCreateOrder ? (
-        <Suspense fallback={<p className="text-sm text-neutral-500">Loading…</p>}>
+        <Suspense fallback={<p className="text-sm text-ink-muted">Loading…</p>}>
           <POSOrderBuilder
             slug={active.slug}
             canApplyDiscount={canApplyDiscount}
@@ -43,7 +43,7 @@ export default async function PosPage() {
           />
         </Suspense>
       ) : (
-        <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-500">
+        <p className="rounded-lg bg-surface-1 px-4 py-3 text-sm text-ink-muted">
           Your role doesn&apos;t have permission to create orders.
         </p>
       )}

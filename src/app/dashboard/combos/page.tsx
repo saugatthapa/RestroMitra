@@ -26,8 +26,8 @@ export default async function CombosPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-neutral-900">Combos</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-semibold text-ink">Combos</h1>
+        <p className="text-sm text-ink-muted">
           Bundle menu items at a fixed price for staff to add to an order at the POS for{" "}
           {active.name}.
         </p>

@@ -21,8 +21,8 @@ export default async function BranchesPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-neutral-900">Branches</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-semibold text-ink">Branches</h1>
+        <p className="text-sm text-ink-muted">
           Manage {active.name}&apos;s physical locations. Staff, tables, and orders can be
           scoped to a specific branch.
         </p>

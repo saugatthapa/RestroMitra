@@ -29,8 +29,8 @@ export default async function ExpensesPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-neutral-900">Expenses</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-semibold text-ink">Expenses</h1>
+        <p className="text-sm text-ink-muted">
           Operational spending for {active.name}.
         </p>
       </div>

@@ -90,8 +90,8 @@ export function DashboardMetrics() {
     };
   }, []);
 
-  if (error && !data) return <p className="mb-6 text-sm text-red-600">{error}</p>;
-  if (!data) return <p className="mb-6 text-sm text-neutral-400">Loading metrics…</p>;
+  if (error && !data) return <p className="mb-6 text-sm text-red-400">{error}</p>;
+  if (!data) return <p className="mb-6 text-sm text-ink-faint">Loading metrics…</p>;
 
   const { metrics, recentActivity } = data;
 
@@ -106,44 +106,44 @@ export function DashboardMetrics() {
         <MetricTile label="Active MRR" value={formatPaisa(metrics.revenue.activeMonthlyInPaisa)} />
       </div>
       {metrics.revenue.pastDueMonthlyInPaisa > 0 && (
-        <p className="mb-4 text-xs text-amber-700">
+        <p className="mb-4 text-xs text-amber-400">
           {formatPaisa(metrics.revenue.pastDueMonthlyInPaisa)}/mo billed but currently past due.
         </p>
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-xl border border-neutral-200 bg-white p-4">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+        <div className="rounded-xl border border-hairline bg-surface-2 p-4">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
             Plan distribution
           </h3>
           <div className="space-y-1.5">
-            {metrics.planDistribution.length === 0 && <p className="text-xs text-neutral-400">No restaurants yet.</p>}
+            {metrics.planDistribution.length === 0 && <p className="text-xs text-ink-faint">No restaurants yet.</p>}
             {metrics.planDistribution
               .slice()
               .sort((a, b) => b.restaurantCount - a.restaurantCount)
               .map((p) => (
                 <div key={p.planKey ?? "none"} className="flex items-center justify-between text-sm">
-                  <span className="text-neutral-700">{p.planName}</span>
-                  <span className="font-medium tabular-nums text-neutral-900">{p.restaurantCount}</span>
+                  <span className="text-ink-secondary">{p.planName}</span>
+                  <span className="font-medium tabular-nums text-ink">{p.restaurantCount}</span>
                 </div>
               ))}
           </div>
         </div>
 
-        <div className="rounded-xl border border-neutral-200 bg-white p-4">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+        <div className="rounded-xl border border-hairline bg-surface-2 p-4">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
             Feature usage
           </h3>
           <div className="max-h-56 space-y-1.5 overflow-y-auto">
-            {metrics.featureUsage.length === 0 && <p className="text-xs text-neutral-400">No features tracked yet.</p>}
+            {metrics.featureUsage.length === 0 && <p className="text-xs text-ink-faint">No features tracked yet.</p>}
             {metrics.featureUsage.map((f) => (
               <div key={f.featureKey} className="text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-neutral-700">{f.name}</span>
-                  <span className="font-medium tabular-nums text-neutral-900">{f.viaPlanCount}</span>
+                  <span className="text-ink-secondary">{f.name}</span>
+                  <span className="font-medium tabular-nums text-ink">{f.viaPlanCount}</span>
                 </div>
                 {(f.overrideGrantedCount > 0 || f.overrideRevokedCount > 0) && (
-                  <p className="text-[11px] text-neutral-400">
+                  <p className="text-[11px] text-ink-faint">
                     {f.overrideGrantedCount > 0 && `+${f.overrideGrantedCount} via override`}
                     {f.overrideGrantedCount > 0 && f.overrideRevokedCount > 0 && " · "}
                     {f.overrideRevokedCount > 0 && `−${f.overrideRevokedCount} revoked`}
@@ -154,26 +154,26 @@ export function DashboardMetrics() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-neutral-200 bg-white p-4">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+        <div className="rounded-xl border border-hairline bg-surface-2 p-4">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
             Recent activity
           </h3>
           <div className="max-h-56 space-y-2 overflow-y-auto">
-            {recentActivity.length === 0 && <p className="text-xs text-neutral-400">No activity yet.</p>}
+            {recentActivity.length === 0 && <p className="text-xs text-ink-faint">No activity yet.</p>}
             {recentActivity.map((event) => (
               <div key={event.id} className="text-xs">
-                <p className="text-neutral-700">
+                <p className="text-ink-secondary">
                   {formatAction(event.action)}
                   {event.restaurantName && (
                     <>
                       {" · "}
-                      <Link href={`/admin/restaurants/${event.restaurantId}`} className="text-neutral-500 hover:underline">
+                      <Link href={`/admin/restaurants/${event.restaurantId}`} className="text-ink-muted hover:underline">
                         {event.restaurantName}
                       </Link>
                     </>
                   )}
                 </p>
-                <p className="text-neutral-400">
+                <p className="text-ink-faint">
                   {event.userFullName ?? "System"} · {formatDateTime(event.createdAt)}
                 </p>
               </div>
@@ -187,9 +187,9 @@ export function DashboardMetrics() {
 
 function MetricTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-3">
-      <p className="text-xs font-medium text-neutral-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{value}</p>
+    <div className="rounded-xl border border-hairline bg-surface-2 p-3">
+      <p className="text-xs font-medium text-ink-muted">{label}</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums text-ink">{value}</p>
     </div>
   );
 }

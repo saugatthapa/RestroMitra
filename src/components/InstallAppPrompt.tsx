@@ -89,7 +89,7 @@ export function InstallAppPrompt() {
         type="button"
         onClick={handleClick}
         aria-label="Install app"
-        className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50 sm:px-3"
+        className="inline-flex items-center gap-1.5 rounded-full border border-hairline px-2.5 py-1.5 text-xs font-medium text-ink-secondary hover:bg-surface-1 sm:px-3"
       >
         <span className="flex h-3.5 w-3.5 items-center justify-center" aria-hidden="true">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -102,8 +102,8 @@ export function InstallAppPrompt() {
       </button>
 
       {showIosTip && (
-        <div className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-neutral-200 bg-white p-3 text-xs text-neutral-600 shadow-lg">
-          <p className="font-semibold text-neutral-900">Add RestroKendra to your Home Screen</p>
+        <div className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-hairline bg-surface-2 p-3 text-xs text-ink-secondary shadow-lg">
+          <p className="font-semibold text-ink">Add RestroKendra to your Home Screen</p>
           <p className="mt-1">
             Tap the Share icon in Safari, then choose <span className="font-medium">Add to Home Screen</span>.
             It&apos;ll open full-screen, just like an app.
@@ -111,7 +111,7 @@ export function InstallAppPrompt() {
           <button
             type="button"
             onClick={dismiss}
-            className="mt-2 rounded-full border border-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-500 hover:bg-neutral-50"
+            className="mt-2 rounded-full border border-hairline px-2.5 py-1 text-[11px] font-medium text-ink-muted hover:bg-surface-1"
           >
             Got it
           </button>

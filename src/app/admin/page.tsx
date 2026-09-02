@@ -8,8 +8,8 @@ export default function AdminHomePage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-neutral-900">Dashboard</h1>
-        <p className="text-sm text-neutral-500">Platform-wide metrics and every restaurant on the platform.</p>
+        <h1 className="text-xl font-semibold text-ink">Dashboard</h1>
+        <p className="text-sm text-ink-muted">Platform-wide metrics and every restaurant on the platform.</p>
       </div>
       <DashboardMetrics />
       <AlertsPanel />

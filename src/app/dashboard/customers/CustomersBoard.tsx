@@ -70,13 +70,13 @@ function formatRupees(paisa: number) {
 function tierBadgeClass(tier: string) {
   switch (tier) {
     case "Platinum":
-      return "bg-neutral-900 text-white";
+      return "bg-surface-0 text-white";
     case "Gold":
-      return "bg-amber-100 text-amber-800";
+      return "bg-amber-500/20 text-amber-300";
     case "Silver":
-      return "bg-neutral-200 text-neutral-700";
+      return "bg-surface-3 text-ink-secondary";
     default:
-      return "bg-orange-100 text-orange-800";
+      return "bg-orange-500/20 text-orange-300";
   }
 }
 
@@ -93,7 +93,7 @@ export function CustomersBoard({
 
   if (!canManageCustomers) {
     return (
-      <p className="text-sm text-neutral-400">
+      <p className="text-sm text-ink-faint">
         Your role doesn&apos;t have access to the customer CRM.
       </p>
     );
@@ -154,7 +154,7 @@ function CustomerList({
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <input
@@ -184,11 +184,11 @@ function CustomerList({
       )}
 
       {loading ? (
-        <p className="text-sm text-neutral-500">Loading customers…</p>
+        <p className="text-sm text-ink-muted">Loading customers…</p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+        <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
           <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+            <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
               <tr>
                 <th className="px-3 py-2">Name</th>
                 <th className="px-3 py-2">Phone</th>
@@ -202,7 +202,7 @@ function CustomerList({
             <tbody>
               {customers.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-neutral-400">
+                  <td colSpan={7} className="px-3 py-6 text-center text-ink-faint">
                     No customers yet.
                   </td>
                 </tr>
@@ -214,23 +214,23 @@ function CustomerList({
                   <tr
                     key={c.id}
                     onClick={() => onSelect(c.id)}
-                    className="cursor-pointer border-t border-neutral-100 hover:bg-neutral-50"
+                    className="cursor-pointer border-t border-hairline/60 hover:bg-surface-1"
                   >
-                    <td className="px-3 py-2 font-medium text-neutral-900">
+                    <td className="px-3 py-2 font-medium text-ink">
                       {c.fullName}
                       {birthday && (
                         <span
                           title="Birthday today"
-                          className="ml-2 rounded-full bg-pink-100 px-1.5 py-0.5 text-[10px] font-medium text-pink-700"
+                          className="ml-2 rounded-full bg-pink-500/20 px-1.5 py-0.5 text-[10px] font-medium text-pink-400"
                         >
                           Birthday
                         </span>
                       )}
                       {!c.isActive && (
-                        <span className="ml-2 text-xs text-neutral-400">(inactive)</span>
+                        <span className="ml-2 text-xs text-ink-faint">(inactive)</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-neutral-500">{c.phone}</td>
+                    <td className="px-3 py-2 text-ink-muted">{c.phone}</td>
                     <td className="px-3 py-2">
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${tierBadgeClass(tier)}`}
@@ -239,7 +239,7 @@ function CustomerList({
                       </span>
                     </td>
                     <td className="px-3 py-2">{c.loyaltyPointsBalance}</td>
-                    <td className="px-3 py-2 text-neutral-500">
+                    <td className="px-3 py-2 text-ink-muted">
                       {c.currentVisitStreak > 0 ? `${c.currentVisitStreak}🔥` : "—"}
                     </td>
                     <td className="px-3 py-2">{c.totalOrdersCount}</td>
@@ -288,11 +288,11 @@ function AddCustomerForm({ slug, onAdded }: { slug: string; onAdded: () => void 
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+    <form onSubmit={submit} className="rounded-2xl border border-hairline bg-surface-2 p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-4">
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Phone</span>
+          <span className="mb-1 block text-ink-secondary">Phone</span>
           <input
             required
             value={phone}
@@ -302,7 +302,7 @@ function AddCustomerForm({ slug, onAdded }: { slug: string; onAdded: () => void 
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Full name</span>
+          <span className="mb-1 block text-ink-secondary">Full name</span>
           <input
             required
             value={fullName}
@@ -311,7 +311,7 @@ function AddCustomerForm({ slug, onAdded }: { slug: string; onAdded: () => void 
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Email (optional)</span>
+          <span className="mb-1 block text-ink-secondary">Email (optional)</span>
           <input
             type="email"
             value={email}
@@ -320,7 +320,7 @@ function AddCustomerForm({ slug, onAdded }: { slug: string; onAdded: () => void 
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Birthday (optional)</span>
+          <span className="mb-1 block text-ink-secondary">Birthday (optional)</span>
           <input
             type="date"
             value={dateOfBirth}
@@ -328,7 +328,7 @@ function AddCustomerForm({ slug, onAdded }: { slug: string; onAdded: () => void 
             className="input"
           />
           {dateSystem === "BS" && dateOfBirth && (
-            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(dateOfBirth)}</span>
+            <span className="mt-1 block text-xs text-ink-faint">{formatBsHint(dateOfBirth)}</span>
           )}
         </label>
       </div>
@@ -401,12 +401,12 @@ function CustomerDetail({
     }
   }
 
-  if (loading) return <p className="text-sm text-neutral-500">Loading…</p>;
+  if (loading) return <p className="text-sm text-ink-muted">Loading…</p>;
   if (error || !customer) {
     return (
       <div className="space-y-3">
         <BackButton onBack={onBack} />
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">
           {error ?? "Customer not found."}
         </p>
       </div>
@@ -421,21 +421,21 @@ function CustomerDetail({
     <div className="space-y-4">
       <BackButton onBack={onBack} />
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+      <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-neutral-900">
+            <h2 className="text-lg font-semibold text-ink">
               {customer.fullName}
               {birthday && (
-                <span className="ml-2 rounded-full bg-pink-100 px-2 py-0.5 text-xs font-medium text-pink-700">
+                <span className="ml-2 rounded-full bg-pink-500/20 px-2 py-0.5 text-xs font-medium text-pink-400">
                   🎂 Happy birthday!
                 </span>
               )}
               {!customer.isActive && (
-                <span className="ml-2 text-sm font-normal text-neutral-400">(inactive)</span>
+                <span className="ml-2 text-sm font-normal text-ink-faint">(inactive)</span>
               )}
             </h2>
-            <p className="text-sm text-neutral-500">
+            <p className="text-sm text-ink-muted">
               {customer.phone}
               {customer.email ? ` · ${customer.email}` : ""}
             </p>
@@ -489,7 +489,7 @@ function CustomerDetail({
             }
           />
         </div>
-        <p className="mt-2 text-xs text-neutral-400">
+        <p className="mt-2 text-xs text-ink-faint">
           {toNext !== null
             ? `${toNext} more lifetime points to reach ${
                 LOYALTY_TIERS[LOYALTY_TIERS.findIndex((t) => t.name === tier) + 1]?.name
@@ -497,7 +497,7 @@ function CustomerDetail({
             : "Highest tier reached."}
           {` Every ${VISIT_STREAK_MILESTONE_INTERVAL}th visit within a week of the last earns a streak bonus.`}
         </p>
-        {customer.notes && <p className="mt-3 text-sm text-neutral-600">Notes: {customer.notes}</p>}
+        {customer.notes && <p className="mt-3 text-sm text-ink-secondary">Notes: {customer.notes}</p>}
 
         <BirthdayEditor
           slug={slug}
@@ -519,7 +519,7 @@ function CustomerDetail({
           <button onClick={() => setShowAdjust((v) => !v)} className="btn-secondary">
             {showAdjust ? "Cancel" : "Adjust points"}
           </button>
-          <button onClick={toggleActive} className="text-xs font-medium text-orange-700 hover:underline">
+          <button onClick={toggleActive} className="text-xs font-medium text-orange-400 hover:underline">
             {customer.isActive ? "Deactivate customer" : "Reactivate customer"}
           </button>
         </div>
@@ -538,37 +538,37 @@ function CustomerDetail({
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-semibold text-neutral-900">Recent orders</h3>
+        <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
+          <h3 className="mb-2 text-sm font-semibold text-ink">Recent orders</h3>
           {orders.length === 0 ? (
-            <p className="text-sm text-neutral-400">No orders yet.</p>
+            <p className="text-sm text-ink-faint">No orders yet.</p>
           ) : (
-            <ul className="divide-y divide-neutral-100 text-sm">
+            <ul className="divide-y divide-hairline/60 text-sm">
               {orders.map((o) => (
                 <li key={o.id} className="flex items-center justify-between py-2">
                   <span>
-                    #{o.orderNumber} <span className="text-neutral-400">({o.status})</span>
+                    #{o.orderNumber} <span className="text-ink-faint">({o.status})</span>
                   </span>
-                  <span className="text-neutral-600">{formatRupees(o.totalInPaisa)}</span>
+                  <span className="text-ink-secondary">{formatRupees(o.totalInPaisa)}</span>
                 </li>
               ))}
             </ul>
           )}
         </div>
 
-        <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-semibold text-neutral-900">Loyalty ledger</h3>
+        <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
+          <h3 className="mb-2 text-sm font-semibold text-ink">Loyalty ledger</h3>
           {ledger.length === 0 ? (
-            <p className="text-sm text-neutral-400">No loyalty activity yet.</p>
+            <p className="text-sm text-ink-faint">No loyalty activity yet.</p>
           ) : (
-            <ul className="divide-y divide-neutral-100 text-sm">
+            <ul className="divide-y divide-hairline/60 text-sm">
               {ledger.map((t) => (
                 <li key={t.id} className="flex items-center justify-between py-2">
                   <span>
                     <span className="capitalize">{t.type}</span>
-                    {t.note ? <span className="text-neutral-400"> — {t.note}</span> : null}
+                    {t.note ? <span className="text-ink-faint"> — {t.note}</span> : null}
                   </span>
-                  <span className={t.pointsDelta >= 0 ? "text-green-700" : "text-red-700"}>
+                  <span className={t.pointsDelta >= 0 ? "text-green-400" : "text-red-400"}>
                     {t.pointsDelta >= 0 ? "+" : ""}
                     {t.pointsDelta}
                   </span>
@@ -625,16 +625,16 @@ function CreditTabSection({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+    <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-neutral-900">Customer tab (credit)</h3>
+        <h3 className="text-sm font-semibold text-ink">Customer tab (credit)</h3>
         {canManageAccountBooks && outstandingCreditInPaisa > 0 && (
           <button onClick={() => setShowSettle((v) => !v)} className="btn-secondary text-xs">
             {showSettle ? "Cancel" : "Record payment"}
           </button>
         )}
       </div>
-      <p className="mb-3 text-xs text-neutral-500">
+      <p className="mb-3 text-xs text-ink-muted">
         Orders billed to this customer that finished unpaid or partly paid — settling here reuses
         Account Books&apos; own due-tracking, applied to the oldest charge first.
       </p>
@@ -651,11 +651,11 @@ function CreditTabSection({
         />
       )}
 
-      <ul className="mt-3 divide-y divide-neutral-100 text-sm">
+      <ul className="mt-3 divide-y divide-hairline/60 text-sm">
         {creditLedger.map((entry) => (
           <li key={entry.id} className="flex items-center justify-between py-2">
             <span>
-              <span className="text-neutral-400">
+              <span className="text-ink-faint">
                 {new Date(`${entry.entryDate}T00:00:00Z`).toLocaleDateString(
                   dateSystem === "BS" ? undefined : "en-NP",
                   { day: "numeric", month: "short", timeZone: "UTC" },
@@ -663,12 +663,12 @@ function CreditTabSection({
               </span>{" "}
               {entry.description}
               {entry.dueStatus === "outstanding" && (
-                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-300">
                   Outstanding
                 </span>
               )}
               {entry.dueStatus === "settled" && entry.category === "sales" && (
-                <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-500">
+                <span className="ml-2 rounded-full bg-surface-1 px-2 py-0.5 text-[10px] font-medium text-ink-muted">
                   Settled
                 </span>
               )}
@@ -676,10 +676,10 @@ function CreditTabSection({
             <span
               className={
                 entry.category === "due_settlement"
-                  ? "text-green-700"
+                  ? "text-green-400"
                   : entry.dueStatus === "outstanding"
-                    ? "text-amber-700"
-                    : "text-neutral-700"
+                    ? "text-amber-400"
+                    : "text-ink-secondary"
               }
             >
               {formatRupees(entry.amountInPaisa)}
@@ -725,10 +725,10 @@ function SettleCreditForm({
   }
 
   return (
-    <form onSubmit={submit} className="mb-3 flex flex-wrap items-end gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3">
-      {error && <p className="w-full text-xs text-red-700">{error}</p>}
+    <form onSubmit={submit} className="mb-3 flex flex-wrap items-end gap-2 rounded-xl border border-hairline bg-surface-1 p-3">
+      {error && <p className="w-full text-xs text-red-400">{error}</p>}
       <label className="text-xs">
-        <span className="mb-1 block text-neutral-600">Amount received (Rs)</span>
+        <span className="mb-1 block text-ink-secondary">Amount received (Rs)</span>
         <input
           required
           type="number"
@@ -741,13 +741,13 @@ function SettleCreditForm({
         />
       </label>
       <label className="text-xs">
-        <span className="mb-1 block text-neutral-600">Note (optional)</span>
+        <span className="mb-1 block text-ink-secondary">Note (optional)</span>
         <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
       </label>
       <button disabled={saving} className="btn-primary text-xs disabled:opacity-50">
         {saving ? "Recording…" : "Record payment"}
       </button>
-      <span className="text-xs text-neutral-400">Owed: {formatRupees(outstandingCreditInPaisa)}</span>
+      <span className="text-xs text-ink-faint">Owed: {formatRupees(outstandingCreditInPaisa)}</span>
     </form>
   );
 }
@@ -796,7 +796,7 @@ function CreditLimitEditor({
   return (
     <div className="mt-3 flex flex-wrap items-end gap-2">
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Credit / tab limit (Rs, optional)</span>
+        <span className="mb-1 block text-ink-secondary">Credit / tab limit (Rs, optional)</span>
         <input
           type="number"
           min={0}
@@ -810,8 +810,8 @@ function CreditLimitEditor({
       <button onClick={save} disabled={saving || unchanged} className="btn-secondary text-xs disabled:opacity-50">
         {saving ? "Saving…" : "Save limit"}
       </button>
-      {error && <p className="text-xs text-red-700">{error}</p>}
-      <p className="w-full text-xs text-neutral-400">
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      <p className="w-full text-xs text-ink-faint">
         Advisory only — shown as a warning on this profile once their tab reaches this amount;
         it never blocks an order. Leave blank for no limit.
       </p>
@@ -860,7 +860,7 @@ function BirthdayEditor({
   return (
     <div className="mt-3 flex flex-wrap items-end gap-2">
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Birthday</span>
+        <span className="mb-1 block text-ink-secondary">Birthday</span>
         <input
           type="date"
           value={value}
@@ -868,7 +868,7 @@ function BirthdayEditor({
           className="input"
         />
         {dateSystem === "BS" && value && (
-          <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(value)}</span>
+          <span className="mt-1 block text-xs text-ink-faint">{formatBsHint(value)}</span>
         )}
       </label>
       <button
@@ -878,9 +878,9 @@ function BirthdayEditor({
       >
         {saving ? "Saving…" : "Save birthday"}
       </button>
-      {error && <p className="text-xs text-red-700">{error}</p>}
+      {error && <p className="text-xs text-red-400">{error}</p>}
       {!dateOfBirth && (
-        <p className="w-full text-xs text-neutral-400">
+        <p className="w-full text-xs text-ink-faint">
           Add their birthday to enable an automatic yearly bonus.
         </p>
       )}
@@ -898,10 +898,10 @@ function Stat({
   tone?: "info" | "warning";
 }) {
   const valueClass =
-    tone === "warning" ? "text-amber-700" : tone === "info" ? "text-orange-700" : "text-neutral-900";
+    tone === "warning" ? "text-amber-400" : tone === "info" ? "text-orange-400" : "text-ink";
   return (
-    <div className={`rounded-xl px-3 py-2 ${tone === "warning" ? "bg-amber-50" : "bg-neutral-50"}`}>
-      <p className="text-xs text-neutral-500">{label}</p>
+    <div className={`rounded-xl px-3 py-2 ${tone === "warning" ? "bg-amber-500/15" : "bg-surface-1"}`}>
+      <p className="text-xs text-ink-muted">{label}</p>
       <p className={`text-base font-semibold ${valueClass}`}>{value}</p>
     </div>
   );
@@ -909,7 +909,7 @@ function Stat({
 
 function BackButton({ onBack }: { onBack: () => void }) {
   return (
-    <button onClick={onBack} className="text-sm font-medium text-orange-700 hover:underline">
+    <button onClick={onBack} className="text-sm font-medium text-orange-400 hover:underline">
       ← Back to customers
     </button>
   );
@@ -953,12 +953,12 @@ function AdjustPointsForm({
   }
 
   return (
-    <form onSubmit={submit} className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-3">
-      {error && <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      <p className="mb-2 text-xs text-neutral-500">Current balance: {balance} points</p>
+    <form onSubmit={submit} className="mt-4 rounded-xl border border-hairline bg-surface-1 p-3">
+      {error && <p className="mb-2 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      <p className="mb-2 text-xs text-ink-muted">Current balance: {balance} points</p>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Direction</span>
+          <span className="mb-1 block text-ink-secondary">Direction</span>
           <select
             value={direction}
             onChange={(e) => setDirection(e.target.value as "add" | "redeem")}
@@ -969,7 +969,7 @@ function AdjustPointsForm({
           </select>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Points</span>
+          <span className="mb-1 block text-ink-secondary">Points</span>
           <input
             required
             type="number"
@@ -980,7 +980,7 @@ function AdjustPointsForm({
           />
         </label>
         <label className="text-sm sm:col-span-1">
-          <span className="mb-1 block text-neutral-600">Reason</span>
+          <span className="mb-1 block text-ink-secondary">Reason</span>
           <input required value={reason} onChange={(e) => setReason(e.target.value)} className="input" />
         </label>
       </div>

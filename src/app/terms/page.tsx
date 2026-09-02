@@ -113,7 +113,7 @@ export default function TermsOfServicePage() {
 
       <LegalSection heading="Contact">
         <p>
-          <a className="font-medium text-orange-600 underline underline-offset-2" href="mailto:legal@restromitra.com">
+          <a className="font-medium text-orange-400 underline underline-offset-2" href="mailto:legal@restromitra.com">
             legal@restromitra.com
           </a>{" "}
           (placeholder — set a real, monitored address before commercial launch).

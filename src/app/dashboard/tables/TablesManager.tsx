@@ -152,7 +152,7 @@ export function TablesManager({ slug, restaurantName }: { slug: string; restaura
   }
 
   if (loading) {
-    return <p className="text-sm text-neutral-500">Loading tables…</p>;
+    return <p className="text-sm text-ink-muted">Loading tables…</p>;
   }
 
   const activeTables = tables.filter((t) => t.isActive);
@@ -161,7 +161,7 @@ export function TablesManager({ slug, restaurantName }: { slug: string; restaura
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button onClick={handleAddTable} disabled={creating} className="btn-primary text-sm">
@@ -169,7 +169,7 @@ export function TablesManager({ slug, restaurantName }: { slug: string; restaura
         </button>
         {branches.length > 1 && (
           <label className="text-sm">
-            <span className="mr-2 text-neutral-500">Branch</span>
+            <span className="mr-2 text-ink-muted">Branch</span>
             <select
               value={branchFilter}
               onChange={(e) => setBranchFilter(e.target.value)}
@@ -187,7 +187,7 @@ export function TablesManager({ slug, restaurantName }: { slug: string; restaura
       </div>
 
       {activeTables.length === 0 ? (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-ink-muted">
           No tables yet. Add one to generate its QR code — customers scan it to view your
           menu and place an order for that table.
         </p>
@@ -196,16 +196,16 @@ export function TablesManager({ slug, restaurantName }: { slug: string; restaura
           {activeTables.map((table) => (
             <div
               key={table.id}
-              className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"
+              className="rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm"
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-neutral-900">{table.name}</p>
+                  <p className="text-sm font-semibold text-ink">{table.name}</p>
                   {table.capacity != null && (
-                    <p className="text-xs text-neutral-500">Seats {table.capacity}</p>
+                    <p className="text-xs text-ink-muted">Seats {table.capacity}</p>
                   )}
                   {branches.length > 1 && (
-                    <p className="text-xs text-neutral-400">{branchName(table.branchId)}</p>
+                    <p className="text-xs text-ink-faint">{branchName(table.branchId)}</p>
                   )}
                 </div>
               </div>
@@ -222,14 +222,14 @@ export function TablesManager({ slug, restaurantName }: { slug: string; restaura
                       alt={`QR code for ${table.name}`}
                       width={140}
                       height={140}
-                      className="my-3 h-[140px] w-[140px] rounded-lg border border-neutral-100"
+                      className="my-3 h-[140px] w-[140px] rounded-lg border border-hairline/60"
                     />
 
                     <div className="flex flex-wrap gap-3 text-xs">
                       <a
                         href={qrUrl}
                         download={`${table.name.replace(/[^a-z0-9]+/gi, "-")}-qr.png`}
-                        className="font-medium text-orange-600 hover:text-orange-700"
+                        className="font-medium text-orange-400 hover:text-orange-300"
                       >
                         Download QR
                       </a>
@@ -238,33 +238,33 @@ export function TablesManager({ slug, restaurantName }: { slug: string; restaura
                         restaurantName={restaurantName}
                         subtitle={table.name}
                         fileName={`${table.name.replace(/[^a-z0-9]+/gi, "-")}-poster.png`}
-                        className="font-medium text-orange-600 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="font-medium text-orange-400 hover:text-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Download poster
                       </QrPosterButton>
                       <button
                         onClick={() => copyOrderLink(table)}
-                        className="font-medium text-neutral-600 hover:text-neutral-900"
+                        className="font-medium text-ink-secondary hover:text-ink"
                       >
                         Copy order link
                       </button>
                       <button
                         onClick={() => handleRename(table)}
-                        className="font-medium text-neutral-600 hover:text-neutral-900"
+                        className="font-medium text-ink-secondary hover:text-ink"
                       >
                         Rename
                       </button>
                       <button
                         onClick={() => handleRegenerateQr(table)}
                         disabled={regenerating === table.id}
-                        className="font-medium text-neutral-600 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="font-medium text-ink-secondary hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-60"
                         title="Invalidate the current QR code and issue a new one — use if a code was leaked or a poster went missing."
                       >
                         {regenerating === table.id ? "Regenerating…" : "Regenerate QR"}
                       </button>
                       <button
                         onClick={() => handleDeactivate(table)}
-                        className="font-medium text-neutral-400 hover:text-red-600"
+                        className="font-medium text-ink-faint hover:text-red-400"
                       >
                         Deactivate
                       </button>

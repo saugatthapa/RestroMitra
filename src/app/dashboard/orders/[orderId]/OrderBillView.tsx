@@ -130,9 +130,9 @@ const ADVANCE_LABELS: Partial<Record<OrderStatus, string>> = {
 };
 
 const PAYMENT_STATUS_STYLES: Record<PaymentStatus, string> = {
-  unpaid: "bg-red-50 text-red-700",
-  partially_paid: "bg-amber-50 text-amber-700",
-  paid: "bg-green-50 text-green-700",
+  unpaid: "bg-red-500/15 text-red-400",
+  partially_paid: "bg-amber-500/15 text-amber-400",
+  paid: "bg-green-500/15 text-green-400",
 };
 
 export function OrderBillView({
@@ -235,14 +235,14 @@ export function OrderBillView({
     updateStatus("cancelled", reason || undefined);
   }
 
-  if (loading) return <p className="text-sm text-neutral-500">Loading order…</p>;
+  if (loading) return <p className="text-sm text-ink-muted">Loading order…</p>;
   if (loadError || !order || !billing) {
     return (
       <div className="space-y-3">
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">
           {loadError ?? "Order not found."}
         </p>
-        <Link href="/dashboard/orders" className="text-sm text-orange-700">
+        <Link href="/dashboard/orders" className="text-sm text-orange-400">
           ← Back to orders
         </Link>
       </div>
@@ -270,7 +270,7 @@ export function OrderBillView({
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-4 flex items-center justify-between print:hidden">
-        <Link href="/dashboard/orders" className="text-sm text-neutral-500 hover:text-neutral-800">
+        <Link href="/dashboard/orders" className="text-sm text-ink-muted hover:text-ink">
           ← Back to orders
         </Link>
         <div className="flex gap-2">
@@ -285,26 +285,26 @@ export function OrderBillView({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-6 print:border-0 print:p-0 print:shadow-none">
+      <div className="rounded-2xl border border-hairline bg-surface-2 p-6 print:border-0 print:p-0 print:shadow-none">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-lg font-semibold text-neutral-900">Order #{order.orderNumber}</h1>
+            <h1 className="text-lg font-semibold text-ink">Order #{order.orderNumber}</h1>
             {/* Gap-audit P2 fix — the gapless fiscal sequence number, shown
                 alongside (never instead of) the order number above once the
                 order has reached "completed" and one's been assigned; see
                 assignFiscalInvoiceNumber's doc comment for why it doesn't
                 exist before then. */}
             {order.fiscalInvoiceNumber !== null && (
-              <p className="text-sm font-medium text-neutral-700">
+              <p className="text-sm font-medium text-ink-secondary">
                 Fiscal Invoice #{order.fiscalInvoiceNumber}
               </p>
             )}
-            <p className="text-sm text-neutral-500">
+            <p className="text-sm text-ink-muted">
               {order.table ? order.table.name : "Takeaway"}
               {order.customerName ? ` · ${order.customerName}` : ""}
               {order.customerPhone ? ` · ${order.customerPhone}` : ""}
             </p>
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-ink-faint">
               Placed {formatDate(order.placedAt, dateSystem, { withTime: true })} · source: {order.source}
             </p>
             {/* Gap-audit P2 fix — printed on the customer-facing bill only
@@ -312,7 +312,7 @@ export function OrderBillView({
                 restaurants below the VAT-registration threshold set only
                 panNumber, or neither. */}
             {(order.restaurant.panNumber || order.restaurant.vatNumber) && (
-              <p className="text-xs text-neutral-400">
+              <p className="text-xs text-ink-faint">
                 {order.restaurant.panNumber ? `PAN: ${order.restaurant.panNumber}` : ""}
                 {order.restaurant.panNumber && order.restaurant.vatNumber ? " · " : ""}
                 {order.restaurant.vatNumber ? `VAT: ${order.restaurant.vatNumber}` : ""}
@@ -320,7 +320,7 @@ export function OrderBillView({
             )}
           </div>
           <div className="flex flex-col items-end gap-1.5">
-            <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-700">
+            <span className="rounded-full bg-surface-1 px-2.5 py-1 text-xs font-medium text-ink-secondary">
               {ORDER_STATUS_LABELS[order.status]}
             </span>
             <span
@@ -332,18 +332,18 @@ export function OrderBillView({
         </div>
 
         {order.notes && (
-          <p className="mb-4 rounded-lg bg-neutral-50 px-3 py-2 text-xs italic text-neutral-500">
+          <p className="mb-4 rounded-lg bg-surface-1 px-3 py-2 text-xs italic text-ink-muted">
             {order.notes}
           </p>
         )}
 
         {paymentOutcome === "success" && (
-          <p className="mb-4 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 print:hidden">
+          <p className="mb-4 rounded-lg bg-green-500/15 px-3 py-2 text-sm text-green-400 print:hidden">
             Payment received — thank you.
           </p>
         )}
         {paymentOutcome === "failed" && (
-          <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 print:hidden">
+          <p className="mb-4 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400 print:hidden">
             The gateway payment was not completed. No charge was recorded — you can try again or
             record a manual payment below.
           </p>
@@ -364,7 +364,7 @@ export function OrderBillView({
               <button
                 disabled={busy}
                 onClick={handleCancel}
-                className="rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-500 hover:text-red-600 disabled:opacity-50"
+                className="rounded-full border border-hairline-strong px-3 py-1.5 text-xs font-medium text-ink-muted hover:text-red-400 disabled:opacity-50"
               >
                 Cancel order
               </button>
@@ -374,7 +374,7 @@ export function OrderBillView({
 
         <table className="mb-4 w-full text-sm">
           <thead>
-            <tr className="border-b border-neutral-200 text-left text-xs text-neutral-500">
+            <tr className="border-b border-hairline text-left text-xs text-ink-muted">
               <th className="py-1.5 font-medium">Item</th>
               <th className="py-1.5 text-center font-medium">Qty</th>
               <th className="py-1.5 text-right font-medium">Total</th>
@@ -382,21 +382,21 @@ export function OrderBillView({
           </thead>
           <tbody>
             {order.items.map((item) => (
-              <tr key={item.id} className="border-b border-neutral-100">
+              <tr key={item.id} className="border-b border-hairline/60">
                 <td className="py-2">
-                  <p className="font-medium text-neutral-900">
+                  <p className="font-medium text-ink">
                     {item.menuItemNameSnapshot}
                     {item.variantNameSnapshot ? ` — ${item.variantNameSnapshot}` : ""}
                   </p>
                   {item.addons.length > 0 && (
-                    <p className="text-xs text-neutral-500">
+                    <p className="text-xs text-ink-muted">
                       {item.addons.map((a) => a.nameSnapshot).join(", ")}
                     </p>
                   )}
-                  {item.notes && <p className="text-xs italic text-neutral-400">{item.notes}</p>}
+                  {item.notes && <p className="text-xs italic text-ink-faint">{item.notes}</p>}
                 </td>
-                <td className="py-2 text-center text-neutral-600">{item.quantity}</td>
-                <td className="py-2 text-right font-medium text-neutral-900">
+                <td className="py-2 text-center text-ink-secondary">{item.quantity}</td>
+                <td className="py-2 text-right font-medium text-ink">
                   {formatNPR(item.lineTotalInPaisa)}
                 </td>
               </tr>
@@ -405,12 +405,12 @@ export function OrderBillView({
         </table>
 
         <div className="ml-auto max-w-xs space-y-1 text-sm">
-          <div className="flex justify-between text-neutral-500">
+          <div className="flex justify-between text-ink-muted">
             <span>Subtotal</span>
             <span>{formatNPR(order.subtotalInPaisa)}</span>
           </div>
           {order.discountInPaisa > 0 && (
-            <div className="flex justify-between text-red-700">
+            <div className="flex justify-between text-red-400">
               <span>
                 Discount
                 {order.discountType === "percentage" && order.discountValue
@@ -422,30 +422,30 @@ export function OrderBillView({
             </div>
           )}
           {order.serviceChargeInPaisa > 0 && (
-            <div className="flex justify-between text-neutral-500">
+            <div className="flex justify-between text-ink-muted">
               <span>Service charge ({(order.serviceChargeBasisPoints / 100).toFixed(2)}%)</span>
               <span>{formatNPR(order.serviceChargeInPaisa)}</span>
             </div>
           )}
-          <div className="flex justify-between text-neutral-500">
+          <div className="flex justify-between text-ink-muted">
             <span>Tax</span>
             <span>{formatNPR(order.taxInPaisa)}</span>
           </div>
-          <div className="flex justify-between border-t border-neutral-200 pt-1 font-semibold text-neutral-900">
+          <div className="flex justify-between border-t border-hairline pt-1 font-semibold text-ink">
             <span>Total</span>
             <span>{formatNPR(order.totalInPaisa)}</span>
           </div>
-          <div className="flex justify-between text-neutral-500">
+          <div className="flex justify-between text-ink-muted">
             <span>Paid</span>
             <span>{formatNPR(billing.netPaidInPaisa)}</span>
           </div>
           {billing.tipTotalInPaisa > 0 && (
-            <div className="flex justify-between text-neutral-500">
+            <div className="flex justify-between text-ink-muted">
               <span>Tips (not part of the bill)</span>
               <span>{formatNPR(billing.tipTotalInPaisa)}</span>
             </div>
           )}
-          <div className="flex justify-between font-semibold text-neutral-900">
+          <div className="flex justify-between font-semibold text-ink">
             <span>Remaining due</span>
             <span>{formatNPR(billing.remainingDueInPaisa)}</span>
           </div>
@@ -473,26 +473,26 @@ export function OrderBillView({
       )}
 
       <div className="mt-4 grid grid-cols-1 gap-4 print:hidden md:grid-cols-2">
-        <div className="rounded-2xl border border-neutral-200 bg-white p-5">
-          <p className="mb-3 text-sm font-semibold text-neutral-900">Payment history</p>
+        <div className="rounded-2xl border border-hairline bg-surface-2 p-5">
+          <p className="mb-3 text-sm font-semibold text-ink">Payment history</p>
           {order.payments.length === 0 ? (
-            <p className="text-sm text-neutral-400">No payments recorded yet.</p>
+            <p className="text-sm text-ink-faint">No payments recorded yet.</p>
           ) : (
             <ul className="space-y-2 text-sm">
               {order.payments.map((p) => (
-                <li key={p.id} className="flex items-center justify-between border-b border-neutral-100 pb-2">
+                <li key={p.id} className="flex items-center justify-between border-b border-hairline/60 pb-2">
                   <div>
-                    <p className={p.amountInPaisa < 0 ? "font-medium text-red-600" : "font-medium text-neutral-900"}>
+                    <p className={p.amountInPaisa < 0 ? "font-medium text-red-400" : "font-medium text-ink"}>
                       {p.amountInPaisa < 0 ? "Refund" : "Payment"} · {PAYMENT_METHOD_LABELS[p.method]}
                     </p>
-                    <p className="text-xs text-neutral-400">
+                    <p className="text-xs text-ink-faint">
                       {formatDate(p.createdAt, dateSystem, { withTime: true })}
                       {p.splitId ? ` · ${splits.find((s) => s.id === p.splitId)?.label ?? "a share"}` : ""}
                       {p.note ? ` · ${p.note}` : ""}
                       {p.tipInPaisa > 0 ? ` · tip ${formatNPR(p.tipInPaisa)}` : ""}
                     </p>
                   </div>
-                  <span className={p.amountInPaisa < 0 ? "font-semibold text-red-600" : "font-semibold text-neutral-900"}>
+                  <span className={p.amountInPaisa < 0 ? "font-semibold text-red-400" : "font-semibold text-ink"}>
                     {formatNPR(p.amountInPaisa)}
                   </span>
                 </li>
@@ -527,18 +527,18 @@ export function OrderBillView({
       </div>
 
       {order.statusHistory.length > 0 && (
-        <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-5 print:hidden">
-          <p className="mb-3 text-sm font-semibold text-neutral-900">Status history</p>
+        <div className="mt-4 rounded-2xl border border-hairline bg-surface-2 p-5 print:hidden">
+          <p className="mb-3 text-sm font-semibold text-ink">Status history</p>
           <ul className="space-y-2 text-sm">
             {order.statusHistory.map((h) => (
-              <li key={h.id} className="flex items-center justify-between border-b border-neutral-100 pb-2 last:border-0 last:pb-0">
+              <li key={h.id} className="flex items-center justify-between border-b border-hairline/60 pb-2 last:border-0 last:pb-0">
                 <div>
-                  <p className="font-medium text-neutral-900">
+                  <p className="font-medium text-ink">
                     {ORDER_STATUS_LABELS[h.fromStatus]} → {ORDER_STATUS_LABELS[h.toStatus]}
                   </p>
-                  {h.reason && <p className="text-xs text-neutral-400">{h.reason}</p>}
+                  {h.reason && <p className="text-xs text-ink-faint">{h.reason}</p>}
                 </div>
-                <span className="text-xs text-neutral-400">
+                <span className="text-xs text-ink-faint">
                   {formatDate(h.changedAt, dateSystem, { withTime: true })}
                 </span>
               </li>
@@ -632,8 +632,8 @@ function RecordPaymentForm({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-5">
-      <p className="mb-3 text-sm font-semibold text-neutral-900">Record a payment</p>
+    <div className="rounded-2xl border border-hairline bg-surface-2 p-5">
+      <p className="mb-3 text-sm font-semibold text-ink">Record a payment</p>
       <div className="space-y-2">
         {splits.length > 0 && (
           <select className="input" value={splitId} onChange={(e) => selectSplit(e.target.value)}>
@@ -679,7 +679,7 @@ function RecordPaymentForm({
           />
         )}
         {changeDue !== null && changeDue > 0 && (
-          <p className="text-xs text-neutral-500">Change due: {formatNPR(changeDue)}</p>
+          <p className="text-xs text-ink-muted">Change due: {formatNPR(changeDue)}</p>
         )}
         <input
           className="input"
@@ -696,7 +696,7 @@ function RecordPaymentForm({
           onChange={(e) => setNote(e.target.value)}
           placeholder="Note (optional)"
         />
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+        {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">{error}</p>}
         <button
           onClick={handleSubmit}
           disabled={submitting || !(Number(amount) > 0)}
@@ -752,9 +752,9 @@ function RecordRefundForm({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-5">
-      <p className="mb-3 text-sm font-semibold text-neutral-900">Issue a refund</p>
-      <p className="mb-2 text-xs text-neutral-500">
+    <div className="rounded-2xl border border-hairline bg-surface-2 p-5">
+      <p className="mb-3 text-sm font-semibold text-ink">Issue a refund</p>
+      <p className="mb-2 text-xs text-ink-muted">
         Up to {formatNPR(netPaidInPaisa)} paid so far can be refunded.
       </p>
       <div className="space-y-2">
@@ -801,7 +801,7 @@ function RecordRefundForm({
           onChange={(e) => setReason(e.target.value)}
           placeholder="Reason (optional)"
         />
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+        {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">{error}</p>}
         <button
           onClick={handleSubmit}
           disabled={submitting || !(Number(amount) > 0)}
@@ -931,35 +931,35 @@ function SplitBillPanel({
 
   if (!editing) {
     return (
-      <div className="rounded-2xl border border-neutral-200 bg-white p-5">
+      <div className="rounded-2xl border border-hairline bg-surface-2 p-5">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-semibold text-neutral-900">Split bill</p>
+          <p className="text-sm font-semibold text-ink">Split bill</p>
           <button onClick={startEditing} className="btn-secondary text-xs">
             {splits.length > 0 ? "Edit split" : "Split this bill"}
           </button>
         </div>
         {splits.length === 0 || !summary ? (
-          <p className="text-sm text-neutral-400">
+          <p className="text-sm text-ink-faint">
             Not split — the whole bill is one due amount. Split it to track who owes what.
           </p>
         ) : (
           <ul className="space-y-2 text-sm">
             {summary.splits.map((s) => (
-              <li key={s.splitId} className="flex items-center justify-between border-b border-neutral-100 pb-2">
+              <li key={s.splitId} className="flex items-center justify-between border-b border-hairline/60 pb-2">
                 <div>
-                  <p className="font-medium text-neutral-900">{s.label}</p>
-                  <p className="text-xs text-neutral-400">
+                  <p className="font-medium text-ink">{s.label}</p>
+                  <p className="text-xs text-ink-faint">
                     {s.itemCount} item{s.itemCount === 1 ? "" : "s"} · {formatNPR(s.subtotalInPaisa)}
                     {s.paidInPaisa > 0 ? ` · paid ${formatNPR(s.paidInPaisa)}` : ""}
                   </p>
                 </div>
-                <span className={s.remainingDueInPaisa > 0 ? "font-semibold text-amber-700" : "font-semibold text-green-700"}>
+                <span className={s.remainingDueInPaisa > 0 ? "font-semibold text-amber-400" : "font-semibold text-green-400"}>
                   {s.remainingDueInPaisa > 0 ? formatNPR(s.remainingDueInPaisa) : "Paid"}
                 </span>
               </li>
             ))}
             {summary.unassigned.subtotalInPaisa > 0 && (
-              <li className="flex items-center justify-between pt-1 text-neutral-500">
+              <li className="flex items-center justify-between pt-1 text-ink-muted">
                 <span>
                   Unassigned · {summary.unassigned.itemCount} item{summary.unassigned.itemCount === 1 ? "" : "s"}
                 </span>
@@ -973,13 +973,13 @@ function SplitBillPanel({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-5">
-      <p className="mb-3 text-sm font-semibold text-neutral-900">Split bill</p>
-      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+    <div className="rounded-2xl border border-hairline bg-surface-2 p-5">
+      <p className="mb-3 text-sm font-semibold text-ink">Split bill</p>
+      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">{error}</p>}
 
       <div className="mb-3 space-y-2">
         {draftShares.map((share) => (
-          <div key={share.key} className="rounded-lg border border-neutral-200 p-2.5">
+          <div key={share.key} className="rounded-lg border border-hairline p-2.5">
             <div className="mb-2 flex items-center gap-2">
               <input
                 className="input"
@@ -990,7 +990,7 @@ function SplitBillPanel({
               <button
                 type="button"
                 onClick={() => removeShare(share.key)}
-                className="shrink-0 text-neutral-400 hover:text-red-600"
+                className="shrink-0 text-ink-faint hover:text-red-400"
               >
                 ✕
               </button>
@@ -998,7 +998,7 @@ function SplitBillPanel({
             <div className="space-y-1">
               {items.map((item) => (
                 <div key={item.id} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="text-neutral-600">
+                  <span className="text-ink-secondary">
                     {item.menuItemNameSnapshot}
                     {item.variantNameSnapshot ? ` — ${item.variantNameSnapshot}` : ""}
                   </span>
@@ -1019,7 +1019,7 @@ function SplitBillPanel({
         ))}
       </div>
 
-      <div className="mb-3 space-y-1 rounded-lg bg-neutral-50 p-2.5 text-xs text-neutral-500">
+      <div className="mb-3 space-y-1 rounded-lg bg-surface-1 p-2.5 text-xs text-ink-muted">
         {items.map((item) => {
           const assigned = assignedByItem[item.id] ?? 0;
           return (
@@ -1028,7 +1028,7 @@ function SplitBillPanel({
                 {item.menuItemNameSnapshot}
                 {item.variantNameSnapshot ? ` — ${item.variantNameSnapshot}` : ""}
               </span>
-              <span className={assigned > item.quantity ? "font-medium text-red-600" : ""}>
+              <span className={assigned > item.quantity ? "font-medium text-red-400" : ""}>
                 {assigned} / {item.quantity} assigned
               </span>
             </div>
@@ -1122,7 +1122,7 @@ function CouponPanel({
         <button onClick={removeCoupon} disabled={submitting} className="btn-secondary">
           {submitting ? "Removing…" : "Remove coupon"}
         </button>
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+        {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">{error}</p>}
       </div>
     );
   }
@@ -1136,8 +1136,8 @@ function CouponPanel({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-5">
-      <p className="mb-3 text-sm font-semibold text-neutral-900">Apply coupon</p>
+    <div className="rounded-2xl border border-hairline bg-surface-2 p-5">
+      <p className="mb-3 text-sm font-semibold text-ink">Apply coupon</p>
       <div className="space-y-2">
         <input
           className="input font-mono uppercase"
@@ -1146,7 +1146,7 @@ function CouponPanel({
           placeholder="Coupon code"
           autoFocus
         />
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+        {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">{error}</p>}
         <div className="flex gap-2">
           <button
             onClick={applyCode}
@@ -1245,8 +1245,8 @@ function AdjustmentsPanel({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-5">
-      <p className="mb-3 text-sm font-semibold text-neutral-900">Discount / service charge</p>
+    <div className="rounded-2xl border border-hairline bg-surface-2 p-5">
+      <p className="mb-3 text-sm font-semibold text-ink">Discount / service charge</p>
       <div className="space-y-2">
         <div className="flex gap-1.5">
           {(["none", "percentage", "flat"] as const).map((t) => (
@@ -1256,8 +1256,8 @@ function AdjustmentsPanel({
               onClick={() => setDiscountType(t)}
               className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium ${
                 discountType === t
-                  ? "border-orange-600 bg-orange-50 text-orange-700"
-                  : "border-neutral-200 text-neutral-500"
+                  ? "border-orange-600 bg-orange-500/15 text-orange-400"
+                  : "border-hairline text-ink-muted"
               }`}
             >
               {t === "none" ? "No discount" : t === "percentage" ? "% off" : "Flat Rs. off"}
@@ -1305,7 +1305,7 @@ function AdjustmentsPanel({
           onChange={(e) => setServiceChargePercentInput(e.target.value)}
           placeholder="Service charge % (optional)"
         />
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+        {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">{error}</p>}
         <div className="flex gap-2">
           <button onClick={handleSave} disabled={submitting} className="btn-primary flex-1">
             {submitting ? "Saving…" : "Save"}

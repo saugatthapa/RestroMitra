@@ -88,17 +88,17 @@ export function HourlyHeatmap({ cells }: { cells: HourlyHeatmapCell[] }) {
     : null;
 
   if (cells.length === 0) {
-    return <p className="text-sm text-neutral-400">No completed orders in this range yet.</p>;
+    return <p className="text-sm text-ink-faint">No completed orders in this range yet.</p>;
   }
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1 rounded-full border border-neutral-200 bg-neutral-50 p-0.5 text-xs">
+        <div className="flex items-center gap-1 rounded-full border border-hairline bg-surface-1 p-0.5 text-xs">
           <button
             onClick={() => setMetric("orders")}
             className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
-              metric === "orders" ? "bg-white text-orange-700 shadow-sm" : "text-neutral-500"
+              metric === "orders" ? "bg-surface-2 text-orange-400 shadow-sm" : "text-ink-muted"
             }`}
           >
             By orders
@@ -106,7 +106,7 @@ export function HourlyHeatmap({ cells }: { cells: HourlyHeatmapCell[] }) {
           <button
             onClick={() => setMetric("revenue")}
             className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
-              metric === "revenue" ? "bg-white text-orange-700 shadow-sm" : "text-neutral-500"
+              metric === "revenue" ? "bg-surface-2 text-orange-400 shadow-sm" : "text-ink-muted"
             }`}
           >
             By revenue
@@ -114,7 +114,7 @@ export function HourlyHeatmap({ cells }: { cells: HourlyHeatmapCell[] }) {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-[11px] text-neutral-400">
+          <div className="flex items-center gap-1.5 text-[11px] text-ink-faint">
             <span>Fewer</span>
             <span className="flex h-2.5 w-20 overflow-hidden rounded-full">
               {SEQUENTIAL_STEPS.map((step) => (
@@ -125,7 +125,7 @@ export function HourlyHeatmap({ cells }: { cells: HourlyHeatmapCell[] }) {
           </div>
           <button
             onClick={() => setShowTable((v) => !v)}
-            className="text-xs font-medium text-orange-700 hover:underline"
+            className="text-xs font-medium text-orange-400 hover:underline"
           >
             {showTable ? "Show heatmap" : "Show as table"}
           </button>
@@ -133,9 +133,9 @@ export function HourlyHeatmap({ cells }: { cells: HourlyHeatmapCell[] }) {
       </div>
 
       {showTable ? (
-        <div className="max-h-64 overflow-y-auto rounded-lg border border-neutral-200">
+        <div className="max-h-64 overflow-y-auto rounded-lg border border-hairline">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+            <thead className="sticky top-0 bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
               <tr>
                 <th className="px-3 py-2">Day</th>
                 <th className="px-3 py-2">Hour</th>
@@ -146,13 +146,13 @@ export function HourlyHeatmap({ cells }: { cells: HourlyHeatmapCell[] }) {
             <tbody>
               {nonZeroCells.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-3 py-3 text-center text-neutral-400">
+                  <td colSpan={4} className="px-3 py-3 text-center text-ink-faint">
                     No completed orders in this range yet.
                   </td>
                 </tr>
               ) : (
                 nonZeroCells.map((c) => (
-                  <tr key={`${c.dayOfWeek}-${c.hour}`} className="border-t border-neutral-100">
+                  <tr key={`${c.dayOfWeek}-${c.hour}`} className="border-t border-hairline/60">
                     <td className="px-3 py-1.5">{DAY_LABELS[c.dayOfWeek]}</td>
                     <td className="px-3 py-1.5">{formatHour(c.hour)}</td>
                     <td className="px-3 py-1.5">{c.orderCount}</td>
@@ -170,7 +170,7 @@ export function HourlyHeatmap({ cells }: { cells: HourlyHeatmapCell[] }) {
             <div className="mb-1 grid grid-cols-[36px_repeat(24,1fr)] gap-[2px] pl-0">
               <div />
               {HOURS.map((hour) => (
-                <div key={hour} className="text-center text-[9px] text-neutral-400">
+                <div key={hour} className="text-center text-[9px] text-ink-faint">
                   {hour % 3 === 0 ? formatHour(hour).replace(" ", "") : ""}
                 </div>
               ))}
@@ -178,7 +178,7 @@ export function HourlyHeatmap({ cells }: { cells: HourlyHeatmapCell[] }) {
 
             {grid.map((row, dayOfWeek) => (
               <div key={dayOfWeek} className="mb-[2px] grid grid-cols-[36px_repeat(24,1fr)] gap-[2px]">
-                <div className="flex items-center text-[11px] text-neutral-500">
+                <div className="flex items-center text-[11px] text-ink-muted">
                   {DAY_LABELS[dayOfWeek]}
                 </div>
                 {row.map((cell) => {
@@ -204,13 +204,13 @@ export function HourlyHeatmap({ cells }: { cells: HourlyHeatmapCell[] }) {
           </div>
 
           {hovered && (
-            <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md">
-              <p className="mb-1 font-medium text-neutral-900">
+            <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-full rounded-lg border border-hairline bg-surface-2 px-3 py-2 text-xs shadow-md">
+              <p className="mb-1 font-medium text-ink">
                 {DAY_LABELS[hovered.dayOfWeek]} · {formatHour(hovered.hour)}
               </p>
-              <p className="text-neutral-500">
+              <p className="text-ink-muted">
                 {hovered.orderCount} order{hovered.orderCount === 1 ? "" : "s"} ·{" "}
-                <strong className="text-neutral-900">{formatNPR(hovered.revenueInPaisa)}</strong>
+                <strong className="text-ink">{formatNPR(hovered.revenueInPaisa)}</strong>
               </p>
             </div>
           )}

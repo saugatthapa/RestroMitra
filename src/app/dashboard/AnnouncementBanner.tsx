@@ -10,9 +10,9 @@ type Announcement = {
 };
 
 const SEVERITY_CLASSES: Record<Announcement["severity"], string> = {
-  info: "border-sky-200 bg-sky-50 text-sky-900",
-  warning: "border-amber-200 bg-amber-50 text-amber-900",
-  critical: "border-red-200 bg-red-50 text-red-900",
+  info: "border-sky-500/30 bg-sky-500/15 text-sky-300",
+  warning: "border-amber-500/30 bg-amber-500/15 text-amber-300",
+  critical: "border-red-500/30 bg-red-500/15 text-red-300",
 };
 
 /**

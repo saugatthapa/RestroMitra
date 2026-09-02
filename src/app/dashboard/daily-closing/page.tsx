@@ -20,8 +20,8 @@ export default async function DailyClosingPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-neutral-900">Daily Closing</h1>
-        <p className="text-sm text-neutral-500">End-of-day snapshot and close-out for {active.name}.</p>
+        <h1 className="text-xl font-semibold text-ink">Daily Closing</h1>
+        <p className="text-sm text-ink-muted">End-of-day snapshot and close-out for {active.name}.</p>
       </div>
       <DailyClosingBoard slug={active.slug} />
     </div>

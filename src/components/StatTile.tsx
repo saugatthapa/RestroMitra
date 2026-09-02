@@ -42,14 +42,14 @@ export function DeltaLine({
 }) {
   if (percent === null) {
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-neutral-400">
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-ink-faint">
         New <span className="font-normal">· no data in the previous period</span>
       </span>
     );
   }
   if (percent === 0) {
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-neutral-400">
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-ink-faint">
         No change <span className="font-normal">· {againstLabel}</span>
       </span>
     );
@@ -58,10 +58,10 @@ export function DeltaLine({
   const isGood = goodDirection === "up" ? isUp : !isUp;
   return (
     <span
-      className={`inline-flex items-center gap-1 text-xs font-medium ${isGood ? "text-green-700" : "text-red-700"}`}
+      className={`inline-flex items-center gap-1 text-xs font-medium ${isGood ? "text-green-400" : "text-red-400"}`}
     >
       {isUp ? "▲" : "▼"} {Math.abs(percent)}%
-      <span className="font-normal text-neutral-400">{againstLabel}</span>
+      <span className="font-normal text-ink-faint">{againstLabel}</span>
     </span>
   );
 }
@@ -88,7 +88,7 @@ export function IconStatTile({
   const valueColor = tone === "negative" ? "#b3261e" : "#0b0b0b";
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm">
       <div className="flex items-start gap-3">
         <span
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
@@ -97,7 +97,7 @@ export function IconStatTile({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="text-xs font-medium text-neutral-500">{label}</p>
+          <p className="text-xs font-medium text-ink-muted">{label}</p>
           <p className="mt-0.5 truncate text-lg font-semibold" style={{ color: valueColor }}>
             {value}
           </p>
@@ -108,7 +108,7 @@ export function IconStatTile({
           <DeltaLine percent={delta.percent} goodDirection={delta.goodDirection} />
         </div>
       ) : (
-        note && <p className="mt-2 text-xs text-neutral-400">{note}</p>
+        note && <p className="mt-2 text-xs text-ink-faint">{note}</p>
       )}
     </div>
   );

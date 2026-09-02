@@ -92,14 +92,14 @@ function urgencyOf(iso: string): Urgency {
 // says "17m ago", color is a reinforcing, glance-from-across-the-kitchen
 // signal on top of that, not a replacement for it.
 const URGENCY_CARD_CLASS: Record<Urgency, string> = {
-  normal: "border-neutral-200 bg-neutral-50",
-  warning: "border-amber-300 bg-amber-50",
-  critical: "border-red-300 bg-red-50",
+  normal: "border-hairline bg-surface-1",
+  warning: "border-amber-500/40 bg-amber-500/15",
+  critical: "border-red-500/40 bg-red-500/15",
 };
 const URGENCY_TIMER_CLASS: Record<Urgency, string> = {
-  normal: "text-neutral-400",
-  warning: "font-semibold text-amber-700",
-  critical: "font-semibold text-red-700",
+  normal: "text-ink-faint",
+  warning: "font-semibold text-amber-400",
+  critical: "font-semibold text-red-400",
 };
 
 export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boolean }) {
@@ -243,30 +243,30 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
   }
 
   if (loading) {
-    return <p className="text-sm text-neutral-500">Loading tickets…</p>;
+    return <p className="text-sm text-ink-muted">Loading tickets…</p>;
   }
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
 
       {!isOnline && (
-        <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+        <div className="flex items-center gap-2 rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-medium text-amber-300">
           <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
           You&apos;re offline — ticket updates will be saved on this device and applied
           automatically once you&apos;re back online.
         </div>
       )}
       {queuedUpdates.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/15 p-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold text-amber-800">
+            <p className="text-xs font-semibold text-amber-300">
               {queuedUpdates.length} update{queuedUpdates.length === 1 ? "" : "s"} waiting to sync
             </p>
             <button
               onClick={runSync}
               disabled={!isOnline || syncing}
-              className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 disabled:opacity-50"
+              className="rounded-lg border border-amber-500/40 bg-surface-2 px-2.5 py-1 text-xs font-medium text-amber-300 disabled:opacity-50"
             >
               {syncing ? "Syncing…" : "Sync now"}
             </button>
@@ -275,17 +275,17 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
             {queuedUpdates.map((u) => (
               <li
                 key={u.clientRequestId}
-                className="flex items-center justify-between gap-2 text-xs text-amber-700"
+                className="flex items-center justify-between gap-2 text-xs text-amber-400"
               >
                 <span>#{u.orderNumber} → {u.toStatus}</span>
                 <span className="flex items-center gap-2">
-                  <span className={u.status === "error" ? "font-medium text-red-600" : ""}>
+                  <span className={u.status === "error" ? "font-medium text-red-400" : ""}>
                     {u.status === "error" ? "Sync failed — will retry" : "Waiting"}
                   </span>
                   {u.status === "error" && (
                     <button
                       onClick={() => discardQueuedUpdate(u)}
-                      className="rounded border border-red-300 px-1.5 py-0.5 font-medium text-red-700 hover:bg-red-50"
+                      className="rounded border border-red-500/40 px-1.5 py-0.5 font-medium text-red-400 hover:bg-red-500/15"
                     >
                       Discard
                     </button>
@@ -302,8 +302,8 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
           onClick={() => setSelectedStationId("all")}
           className={`rounded-full border px-3 py-1.5 text-sm ${
             selectedStationId === "all"
-              ? "border-orange-600 bg-orange-50 font-medium text-orange-700"
-              : "border-neutral-200 text-neutral-600"
+              ? "border-orange-600 bg-orange-500/15 font-medium text-orange-400"
+              : "border-hairline text-ink-secondary"
           }`}
         >
           All stations
@@ -314,15 +314,15 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
             onClick={() => setSelectedStationId(s.id)}
             className={`rounded-full border px-3 py-1.5 text-sm ${
               selectedStationId === s.id
-                ? "border-orange-600 bg-orange-50 font-medium text-orange-700"
-                : "border-neutral-200 text-neutral-600"
+                ? "border-orange-600 bg-orange-500/15 font-medium text-orange-400"
+                : "border-hairline text-ink-secondary"
             }`}
           >
             {s.name}
           </button>
         ))}
 
-        <div className="ml-auto flex items-center gap-3 text-[11px] text-neutral-400">
+        <div className="ml-auto flex items-center gap-3 text-[11px] text-ink-faint">
           <span className="flex items-center gap-1">
             <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden="true" />
             {URGENCY_WARNING_MINUTES}m+
@@ -335,7 +335,7 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
       </div>
 
       {orders.length === 0 ? (
-        <p className="text-sm text-neutral-400">No active tickets right now.</p>
+        <p className="text-sm text-ink-faint">No active tickets right now.</p>
       ) : (
         // QA hardening pass: this used to jump to 3 columns at `sm` (640px)
         // — fine on a phone in landscape, but on a tablet held in portrait
@@ -358,19 +358,19 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
             const advanceAction = KITCHEN_ADVANCE[status];
 
             return (
-              <div key={status} className="rounded-2xl border border-neutral-200 bg-white p-3">
+              <div key={status} className="rounded-2xl border border-hairline bg-surface-2 p-3">
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-neutral-900">
+                  <p className="text-sm font-semibold text-ink">
                     {COLUMN_LABELS[status]}
                   </p>
-                  <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500">
+                  <span className="rounded-full bg-surface-1 px-2 py-0.5 text-xs text-ink-muted">
                     {columnOrders.length}
                   </span>
                 </div>
 
                 <div className="space-y-2">
                   {columnOrders.length === 0 && (
-                    <p className="text-xs text-neutral-400">Nothing here.</p>
+                    <p className="text-xs text-ink-faint">Nothing here.</p>
                   )}
                   {columnOrders.map((order) => {
                     const ticketItems =
@@ -388,7 +388,7 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
                         <div className="mb-1 flex items-center justify-between">
                           <Link
                             href={`/dashboard/orders/${order.id}`}
-                            className="font-semibold text-neutral-900 hover:text-orange-700 hover:underline"
+                            className="font-semibold text-ink hover:text-orange-300 hover:underline"
                           >
                             #{order.orderNumber}
                           </Link>
@@ -401,11 +401,11 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
                             {elapsedSince(order.placedAt)}
                           </span>
                         </div>
-                        <p className="text-neutral-500">
+                        <p className="text-ink-muted">
                           {order.table ? order.table.name : "Takeaway"}
                           {order.customerName ? ` · ${order.customerName}` : ""}
                         </p>
-                        <ul className="mt-1 space-y-1 text-neutral-700">
+                        <ul className="mt-1 space-y-1 text-ink-secondary">
                           {ticketItems.map((item) => (
                             <li key={item.id}>
                               <span className="font-medium">
@@ -413,20 +413,20 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
                                 {item.variantNameSnapshot ? ` (${item.variantNameSnapshot})` : ""}
                               </span>
                               {item.addons.length > 0 && (
-                                <span className="text-neutral-500">
+                                <span className="text-ink-muted">
                                   {" "}
                                   — {item.addons.map((a) => a.nameSnapshot).join(", ")}
                                 </span>
                               )}
                               {item.notes && (
-                                <span className="block italic text-neutral-400">
+                                <span className="block italic text-ink-faint">
                                   {item.notes}
                                 </span>
                               )}
                               {selectedStationId === "all" &&
                                 item.kitchenStationNameSnapshot &&
                                 stations.length > 1 && (
-                                  <span className="ml-1 rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-600">
+                                  <span className="ml-1 rounded-full bg-surface-3 px-1.5 py-0.5 text-[10px] text-ink-secondary">
                                     {item.kitchenStationNameSnapshot}
                                   </span>
                                 )}
@@ -454,7 +454,7 @@ export function KDSBoard({ slug, canAdvance }: { slug: string; canAdvance: boole
       )}
 
       {stations.some((s) => s.id === UNASSIGNED_STATION_ID) && (
-        <p className="text-xs text-neutral-400">
+        <p className="text-xs text-ink-faint">
           &quot;Unassigned&quot; items have no kitchen station set on the menu — assign one from
           the Menu page so they group correctly here.
         </p>

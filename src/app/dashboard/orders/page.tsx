@@ -19,8 +19,8 @@ export default async function OrdersPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-900">Orders</h1>
-          <p className="text-sm text-neutral-500">
+          <h1 className="text-xl font-semibold text-ink">Orders</h1>
+          <p className="text-sm text-ink-muted">
             Live orders for {active.name} — from QR ordering today, and every other
             source (POS, waiter) once those phases ship, all through the same board.
           </p>

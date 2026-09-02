@@ -195,13 +195,13 @@ export function MenuManager({ slug, canEditPrice }: { slug: string; canEditPrice
   }
 
   if (loading) {
-    return <p className="text-sm text-neutral-500">Loading menu…</p>;
+    return <p className="text-sm text-ink-muted">Loading menu…</p>;
   }
 
   return (
     <div className="space-y-6">
       {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>
       )}
 
       {/* Category strip */}
@@ -213,8 +213,8 @@ export function MenuManager({ slug, canEditPrice }: { slug: string; canEditPrice
               key={category.id}
               className={`group flex items-center gap-1 rounded-full border px-3 py-1.5 text-sm ${
                 selectedCategoryId === category.id
-                  ? "border-orange-600 bg-orange-50 text-orange-700"
-                  : "border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
+                  ? "border-orange-600 bg-orange-500/15 text-orange-400"
+                  : "border-hairline bg-surface-2 text-ink-secondary hover:bg-surface-1"
               }`}
             >
               <button onClick={() => setSelectedCategoryId(category.id)} className="font-medium">
@@ -223,7 +223,7 @@ export function MenuManager({ slug, canEditPrice }: { slug: string; canEditPrice
               <button
                 onClick={() => moveCategory(category, -1)}
                 disabled={i === 0}
-                className="text-xs text-neutral-400 hover:text-neutral-700 disabled:opacity-30"
+                className="text-xs text-ink-faint hover:text-ink-secondary disabled:opacity-30"
                 title="Move left"
               >
                 ←
@@ -231,21 +231,21 @@ export function MenuManager({ slug, canEditPrice }: { slug: string; canEditPrice
               <button
                 onClick={() => moveCategory(category, 1)}
                 disabled={i === activeCategories.length - 1}
-                className="text-xs text-neutral-400 hover:text-neutral-700 disabled:opacity-30"
+                className="text-xs text-ink-faint hover:text-ink-secondary disabled:opacity-30"
                 title="Move right"
               >
                 →
               </button>
               <button
                 onClick={() => handleRenameCategory(category)}
-                className="text-xs text-neutral-400 hover:text-neutral-700"
+                className="text-xs text-ink-faint hover:text-ink-secondary"
                 title="Rename"
               >
                 ✎
               </button>
               <button
                 onClick={() => handleDeactivateCategory(category)}
-                className="text-xs text-neutral-400 hover:text-red-600"
+                className="text-xs text-ink-faint hover:text-red-400"
                 title="Remove category"
               >
                 ✕
@@ -258,7 +258,7 @@ export function MenuManager({ slug, canEditPrice }: { slug: string; canEditPrice
       </div>
 
       {activeCategories.length === 0 && (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-ink-muted">
           No categories yet. Add one (e.g. &quot;Momo&quot;, &quot;Drinks&quot;) to start
           building your menu.
         </p>
@@ -267,7 +267,7 @@ export function MenuManager({ slug, canEditPrice }: { slug: string; canEditPrice
       {selectedCategoryId && (
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-neutral-900">
+            <h2 className="text-sm font-semibold text-ink">
               Items in {categories.find((c) => c.id === selectedCategoryId)?.name}
             </h2>
             <button onClick={() => setEditingItem("new")} className="btn-primary text-sm">
@@ -276,27 +276,27 @@ export function MenuManager({ slug, canEditPrice }: { slug: string; canEditPrice
           </div>
 
           {itemsInSelectedCategory.length === 0 ? (
-            <p className="text-sm text-neutral-500">No items in this category yet.</p>
+            <p className="text-sm text-ink-muted">No items in this category yet.</p>
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {itemsInSelectedCategory.map((item) => (
                 <div
                   key={item.id}
-                  className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm"
+                  className="rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-start gap-3">
                       <MenuItemThumb imageUrl={item.imageUrl} name={item.name} size="md" />
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-neutral-900">{item.name}</p>
-                        <p className="text-sm text-neutral-500">
+                        <p className="truncate text-sm font-semibold text-ink">{item.name}</p>
+                        <p className="text-sm text-ink-muted">
                           {item.variants.filter((v) => v.isActive).length > 0
                             ? variantPriceRange(item.variants)
                             : formatNPR(item.basePriceInPaisa)}
                         </p>
                       </div>
                     </div>
-                    <label className="flex shrink-0 items-center gap-1 text-xs text-neutral-500">
+                    <label className="flex shrink-0 items-center gap-1 text-xs text-ink-muted">
                       <input
                         type="checkbox"
                         checked={item.isAvailable}
@@ -307,24 +307,24 @@ export function MenuManager({ slug, canEditPrice }: { slug: string; canEditPrice
                   </div>
 
                   {item.description && (
-                    <p className="mt-1 line-clamp-2 text-xs text-neutral-500">
+                    <p className="mt-1 line-clamp-2 text-xs text-ink-muted">
                       {item.description}
                     </p>
                   )}
 
                   <div className="mt-2 flex flex-wrap gap-1">
                     {item.sku && (
-                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] text-neutral-500">
+                      <span className="rounded-full bg-surface-1 px-2 py-0.5 text-[10px] text-ink-muted">
                         SKU {item.sku}
                       </span>
                     )}
                     {item.prepTimeMinutes != null && (
-                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] text-neutral-500">
+                      <span className="rounded-full bg-surface-1 px-2 py-0.5 text-[10px] text-ink-muted">
                         {item.prepTimeMinutes} min
                       </span>
                     )}
                     {item.kitchenStationId && (
-                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] text-neutral-500">
+                      <span className="rounded-full bg-surface-1 px-2 py-0.5 text-[10px] text-ink-muted">
                         {stations.find((s) => s.id === item.kitchenStationId)?.name ?? "Station"}
                       </span>
                     )}
@@ -333,7 +333,7 @@ export function MenuManager({ slug, canEditPrice }: { slug: string; canEditPrice
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">
                     <button
                       onClick={() => setEditingItem(item)}
-                      className="font-medium text-orange-600 hover:text-orange-700"
+                      className="font-medium text-orange-400 hover:text-orange-300"
                     >
                       Edit
                     </button>
@@ -341,13 +341,13 @@ export function MenuManager({ slug, canEditPrice }: { slug: string; canEditPrice
                       onClick={() =>
                         setExpandedItemId((prev) => (prev === item.id ? null : item.id))
                       }
-                      className="font-medium text-neutral-600 hover:text-neutral-900"
+                      className="font-medium text-ink-secondary hover:text-ink"
                     >
                       Variants &amp; add-ons ({item.variants.length + item.addons.length})
                     </button>
                     <button
                       onClick={() => handleDeactivateItem(item)}
-                      className="font-medium text-neutral-400 hover:text-red-600"
+                      className="font-medium text-ink-faint hover:text-red-400"
                     >
                       Remove
                     </button>
@@ -484,22 +484,22 @@ function VariantsAndAddons({
   const activeAddons = item.addons.filter((a) => a.isAvailable);
 
   return (
-    <div className="mt-3 space-y-3 border-t border-neutral-100 pt-3">
+    <div className="mt-3 space-y-3 border-t border-hairline/60 pt-3">
       <div>
         <div className="mb-1 flex items-center justify-between">
-          <p className="text-xs font-semibold text-neutral-700">Variants</p>
+          <p className="text-xs font-semibold text-ink-secondary">Variants</p>
           {canEditPrice && (
             <button
               onClick={addVariant}
               disabled={busy}
-              className="text-xs font-medium text-orange-600 hover:text-orange-700"
+              className="text-xs font-medium text-orange-400 hover:text-orange-300"
             >
               + Add
             </button>
           )}
         </div>
         {activeVariants.length === 0 ? (
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-ink-faint">
             No variants — item uses its base price. Add e.g. Small/Medium/Large if this item
             comes in sizes.
           </p>
@@ -513,7 +513,7 @@ function VariantsAndAddons({
                 <button
                   onClick={() => removeVariant(v)}
                   disabled={busy}
-                  className="text-neutral-400 hover:text-red-600"
+                  className="text-ink-faint hover:text-red-400"
                 >
                   ✕
                 </button>
@@ -525,17 +525,17 @@ function VariantsAndAddons({
 
       <div>
         <div className="mb-1 flex items-center justify-between">
-          <p className="text-xs font-semibold text-neutral-700">Add-ons</p>
+          <p className="text-xs font-semibold text-ink-secondary">Add-ons</p>
           <button
             onClick={addAddon}
             disabled={busy}
-            className="text-xs font-medium text-orange-600 hover:text-orange-700"
+            className="text-xs font-medium text-orange-400 hover:text-orange-300"
           >
             + Add
           </button>
         </div>
         {activeAddons.length === 0 ? (
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-ink-faint">
             No add-ons — e.g. &quot;Extra spicy&quot; or &quot;Extra sauce&quot;.
           </p>
         ) : (
@@ -549,7 +549,7 @@ function VariantsAndAddons({
                 <button
                   onClick={() => removeAddon(a)}
                   disabled={busy}
-                  className="text-neutral-400 hover:text-red-600"
+                  className="text-ink-faint hover:text-red-400"
                 >
                   ✕
                 </button>
@@ -657,12 +657,12 @@ function ItemFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-surface-2 p-6 shadow-xl sm:rounded-2xl">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">
+          <h3 className="text-base font-semibold text-ink">
             {item ? "Edit item" : "New item"}
           </h3>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700">
+          <button onClick={onClose} className="text-ink-faint hover:text-ink-secondary">
             ✕
           </button>
         </div>
@@ -714,7 +714,7 @@ function ItemFormModal({
           />
 
           <div>
-            <span className="mb-1 block text-xs font-medium text-neutral-500">
+            <span className="mb-1 block text-xs font-medium text-ink-muted">
               Photo (optional)
             </span>
             <div className="flex items-center gap-3">
@@ -740,7 +740,7 @@ function ItemFormModal({
                     <button
                       type="button"
                       onClick={() => setImageUrl("")}
-                      className="text-xs font-medium text-neutral-400 hover:text-red-600"
+                      className="text-xs font-medium text-ink-faint hover:text-red-400"
                     >
                       Remove
                     </button>
@@ -754,7 +754,7 @@ function ItemFormModal({
                 />
               </div>
             </div>
-            {imageError && <p className="mt-1 text-xs text-red-600">{imageError}</p>}
+            {imageError && <p className="mt-1 text-xs text-red-400">{imageError}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -777,7 +777,7 @@ function ItemFormModal({
           {(canEditPrice || !item) && (
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-neutral-500">
+                <span className="mb-1 block text-xs font-medium text-ink-muted">
                   Price (Rs.)
                 </span>
                 <input
@@ -791,7 +791,7 @@ function ItemFormModal({
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-neutral-500">Tax %</span>
+                <span className="mb-1 block text-xs font-medium text-ink-muted">Tax %</span>
                 <input
                   className="input"
                   type="number"
@@ -805,14 +805,14 @@ function ItemFormModal({
             </div>
           )}
           {!canEditPrice && item && (
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-ink-faint">
               You don&apos;t have permission to change prices. Current price:{" "}
               {formatNPR(item.basePriceInPaisa)}.
             </p>
           )}
 
           {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+            <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>
           )}
 
           <div className="flex gap-3 pt-2">

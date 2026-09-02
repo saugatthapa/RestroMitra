@@ -56,31 +56,31 @@ export function BranchesPanel({ restaurantId }: { restaurantId: string }) {
   }, [restaurantId]);
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-900">Branches</h2>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {!branches && !error && <p className="text-sm text-neutral-400">Loading…</p>}
-      {branches && branches.length === 0 && <p className="text-sm text-neutral-400">No branches yet.</p>}
+    <div className="rounded-xl border border-hairline bg-surface-2 p-4">
+      <h2 className="mb-3 text-sm font-semibold text-ink">Branches</h2>
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      {!branches && !error && <p className="text-sm text-ink-faint">Loading…</p>}
+      {branches && branches.length === 0 && <p className="text-sm text-ink-faint">No branches yet.</p>}
       {branches && branches.length > 0 && (
         <div className="space-y-2">
           {branches.map((b) => (
-            <div key={b.id} className="rounded-lg border border-neutral-100 px-3 py-2 text-sm">
+            <div key={b.id} className="rounded-lg border border-hairline/60 px-3 py-2 text-sm">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-neutral-800">
+                <span className="font-medium text-ink">
                   {b.name}
                   {b.isMain && (
-                    <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-600">
+                    <span className="ml-2 rounded-full bg-surface-1 px-2 py-0.5 text-[10px] font-medium text-ink-secondary">
                       Main
                     </span>
                   )}
                 </span>
                 {!b.isActive && (
-                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">
+                  <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-medium text-red-400">
                     Inactive
                   </span>
                 )}
               </div>
-              <p className="text-xs text-neutral-500">
+              <p className="text-xs text-ink-muted">
                 {[b.city, b.address].filter(Boolean).join(", ") || "—"}
                 {b.phone && ` · ${b.phone}`}
               </p>
@@ -118,24 +118,24 @@ export function RecentOrdersPanel({ restaurantId }: { restaurantId: string }) {
   }, [restaurantId]);
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-900">Recent orders</h2>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {!orders && !error && <p className="text-sm text-neutral-400">Loading…</p>}
-      {orders && orders.length === 0 && <p className="text-sm text-neutral-400">No orders yet.</p>}
+    <div className="rounded-xl border border-hairline bg-surface-2 p-4">
+      <h2 className="mb-3 text-sm font-semibold text-ink">Recent orders</h2>
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      {!orders && !error && <p className="text-sm text-ink-faint">Loading…</p>}
+      {orders && orders.length === 0 && <p className="text-sm text-ink-faint">No orders yet.</p>}
       {orders && orders.length > 0 && (
         <div className="max-h-80 space-y-1.5 overflow-y-auto">
           {orders.map((o) => (
-            <div key={o.id} className="flex items-center justify-between rounded-lg border border-neutral-100 px-3 py-2 text-sm">
+            <div key={o.id} className="flex items-center justify-between rounded-lg border border-hairline/60 px-3 py-2 text-sm">
               <div>
-                <p className="font-medium text-neutral-800">
-                  {o.orderNumber} <span className="text-xs font-normal text-neutral-400">· {o.branchName}</span>
+                <p className="font-medium text-ink">
+                  {o.orderNumber} <span className="text-xs font-normal text-ink-faint">· {o.branchName}</span>
                 </p>
-                <p className="text-xs text-neutral-500">
+                <p className="text-xs text-ink-muted">
                   {o.status.replace(/_/g, " ")} · {o.paymentStatus.replace(/_/g, " ")} · {formatDateTime(o.createdAt)}
                 </p>
               </div>
-              <span className="font-medium tabular-nums text-neutral-900">{formatPaisa(o.totalInPaisa)}</span>
+              <span className="font-medium tabular-nums text-ink">{formatPaisa(o.totalInPaisa)}</span>
             </div>
           ))}
         </div>
@@ -178,17 +178,17 @@ export function RestaurantAuditLogPanel({ restaurantId }: { restaurantId: string
   if (forbidden) return null;
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-900">Restaurant activity</h2>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {!logs && !error && <p className="text-sm text-neutral-400">Loading…</p>}
-      {logs && logs.length === 0 && <p className="text-sm text-neutral-400">No activity recorded yet.</p>}
+    <div className="rounded-xl border border-hairline bg-surface-2 p-4">
+      <h2 className="mb-3 text-sm font-semibold text-ink">Restaurant activity</h2>
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      {!logs && !error && <p className="text-sm text-ink-faint">Loading…</p>}
+      {logs && logs.length === 0 && <p className="text-sm text-ink-faint">No activity recorded yet.</p>}
       {logs && logs.length > 0 && (
         <div className="max-h-80 space-y-2 overflow-y-auto">
           {logs.map((l) => (
             <div key={l.id} className="text-xs">
-              <p className="text-neutral-700">{l.action.replace(/[._]/g, " ")}</p>
-              <p className="text-neutral-400">
+              <p className="text-ink-secondary">{l.action.replace(/[._]/g, " ")}</p>
+              <p className="text-ink-faint">
                 {l.userFullName ?? "System"} · {formatDate(l.createdAt)}
               </p>
             </div>

@@ -22,26 +22,26 @@ export default async function MaintenancePage() {
   if (!maintenanceMode.enabled) redirect("/dashboard");
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3 md:px-6">
+    <div className="min-h-screen bg-surface-1">
+      <header className="flex items-center justify-between border-b border-hairline bg-surface-2 px-4 py-3 md:px-6">
         <div className="flex items-center gap-3">
           <span className="flex flex-col leading-tight">
-            <span className="text-lg font-semibold tracking-tight text-neutral-900">
-              Restro<span className="text-orange-600">Mitra</span>
+            <span className="text-lg font-semibold tracking-tight text-ink">
+              Restro<span className="text-orange-400">Kendra</span>
             </span>
-            <span className="text-[10px] font-medium text-neutral-400">by Saugat Thapa</span>
+            <span className="text-[10px] font-medium text-ink-faint">by Saugat Thapa</span>
           </span>
         </div>
         <LogoutButton />
       </header>
       <main className="mx-auto w-full max-w-lg p-4 py-16 text-center md:p-8">
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
-          <h1 className="text-lg font-semibold text-amber-900">Down for maintenance</h1>
-          <p className="mt-2 text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/15 p-6">
+          <h1 className="text-lg font-semibold text-amber-300">Down for maintenance</h1>
+          <p className="mt-2 text-sm text-amber-300">
             {maintenanceMode.message ??
               "RestroKendra is temporarily unavailable while we perform scheduled maintenance. Your data is safe."}
           </p>
-          <p className="mt-3 text-sm text-amber-800">Please check back shortly.</p>
+          <p className="mt-3 text-sm text-amber-300">Please check back shortly.</p>
         </div>
       </main>
     </div>

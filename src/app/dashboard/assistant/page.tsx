@@ -23,8 +23,8 @@ export default async function AssistantPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-neutral-900">AI Assistant</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-semibold text-ink">AI Assistant</h1>
+        <p className="text-sm text-ink-muted">
           Ask about {active.name}&rsquo;s sales, top items, and expenses over the last 30 days.
         </p>
       </div>

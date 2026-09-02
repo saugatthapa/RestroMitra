@@ -29,13 +29,13 @@ const SOURCE_LABELS: Record<EntitlementSource, string> = {
 function sourceBadgeClass(source: EntitlementSource) {
   switch (source) {
     case "override":
-      return "bg-purple-100 text-purple-700";
+      return "bg-purple-500/20 text-purple-400";
     case "plan":
-      return "bg-emerald-50 text-emerald-700";
+      return "bg-emerald-500/15 text-emerald-400";
     case "flag":
-      return "bg-blue-50 text-blue-700";
+      return "bg-blue-500/15 text-blue-400";
     default:
-      return "bg-neutral-100 text-neutral-500";
+      return "bg-surface-1 text-ink-muted";
   }
 }
 
@@ -124,14 +124,14 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
 
   return (
     <div className="mt-10">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-900">Entitlements</h2>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+      <h2 className="mb-3 text-sm font-semibold text-ink">Entitlements</h2>
+      {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
+      <div className="overflow-hidden rounded-xl border border-hairline bg-surface-2">
         {loading ? (
-          <p className="p-5 text-sm text-neutral-500">Loading…</p>
+          <p className="p-5 text-sm text-ink-muted">Loading…</p>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+            <thead className="bg-surface-1 text-left text-xs font-semibold tracking-wide text-ink-muted uppercase">
               <tr>
                 <th className="px-4 py-2.5">Feature</th>
                 <th className="px-4 py-2.5">Access</th>
@@ -142,17 +142,17 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
             </thead>
             <tbody>
               {entitlements.map((e) => (
-                <tr key={e.featureKey} className="border-t border-neutral-100">
+                <tr key={e.featureKey} className="border-t border-hairline/60">
                   <td className="px-4 py-2.5">
-                    <p className="font-medium text-neutral-800">
+                    <p className="font-medium text-ink">
                       {FEATURE_DESCRIPTIONS[e.featureKey as keyof typeof FEATURE_DESCRIPTIONS] ?? e.featureKey}
                     </p>
-                    <p className="font-mono text-[11px] text-neutral-400">{e.featureKey}</p>
+                    <p className="font-mono text-[11px] text-ink-faint">{e.featureKey}</p>
                   </td>
                   <td className="px-4 py-2.5">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        e.granted ? "bg-emerald-50 text-emerald-700" : "bg-neutral-100 text-neutral-500"
+                        e.granted ? "bg-emerald-500/15 text-emerald-400" : "bg-surface-1 text-ink-muted"
                       }`}
                     >
                       {e.granted ? "Granted" : "Denied"}
@@ -163,7 +163,7 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
                       {SOURCE_LABELS[e.source]}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-neutral-500">
+                  <td className="px-4 py-2.5 text-ink-muted">
                     {e.source === "override" ? (e.expiresAt ? formatExpiryDate(e.expiresAt) : "No expiry") : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-right">
@@ -172,7 +172,7 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
                         type="button"
                         disabled={clearingKey === e.featureKey}
                         onClick={() => handleClear(e.featureKey)}
-                        className="text-xs font-medium text-neutral-500 hover:text-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="text-xs font-medium text-ink-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Clear override
                       </button>
@@ -186,7 +186,7 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
                           setOverrideExpiresAt("");
                           setOverrideError(null);
                         }}
-                        className="text-xs font-medium text-orange-700 hover:text-orange-800"
+                        className="text-xs font-medium text-orange-400 hover:text-orange-200"
                       >
                         Override
                       </button>
@@ -201,8 +201,8 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
 
       {overrideKey && (
         <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-4">
-          <form onSubmit={handleSetOverride} className="w-full max-w-sm rounded-lg bg-white p-5 shadow-lg">
-            <h3 className="text-sm font-semibold text-neutral-900">
+          <form onSubmit={handleSetOverride} className="w-full max-w-sm rounded-lg bg-surface-2 p-5 shadow-lg">
+            <h3 className="text-sm font-semibold text-ink">
               Override {FEATURE_DESCRIPTIONS[overrideKey as keyof typeof FEATURE_DESCRIPTIONS] ?? overrideKey}
             </h3>
             <div className="mt-3 flex gap-2">
@@ -211,8 +211,8 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
                 onClick={() => setOverrideGranted(true)}
                 className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-medium ${
                   overrideGranted
-                    ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                    : "border-neutral-300 text-neutral-600"
+                    ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
+                    : "border-hairline-strong text-ink-secondary"
                 }`}
               >
                 Force grant
@@ -221,43 +221,43 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
                 type="button"
                 onClick={() => setOverrideGranted(false)}
                 className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-medium ${
-                  !overrideGranted ? "border-red-300 bg-red-50 text-red-700" : "border-neutral-300 text-neutral-600"
+                  !overrideGranted ? "border-red-500/40 bg-red-500/15 text-red-400" : "border-hairline-strong text-ink-secondary"
                 }`}
               >
                 Force deny
               </button>
             </div>
             <label className="mt-3 block text-sm">
-              <span className="mb-1 block text-neutral-700">Reason (recorded in the audit log)</span>
+              <span className="mb-1 block text-ink-secondary">Reason (recorded in the audit log)</span>
               <input
                 value={overrideReason}
                 onChange={(e) => setOverrideReason(e.target.value)}
                 required
                 minLength={3}
                 autoFocus
-                className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+                className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
               />
             </label>
             <label className="mt-3 block text-sm">
-              <span className="mb-1 block text-neutral-700">Expires (optional)</span>
+              <span className="mb-1 block text-ink-secondary">Expires (optional)</span>
               <input
                 type="date"
                 value={overrideExpiresAt}
                 min={new Date().toISOString().slice(0, 10)}
                 onChange={(e) => setOverrideExpiresAt(e.target.value)}
-                className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
+                className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
               />
-              <span className="mt-1 block text-xs text-neutral-400">
+              <span className="mt-1 block text-xs text-ink-faint">
                 Leave blank for no expiry — the override stays until manually cleared.
               </span>
             </label>
-            {overrideError && <p className="mt-2 text-sm text-red-600">{overrideError}</p>}
+            {overrideError && <p className="mt-2 text-sm text-red-400">{overrideError}</p>}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setOverrideKey(null)}
                 disabled={overrideBusy}
-                className="rounded-md border border-neutral-300 px-4 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-md border border-hairline-strong px-4 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-1 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>

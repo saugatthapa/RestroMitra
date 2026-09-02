@@ -76,7 +76,7 @@ export function DashboardStats({ slug }: { slug: string }) {
   }, [slug, activeBranchId]);
 
   if (error) {
-    return <p className="text-sm text-red-600">{error}</p>;
+    return <p className="text-sm text-red-400">{error}</p>;
   }
 
   if (!data) {
@@ -84,7 +84,7 @@ export function DashboardStats({ slug }: { slug: string }) {
     // refreshes on every branch switch too, and a flash of layout-shifting
     // skeleton tiles on every switch would be more distracting than useful
     // for what's typically a sub-second fetch.
-    return <p className="text-sm text-neutral-400">Loading…</p>;
+    return <p className="text-sm text-ink-faint">Loading…</p>;
   }
 
   const { canViewSales, canViewReports, monthly } = data;
@@ -148,8 +148,8 @@ export function DashboardStats({ slug }: { slug: string }) {
       {canViewReports && monthly && (
         <div>
           <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold text-neutral-900">This month&apos;s performance</h2>
-            <Link href="/dashboard/reports" className="text-xs font-medium text-orange-700 hover:underline">
+            <h2 className="text-sm font-semibold text-ink">This month&apos;s performance</h2>
+            <Link href="/dashboard/reports" className="text-xs font-medium text-orange-400 hover:underline">
               Full reports →
             </Link>
           </div>
@@ -194,7 +194,7 @@ export function DashboardStats({ slug }: { slug: string }) {
             />
           </div>
 
-          <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+          <div className="mt-4 rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm">
             <RevenueTrendChart series={monthly.dailySeries} />
           </div>
         </div>

@@ -38,8 +38,8 @@ export default async function StaffPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-neutral-900">Staff</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-semibold text-ink">Staff</h1>
+        <p className="text-sm text-ink-muted">
           Team roster, attendance, and payroll for {active.name}.
         </p>
       </div>

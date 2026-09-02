@@ -83,10 +83,10 @@ export function CouponsBoard({ slug }: { slug: string }) {
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-ink-muted">
           {coupons.length} coupon{coupons.length === 1 ? "" : "s"}
         </p>
         <button onClick={() => setShowAdd((v) => !v)} className="btn-primary">
@@ -108,9 +108,9 @@ export function CouponsBoard({ slug }: { slug: string }) {
       )}
 
       {loading ? (
-        <p className="text-sm text-neutral-500">Loading coupons…</p>
+        <p className="text-sm text-ink-muted">Loading coupons…</p>
       ) : coupons.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-neutral-300 px-4 py-8 text-center text-sm text-neutral-400">
+        <p className="rounded-2xl border border-dashed border-hairline-strong px-4 py-8 text-center text-sm text-ink-faint">
           No coupons yet. Create one to let staff redeem it at checkout.
         </p>
       ) : (
@@ -168,10 +168,10 @@ function RestrictionPickers({
     <div className="grid gap-3 sm:grid-cols-3">
       {branches.length > 1 && (
         <div className="text-sm">
-          <span className="mb-1 block text-neutral-600">Branches (none checked = all branches)</span>
-          <div className="max-h-28 space-y-1 overflow-y-auto rounded-lg border border-neutral-200 p-2">
+          <span className="mb-1 block text-ink-secondary">Branches (none checked = all branches)</span>
+          <div className="max-h-28 space-y-1 overflow-y-auto rounded-lg border border-hairline p-2">
             {branches.map((b) => (
-              <label key={b.id} className="flex items-center gap-2 text-xs text-neutral-700">
+              <label key={b.id} className="flex items-center gap-2 text-xs text-ink-secondary">
                 <input
                   type="checkbox"
                   checked={branchIds.includes(b.id)}
@@ -184,13 +184,13 @@ function RestrictionPickers({
         </div>
       )}
       <div className="text-sm">
-        <span className="mb-1 block text-neutral-600">Categories (none checked = all items)</span>
-        <div className="max-h-28 space-y-1 overflow-y-auto rounded-lg border border-neutral-200 p-2">
+        <span className="mb-1 block text-ink-secondary">Categories (none checked = all items)</span>
+        <div className="max-h-28 space-y-1 overflow-y-auto rounded-lg border border-hairline p-2">
           {categories.length === 0 ? (
-            <p className="text-xs text-neutral-400">No categories yet.</p>
+            <p className="text-xs text-ink-faint">No categories yet.</p>
           ) : (
             categories.map((c) => (
-              <label key={c.id} className="flex items-center gap-2 text-xs text-neutral-700">
+              <label key={c.id} className="flex items-center gap-2 text-xs text-ink-secondary">
                 <input
                   type="checkbox"
                   checked={categoryIds.includes(c.id)}
@@ -203,13 +203,13 @@ function RestrictionPickers({
         </div>
       </div>
       <div className="text-sm">
-        <span className="mb-1 block text-neutral-600">Menu items (none checked = all items)</span>
-        <div className="max-h-28 space-y-1 overflow-y-auto rounded-lg border border-neutral-200 p-2">
+        <span className="mb-1 block text-ink-secondary">Menu items (none checked = all items)</span>
+        <div className="max-h-28 space-y-1 overflow-y-auto rounded-lg border border-hairline p-2">
           {menuItems.length === 0 ? (
-            <p className="text-xs text-neutral-400">No menu items yet.</p>
+            <p className="text-xs text-ink-faint">No menu items yet.</p>
           ) : (
             menuItems.map((m) => (
-              <label key={m.id} className="flex items-center gap-2 text-xs text-neutral-700">
+              <label key={m.id} className="flex items-center gap-2 text-xs text-ink-secondary">
                 <input
                   type="checkbox"
                   checked={menuItemIds.includes(m.id)}
@@ -222,7 +222,7 @@ function RestrictionPickers({
         </div>
       </div>
       {(categoryIds.length > 0 || menuItemIds.length > 0) && (
-        <p className="sm:col-span-3 text-xs text-neutral-500">
+        <p className="sm:col-span-3 text-xs text-ink-muted">
           The discount will apply only to the selected items/categories&rsquo; share of the order, not the whole
           bill.
         </p>
@@ -308,11 +308,11 @@ function AddCouponForm({
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+    <form onSubmit={submit} className="rounded-2xl border border-hairline bg-surface-2 p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-4">
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Code</span>
+          <span className="mb-1 block text-ink-secondary">Code</span>
           <input
             required
             value={code}
@@ -322,7 +322,7 @@ function AddCouponForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Type</span>
+          <span className="mb-1 block text-ink-secondary">Type</span>
           <select
             value={discountType}
             onChange={(e) => setDiscountType(e.target.value as "percentage" | "flat")}
@@ -334,7 +334,7 @@ function AddCouponForm({
         </label>
         {discountType === "percentage" ? (
           <label className="text-sm">
-            <span className="mb-1 block text-neutral-600">Percent off</span>
+            <span className="mb-1 block text-ink-secondary">Percent off</span>
             <input
               required
               type="number"
@@ -348,7 +348,7 @@ function AddCouponForm({
           </label>
         ) : (
           <label className="text-sm">
-            <span className="mb-1 block text-neutral-600">Flat amount (Rs.)</span>
+            <span className="mb-1 block text-ink-secondary">Flat amount (Rs.)</span>
             <input
               required
               type="number"
@@ -362,7 +362,7 @@ function AddCouponForm({
         )}
         {discountType === "percentage" && (
           <label className="text-sm">
-            <span className="mb-1 block text-neutral-600">Max discount (Rs., optional)</span>
+            <span className="mb-1 block text-ink-secondary">Max discount (Rs., optional)</span>
             <input
               type="number"
               min="0"
@@ -374,7 +374,7 @@ function AddCouponForm({
           </label>
         )}
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Min order subtotal (Rs., optional)</span>
+          <span className="mb-1 block text-ink-secondary">Min order subtotal (Rs., optional)</span>
           <input
             type="number"
             min="0"
@@ -385,7 +385,7 @@ function AddCouponForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Total usage limit (optional)</span>
+          <span className="mb-1 block text-ink-secondary">Total usage limit (optional)</span>
           <input
             type="number"
             min="1"
@@ -397,7 +397,7 @@ function AddCouponForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Uses per customer (optional)</span>
+          <span className="mb-1 block text-ink-secondary">Uses per customer (optional)</span>
           <input
             type="number"
             min="1"
@@ -409,7 +409,7 @@ function AddCouponForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Expires (optional)</span>
+          <span className="mb-1 block text-ink-secondary">Expires (optional)</span>
           <input
             type="date"
             value={expiresAt}
@@ -417,17 +417,17 @@ function AddCouponForm({
             className="input"
           />
         </label>
-        <label className="flex items-center gap-2 self-end pb-2 text-sm text-neutral-700">
+        <label className="flex items-center gap-2 self-end pb-2 text-sm text-ink-secondary">
           <input type="checkbox" checked={firstOrderOnly} onChange={(e) => setFirstOrderOnly(e.target.checked)} />
           First order only (requires a linked customer)
         </label>
         <label className="text-sm sm:col-span-2">
-          <span className="mb-1 block text-neutral-600">Note (optional, internal)</span>
+          <span className="mb-1 block text-ink-secondary">Note (optional, internal)</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
         </label>
       </div>
 
-      <div className="mt-4 border-t border-neutral-100 pt-4">
+      <div className="mt-4 border-t border-hairline/60 pt-4">
         <RestrictionPickers
           branches={branches}
           categories={categories}
@@ -493,39 +493,39 @@ function CouponRow({
   const menuItemCount = coupon.menuItemIds.length;
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+    <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">{error}</p>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-sm font-semibold text-neutral-900">{coupon.code}</span>
-            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
+            <span className="font-mono text-sm font-semibold text-ink">{coupon.code}</span>
+            <span className="rounded-full bg-surface-1 px-2 py-0.5 text-xs text-ink-secondary">
               {formatDiscount(coupon)} off
             </span>
             {!coupon.isActive && (
-              <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-xs text-neutral-600">Inactive</span>
+              <span className="rounded-full bg-surface-3 px-2 py-0.5 text-xs text-ink-secondary">Inactive</span>
             )}
             {expired && (
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">Expired</span>
+              <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-xs text-red-400">Expired</span>
             )}
             {limitReached && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">Limit reached</span>
+              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">Limit reached</span>
             )}
             {coupon.firstOrderOnly && (
-              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-800">First order only</span>
+              <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">First order only</span>
             )}
             {coupon.perCustomerLimit !== null && (
-              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-800">
+              <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
                 {coupon.perCustomerLimit}/customer
               </span>
             )}
             {branchNames.length > 0 && (
-              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-800">
+              <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-xs text-purple-300">
                 {branchNames.join(", ")} only
               </span>
             )}
             {(categoryNames.length > 0 || menuItemCount > 0) && (
-              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-800">
+              <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-xs text-purple-300">
                 {[...categoryNames, menuItemCount > 0 ? `${menuItemCount} item${menuItemCount === 1 ? "" : "s"}` : null]
                   .filter(Boolean)
                   .join(", ")}{" "}
@@ -533,7 +533,7 @@ function CouponRow({
               </span>
             )}
           </div>
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-ink-muted">
             Used {coupon.usageCount}
             {coupon.usageLimit !== null ? ` / ${coupon.usageLimit}` : ""}
             {coupon.minOrderSubtotalInPaisa !== null && (
@@ -556,7 +556,7 @@ function CouponRow({
         </div>
       </div>
       {editing && (
-        <div className="mt-4 border-t border-neutral-100 pt-4">
+        <div className="mt-4 border-t border-hairline/60 pt-4">
           <EditCouponForm
             slug={slug}
             coupon={coupon}
@@ -642,11 +642,11 @@ function EditCouponForm({
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-4">
         {coupon.discountType === "percentage" && (
           <label className="text-sm">
-            <span className="mb-1 block text-neutral-600">Max discount (Rs.)</span>
+            <span className="mb-1 block text-ink-secondary">Max discount (Rs.)</span>
             <input
               type="number"
               min="0"
@@ -658,7 +658,7 @@ function EditCouponForm({
           </label>
         )}
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Min order subtotal (Rs.)</span>
+          <span className="mb-1 block text-ink-secondary">Min order subtotal (Rs.)</span>
           <input
             type="number"
             min="0"
@@ -669,7 +669,7 @@ function EditCouponForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Total usage limit</span>
+          <span className="mb-1 block text-ink-secondary">Total usage limit</span>
           <input
             type="number"
             min="1"
@@ -681,7 +681,7 @@ function EditCouponForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Uses per customer</span>
+          <span className="mb-1 block text-ink-secondary">Uses per customer</span>
           <input
             type="number"
             min="1"
@@ -693,20 +693,20 @@ function EditCouponForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Expires</span>
+          <span className="mb-1 block text-ink-secondary">Expires</span>
           <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className="input" />
         </label>
-        <label className="flex items-center gap-2 self-end pb-2 text-sm text-neutral-700">
+        <label className="flex items-center gap-2 self-end pb-2 text-sm text-ink-secondary">
           <input type="checkbox" checked={firstOrderOnly} onChange={(e) => setFirstOrderOnly(e.target.checked)} />
           First order only
         </label>
         <label className="text-sm sm:col-span-2">
-          <span className="mb-1 block text-neutral-600">Note</span>
+          <span className="mb-1 block text-ink-secondary">Note</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
         </label>
       </div>
 
-      <div className="border-t border-neutral-100 pt-3">
+      <div className="border-t border-hairline/60 pt-3">
         <RestrictionPickers
           branches={branches}
           categories={categories}
