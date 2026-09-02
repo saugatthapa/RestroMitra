@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "loyalty_transactions_reference_unique" ON "loyalty_transactions" USING btree ("type","reference_type","reference_id") WHERE "loyalty_transactions"."reference_type" IS NOT NULL AND "loyalty_transactions"."reference_id" IS NOT NULL;

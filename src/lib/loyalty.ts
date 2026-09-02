@@ -33,6 +33,19 @@ export function computePointsEarned(totalInPaisa: number): number {
  * lifetimePointsEarned only ever goes up, and only for positive "earn"
  * transactions — redemptions and negative adjustments reduce the spendable
  * balance without reducing lifetime standing (see loyalty-tiers.ts).
+ *
+ * When `referenceType`+`referenceId` are both given, the insert targets
+ * the loyalty_transactions_reference_unique partial index (see that
+ * column's schema comment — MASTER_GAP_AUDIT P2) via `onConflictDoNothing`
+ * and silently returns `null` on a collision instead of throwing: a second
+ * attempt to record the SAME (type, referenceType, referenceId) — e.g. two
+ * concurrent order-completion transitions racing to award the same order's
+ * points — means someone else already recorded it, so the balance/lifetime
+ * update below is skipped too rather than double-crediting the customer.
+ * This is a DB-level backstop underneath the app-layer guarantee (the
+ * order-status state machine only allows one transition into "completed"),
+ * not a replacement for it — most callers (manual adjustments, the
+ * birthday bonus) never pass a referenceId and so can never conflict here.
  */
 export async function recordLoyaltyTransaction(
   tx: Transaction,
@@ -63,7 +76,17 @@ export async function recordLoyaltyTransaction(
       note: params.note ?? null,
       recordedByUserId: params.recordedByUserId ?? null,
     })
+    .onConflictDoNothing({
+      target: [loyaltyTransactions.type, loyaltyTransactions.referenceType, loyaltyTransactions.referenceId],
+      where: sql`${loyaltyTransactions.referenceType} IS NOT NULL AND ${loyaltyTransactions.referenceId} IS NOT NULL`,
+    })
     .returning();
+
+  if (!transaction) {
+    // Lost the race (or this is a plain retry of an already-recorded
+    // reference) — nothing to credit/debit, and no row to return.
+    return null;
+  }
 
   const lifetimeIncrement = params.type === "earn" && params.pointsDelta > 0 ? params.pointsDelta : 0;
 
@@ -197,8 +220,16 @@ export async function reconcileBirthdayBonus(
  * deduction gets it for free in src/lib/inventory.ts: the order-status
  * state machine never allows a transition back to "completed" from a
  * later status (there is no later status), so this can only run once per
- * order. The birthday bonus has its own independent compare-and-swap (see
- * awardBirthdayBonus) since it's also reachable from a plain CRM lookup.
+ * order. That app-layer guarantee now has a DB-level backstop too — both
+ * the "earn" award below and the visit-streak bonus record with
+ * referenceType/referenceId set to this order, so recordLoyaltyTransaction's
+ * onConflictDoNothing on loyalty_transactions_reference_unique (see that
+ * index's schema comment — MASTER_GAP_AUDIT P2) makes a second concurrent
+ * call for the same order a silent no-op instead of a duplicate ledger row,
+ * even if the state-machine guarantee were ever violated by a bug
+ * elsewhere. The birthday bonus has its own independent compare-and-swap
+ * (see awardBirthdayBonus) since it's also reachable from a plain CRM
+ * lookup.
  *
  * Silently does nothing for points if the computed amount is 0 (an order
  * small enough that it rounds down to zero points still counts toward

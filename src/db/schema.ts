@@ -2941,6 +2941,28 @@ export const loyaltyTransactions = pgTable(
   (table) => [
     index("loyalty_transactions_restaurant_id_idx").on(table.restaurantId),
     index("loyalty_transactions_customer_id_idx").on(table.customerId),
+    // MASTER_GAP_AUDIT P2 — DB-level backstop for double-award protection.
+    // recordLoyaltyTransaction (loyalty.ts) previously relied ENTIRELY on
+    // the order-status state machine's own guarantee (a completed order
+    // can never re-enter "completed") to keep the once-per-order "earn"
+    // award and the once-per-order visit-streak bonus from being recorded
+    // twice — an app-layer invariant with no constraint enforcing it here,
+    // so a bug elsewhere (a retried transition, a second concurrent status
+    // update racing the first past that check) could silently double-credit
+    // a customer with no error and no trace other than two ledger rows.
+    // Partial + composite on (type, referenceType, referenceId): most rows
+    // (manual adjustments, the once-per-year birthday bonus — already
+    // guarded by its own compare-and-swap on customers.lastBirthdayBonusYear,
+    // see awardBirthdayBonus) never set referenceId, so the predicate keeps
+    // this scoped to reference-carrying rows only; `type` is part of the key
+    // because the SAME (referenceType: "order", referenceId: <orderId>) pair
+    // legitimately appears twice for one order — once as the "redeem" debit
+    // recorded at order creation, once as the "earn" credit recorded at
+    // completion — and those must stay two distinct rows, not collide with
+    // each other.
+    uniqueIndex("loyalty_transactions_reference_unique")
+      .on(table.type, table.referenceType, table.referenceId)
+      .where(sql`${table.referenceType} IS NOT NULL AND ${table.referenceId} IS NOT NULL`),
   ],
 );
 

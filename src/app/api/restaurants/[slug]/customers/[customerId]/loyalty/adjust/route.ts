@@ -68,6 +68,13 @@ export async function POST(
         recordedByUserId: session.user.id,
       });
     });
+    // recordLoyaltyTransaction only returns null on a reference-collision
+    // no-op (see its doc comment), which requires a referenceId — this
+    // call never passes one, so it always inserts. Narrowed here only to
+    // satisfy the now-nullable return type.
+    if (!result) {
+      return NextResponse.json({ error: "Could not record this adjustment." }, { status: 500 });
+    }
 
     await recordAuditLog({
       restaurantId,

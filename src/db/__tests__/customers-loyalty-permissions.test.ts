@@ -242,8 +242,9 @@ describe.skipIf(!hasDb)("Customers + loyalty permissions (integration)", () => {
       }),
     );
 
-    expect(result.customer.loyaltyPointsBalance).toBe(before!.loyaltyPointsBalance - 50);
-    expect(result.customer.lifetimePointsEarned).toBe(before!.lifetimePointsEarned);
+    expect(result).not.toBeNull();
+    expect(result!.customer.loyaltyPointsBalance).toBe(before!.loyaltyPointsBalance - 50);
+    expect(result!.customer.lifetimePointsEarned).toBe(before!.lifetimePointsEarned);
   });
 
   it("loyalty_transactions rows are correctly scoped per restaurant (a real DB round trip)", async () => {

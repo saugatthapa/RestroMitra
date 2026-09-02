@@ -519,6 +519,13 @@
       "when": 1788350897558,
       "tag": "0073_cap_tax_and_service_charge_basis_points",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1788351109341,
+      "tag": "0074_loyalty_transactions_reference_unique",
+      "breakpoints": true
     }
   ]
 }
