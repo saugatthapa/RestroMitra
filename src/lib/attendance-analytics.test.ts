@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  classifyAttendanceDay,
   computeStaffAttendanceAnalytics,
   emptyStaffAttendanceAnalytics,
   isDateWithinLeaveRanges,
@@ -159,5 +160,49 @@ describe("isDateHoliday", () => {
 
   it("returns false for a date with no holiday declared", () => {
     expect(isDateHoliday("2026-10-22", "branch-a", new Set(), new Map())).toBe(false);
+  });
+});
+
+describe("classifyAttendanceDay", () => {
+  const clockedIn = { clockInAt: new Date("2026-01-01T09:00:00Z"), clockOutAt: null };
+
+  it("returns 'present' for a clock-in with no matched shift", () => {
+    expect(classifyAttendanceDay(clockedIn, undefined, false, false)).toBe("present");
+  });
+
+  it("returns 'present' for a clock-in matched to an on-time/early shift (lateMinutes 0)", () => {
+    expect(classifyAttendanceDay(clockedIn, { status: "completed", lateMinutes: 0 }, false, false)).toBe("present");
+  });
+
+  it("returns 'late' for a clock-in matched to a shift with lateMinutes > 0", () => {
+    expect(classifyAttendanceDay(clockedIn, { status: "completed", lateMinutes: 15 }, false, false)).toBe("late");
+  });
+
+  it("returns 'no_show' for a no-show matched shift with no clock-in", () => {
+    expect(classifyAttendanceDay(undefined, { status: "no_show", lateMinutes: 0 }, false, false)).toBe("no_show");
+  });
+
+  it("returns 'on_leave' when on leave with no clock-in and no no-show shift", () => {
+    expect(classifyAttendanceDay(undefined, undefined, true, false)).toBe("on_leave");
+  });
+
+  it("returns 'holiday' when it's a holiday with no clock-in, no no-show shift, and not on leave", () => {
+    expect(classifyAttendanceDay(undefined, undefined, false, true)).toBe("holiday");
+  });
+
+  it("returns null when there is no signal at all for the day", () => {
+    expect(classifyAttendanceDay(undefined, undefined, false, false)).toBeNull();
+  });
+
+  it("an actual clock-in always wins over on_leave/holiday for the same day", () => {
+    expect(classifyAttendanceDay(clockedIn, undefined, true, true)).toBe("present");
+  });
+
+  it("a no-show matched shift takes priority over on_leave/holiday when there's no clock-in", () => {
+    expect(classifyAttendanceDay(undefined, { status: "no_show", lateMinutes: 0 }, true, true)).toBe("no_show");
+  });
+
+  it("on_leave takes priority over holiday", () => {
+    expect(classifyAttendanceDay(undefined, undefined, true, true)).toBe("on_leave");
   });
 });

@@ -1104,6 +1104,13 @@ function AttendanceAnalyticsPanel({ slug }: { slug: string }) {
             >
               {loading ? "Loading…" : "Refresh"}
             </button>
+            <a
+              href={`${base(slug)}/attendance/export?periodStart=${periodStart}&periodEnd=${periodEnd}`}
+              download
+              className="btn-secondary text-xs"
+            >
+              Export CSV
+            </a>
           </div>
 
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -1286,6 +1293,13 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
             className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
           />
         </label>
+        <a
+          href={`${base(slug)}/payroll/export?from=${periodStart}&to=${periodEnd}`}
+          download
+          className="btn-secondary text-xs"
+        >
+          Export CSV
+        </a>
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">

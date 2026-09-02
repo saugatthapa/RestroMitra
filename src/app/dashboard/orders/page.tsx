@@ -27,6 +27,7 @@ export default async function OrdersPage() {
         slug={active.slug}
         canEdit={roleHasPermission(active.role, PERMISSIONS.EDIT_ORDER)}
         canCancel={roleHasPermission(active.role, PERMISSIONS.CANCEL_ORDER)}
+        canExport={roleHasPermission(active.role, PERMISSIONS.VIEW_SALES)}
       />
     </div>
   );

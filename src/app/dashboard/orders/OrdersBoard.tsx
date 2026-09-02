@@ -74,10 +74,12 @@ export function OrdersBoard({
   slug,
   canEdit,
   canCancel,
+  canExport,
 }: {
   slug: string;
   canEdit: boolean;
   canCancel: boolean;
+  canExport: boolean;
 }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -299,6 +301,14 @@ export function OrdersBoard({
   return (
     <div className="space-y-4">
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      {canExport && (
+        <div className="flex justify-end">
+          <a href={`${base(slug)}/orders/export`} download className="btn-secondary text-xs">
+            Export CSV
+          </a>
+        </div>
+      )}
 
       {!isOnline && (
         <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">

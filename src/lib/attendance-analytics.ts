@@ -196,3 +196,51 @@ export function computeStaffAttendanceAnalytics(
     excusedHolidayCount,
   };
 }
+
+/**
+ * Commercial completion pass — Data Export gap (attendance). The per-DAY
+ * classification the /attendance/export route needs (present/late/
+ * no-show/on-leave/holiday), as opposed to this module's own aggregate
+ * StaffAttendanceAnalytics above (period totals, not one row per day).
+ * Deliberately just COMBINES verdicts this codebase already computes
+ * elsewhere rather than re-deriving any of them:
+ *  - late/no-show comes from scheduling.ts's ScheduleVariance (via
+ *    scheduling-db.ts's matchScheduleWithAttendance) — the SAME matched-
+ *    shift result the analytics panel above already reduces into
+ *    lateCount/noShowCount, never a second lateness rule invented here.
+ *  - on-leave/holiday are plain boolean membership checks the caller
+ *    derives from leaveRequests/holidays (attendance-analytics-db.ts) —
+ *    no leave/holiday-eligibility policy lives in this function itself.
+ *
+ * Priority when a day carries more than one signal: an actual clock-in
+ * always wins — a shift the person genuinely showed up for is
+ * "present"/"late", never downgraded to "on_leave" or "holiday" just
+ * because one also happens to be on record for that date (mirrors
+ * attendance.ts's "what actually happened wins" treatment of rejected
+ * shifts). A day with no clock-in, no scheduled no-show, not on leave,
+ * and not a holiday carries no signal at all — returns null so the caller
+ * simply omits that day's row rather than exporting an empty/invented
+ * "off" status this codebase has no such concept for.
+ */
+export type AttendanceDayStatus = "present" | "late" | "no_show" | "on_leave" | "holiday";
+
+export const ATTENDANCE_DAY_STATUS_LABELS: Record<AttendanceDayStatus, string> = {
+  present: "Present",
+  late: "Late",
+  no_show: "No-show",
+  on_leave: "On leave",
+  holiday: "Holiday",
+};
+
+export function classifyAttendanceDay(
+  attendance: { clockInAt: Date; clockOutAt: Date | null } | undefined,
+  scheduleVariance: { status: ScheduleStatus; lateMinutes: number } | undefined,
+  isOnLeave: boolean,
+  isHoliday: boolean,
+): AttendanceDayStatus | null {
+  if (attendance) return scheduleVariance && scheduleVariance.lateMinutes > 0 ? "late" : "present";
+  if (scheduleVariance?.status === "no_show") return "no_show";
+  if (isOnLeave) return "on_leave";
+  if (isHoliday) return "holiday";
+  return null;
+}

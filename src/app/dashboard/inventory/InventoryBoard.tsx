@@ -1377,7 +1377,10 @@ function PurchasesTab({
     <div className="space-y-4">
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <a href={`${base(slug)}/purchases/export`} download className="btn-secondary text-xs">
+          Export CSV
+        </a>
         <button onClick={() => setShowCreate((v) => !v)} className="btn-primary" disabled={items.length === 0}>
           {showCreate ? "Cancel" : "+ Record purchase"}
         </button>

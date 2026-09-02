@@ -1,9 +1,11 @@
 import "server-only";
 import { randomBytes } from "crypto";
+import { and, desc, eq, gte, lt } from "drizzle-orm";
 import { db } from "@/db";
+import { branches, orders, restaurantTables } from "@/db/schema";
 import { applyTax } from "@/lib/money";
 import { HttpError } from "@/lib/http-error";
-import { restaurantDate } from "@/lib/restaurant-date";
+import { restaurantDate, restaurantStartOfDay } from "@/lib/restaurant-date";
 
 export class OrderValidationError extends HttpError {
   constructor(message: string) {
@@ -278,4 +280,62 @@ export function generateOrderNumber(timezone: string): string {
   const datePart = restaurantDate(timezone).replace(/-/g, "");
   const randomPart = randomBytes(3).toString("hex").toUpperCase().slice(0, 4);
   return `${datePart}-${randomPart}`;
+}
+
+export type OrderExportRow = typeof orders.$inferSelect & {
+  branchName: string | null;
+  tableName: string | null;
+};
+
+/**
+ * Commercial completion pass — Data Export gap. Order-level rows (one per
+ * order, not per line item — same granularity every other export in this
+ * codebase already uses) for the /orders/export route. Deliberately its
+ * own function rather than reusing GET /orders' own query: that route is a
+ * "live board" bounded to a 48-hour rolling window
+ * (ORDER_LIST_WINDOW_MS — see route.ts's own comment) with items/addons
+ * eager-loaded for the KDS-style board UI, neither of which an export
+ * report over an arbitrary date range wants. `from`/`to` (restaurant-local
+ * "YYYY-MM-DD", inclusive) scope by `placedAt`, same "attribute to when it
+ * started" convention reports.ts/payroll.ts already use — both optional,
+ * an omitted bound leaves that side of the range open. `branchId` narrows
+ * to one branch; the caller (the export route) is responsible for
+ * resolving/authorizing which branch this may be, same as every other
+ * branch-scoped list here.
+ */
+export async function listOrdersForExport(
+  restaurantId: string,
+  filters: { from?: string; to?: string; branchId?: string },
+  timezone: string,
+  limit: number,
+): Promise<OrderExportRow[]> {
+  const fromBound = filters.from ? restaurantStartOfDay(timezone, filters.from) : undefined;
+  // Exclusive upper bound: local midnight the day AFTER `to`, so the whole
+  // of `to` itself is included (same half-open-interval convention as
+  // reports.ts's dayBounds).
+  const toBound = filters.to
+    ? new Date(restaurantStartOfDay(timezone, filters.to).getTime() + 24 * 60 * 60 * 1000)
+    : undefined;
+
+  const rows = await db
+    .select({
+      order: orders,
+      branchName: branches.name,
+      tableName: restaurantTables.name,
+    })
+    .from(orders)
+    .leftJoin(branches, eq(orders.branchId, branches.id))
+    .leftJoin(restaurantTables, eq(orders.tableId, restaurantTables.id))
+    .where(
+      and(
+        eq(orders.restaurantId, restaurantId),
+        fromBound ? gte(orders.placedAt, fromBound) : undefined,
+        toBound ? lt(orders.placedAt, toBound) : undefined,
+        filters.branchId ? eq(orders.branchId, filters.branchId) : undefined,
+      ),
+    )
+    .orderBy(desc(orders.placedAt))
+    .limit(limit);
+
+  return rows.map((r) => ({ ...r.order, branchName: r.branchName, tableName: r.tableName }));
 }

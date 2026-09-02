@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq, gte, inArray, lt, lte, ne } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, lte, ne, or } from "drizzle-orm";
 import { db } from "@/db";
-import { attendanceRecords, leaveRequests, staffSalaryConfigs, userRoles } from "@/db/schema";
+import { attendanceRecords, leaveRequests, payrollPayments, staffSalaryConfigs, userRoles } from "@/db/schema";
 import { summarizeAttendance } from "@/lib/attendance";
 import { leaveDaysWithinPeriod } from "@/lib/leave";
 import { restaurantDate, restaurantStartOfDay } from "@/lib/restaurant-date";
@@ -290,4 +290,46 @@ export async function getPayrollComputationsBatch(
   }
 
   return result;
+}
+
+/**
+ * Commercial completion pass — Data Export gap (payroll). Same query GET
+ * /payroll/payments already runs (restaurant-scoped, branch-scoped via
+ * userRoles the same way — payrollPayments itself has no branchId column),
+ * extracted here so the export route can request a higher row limit
+ * without duplicating that join/scoping logic. `from`/`to` (YYYY-MM-DD,
+ * inclusive) optionally narrow by `paidAt` — the date the money actually
+ * went out, not payrollPayments.periodStart/periodEnd (the pay PERIOD a
+ * payment covers, which is free-text/ad-hoc for a bonus or advance and not
+ * always set) — same "attribute to when the event happened" convention
+ * every other date-bounded export in this codebase uses.
+ */
+export async function listPayrollPaymentsForExport(
+  restaurantId: string,
+  branchId: string | null,
+  filters: { from?: string; to?: string },
+  timezone: string,
+  limit: number,
+) {
+  const fromBound = filters.from ? restaurantStartOfDay(timezone, filters.from) : undefined;
+  const toBound = filters.to
+    ? new Date(restaurantStartOfDay(timezone, filters.to).getTime() + 24 * 60 * 60 * 1000)
+    : undefined;
+
+  const rows = await db
+    .select({ payment: payrollPayments })
+    .from(payrollPayments)
+    .innerJoin(userRoles, eq(payrollPayments.userRoleId, userRoles.id))
+    .where(
+      and(
+        eq(payrollPayments.restaurantId, restaurantId),
+        fromBound ? gte(payrollPayments.paidAt, fromBound) : undefined,
+        toBound ? lt(payrollPayments.paidAt, toBound) : undefined,
+        branchId === null ? undefined : or(isNull(userRoles.branchId), eq(userRoles.branchId, branchId)),
+      ),
+    )
+    .orderBy(desc(payrollPayments.paidAt))
+    .limit(limit);
+
+  return rows.map((r) => r.payment);
 }

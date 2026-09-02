@@ -1,6 +1,6 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
-import type { Transaction } from "@/db";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { db, type Transaction } from "@/db";
 import {
   inventoryItems,
   stockMovements,
@@ -8,6 +8,8 @@ import {
   recipeItems,
   branches,
   branchInventoryLevels,
+  ledgerEntries,
+  purchases,
 } from "@/db/schema";
 import { HttpError } from "@/lib/http-error";
 import type { WasteReasonValue } from "@/lib/waste-reasons";
@@ -336,4 +338,55 @@ export function isLowStock(item: {
     item.reorderLevelMilliunits !== null &&
     item.currentStockMilliunits <= item.reorderLevelMilliunits
   );
+}
+
+export type PurchaseExportRow = Awaited<ReturnType<typeof listPurchasesForExport>>[number];
+
+/**
+ * Commercial completion pass — Data Export gap (purchases). Same query GET
+ * /purchases already runs (supplier + line items eager-loaded, the linked
+ * ledgerEntries row batched in for due/paid status — see that route's own
+ * comment for why due status lives there and not on the purchase itself),
+ * extracted here so the export route can request a higher row limit
+ * without duplicating the branch-scoping/ledger-join logic. `branchId ===
+ * null` sees every branch's purchases (an unrestricted caller); anything
+ * else scopes to that one branch — same convention the route itself uses.
+ */
+export async function listPurchasesForExport(restaurantId: string, branchId: string | null, limit: number) {
+  const rows = await db.query.purchases.findMany({
+    where:
+      branchId === null
+        ? eq(purchases.restaurantId, restaurantId)
+        : and(eq(purchases.restaurantId, restaurantId), eq(purchases.branchId, branchId)),
+    orderBy: [desc(purchases.createdAt)],
+    with: {
+      supplier: true,
+      branch: true,
+      items: { with: { inventoryItem: true } },
+    },
+    limit,
+  });
+
+  const purchaseIds = rows.map((r) => r.id);
+  const linkedLedgerEntries =
+    purchaseIds.length === 0
+      ? []
+      : await db
+          .select({
+            referenceId: ledgerEntries.referenceId,
+            amountInPaisa: ledgerEntries.amountInPaisa,
+            dueStatus: ledgerEntries.dueStatus,
+            settledAmountInPaisa: ledgerEntries.settledAmountInPaisa,
+          })
+          .from(ledgerEntries)
+          .where(
+            and(
+              eq(ledgerEntries.restaurantId, restaurantId),
+              eq(ledgerEntries.referenceType, "purchase"),
+              inArray(ledgerEntries.referenceId, purchaseIds),
+            ),
+          );
+  const ledgerByPurchaseId = new Map(linkedLedgerEntries.map((e) => [e.referenceId, e]));
+
+  return rows.map((r) => ({ ...r, ledgerEntry: ledgerByPurchaseId.get(r.id) ?? null }));
 }
