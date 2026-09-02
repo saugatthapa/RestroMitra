@@ -15,7 +15,7 @@ export default async function OnboardingPage() {
       <div className="mx-auto max-w-xl">
         <div className="mb-8 flex flex-col leading-tight">
           <span className="text-lg font-semibold tracking-tight text-neutral-900">
-            Restro<span className="text-orange-600">Mitra</span>
+            Restro<span className="text-orange-600">Kendra</span>
           </span>
           <span className="text-[10px] font-medium text-neutral-400">by Saugat Thapa</span>
         </div>
