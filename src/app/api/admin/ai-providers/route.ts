@@ -9,6 +9,7 @@ import { createAiProviderConfigSchema } from "@/lib/validation/ai-provider";
 import { getAllProviderConfigsForAdmin, upsertProviderConfig } from "@/lib/ai/provider-config-db";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Platform Control Center (Phase 7) — provider config management. Gated
@@ -20,7 +21,19 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
  */
 export async function GET() {
   try {
-    await requirePlatformPermission(PLATFORM_PERMISSIONS.MANAGE_AI_PROVIDERS);
+    const session = await requirePlatformPermission(PLATFORM_PERMISSIONS.MANAGE_AI_PROVIDERS);
+
+    // QA hardening (P2 backlog): platform-admin list/read endpoints had no
+    // rate limiting of their own — lower severity since they require an
+    // already-authenticated, MFA'd platform-admin session, but still a
+    // defense-in-depth backstop. Shares the `admin-read:user` bucket with
+    // every other admin list/read route, same "one abuse surface" pattern
+    // as menu-write:user.
+    const limit = await rateLimit(`admin-read:user:${session.user.id}`, { limit: 120, windowMs: 60 * 1000 });
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
+    }
+
     const configs = await getAllProviderConfigsForAdmin();
     return NextResponse.json({ configs });
   } catch (err) {

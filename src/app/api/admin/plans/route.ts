@@ -9,6 +9,7 @@ import { createPlanSchema } from "@/lib/validation/plans";
 import { getAllPlansForAdmin } from "@/lib/plans-db";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Platform Control Center (Phase 4) — the plan catalog's own management
@@ -19,7 +20,15 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
  */
 export async function GET() {
   try {
-    await requirePlatformPermission(PLATFORM_PERMISSIONS.VIEW_TENANTS);
+    const session = await requirePlatformPermission(PLATFORM_PERMISSIONS.VIEW_TENANTS);
+
+    // QA hardening (P2 backlog) — see ai-providers/route.ts's matching
+    // comment; shares the same admin-read:user bucket.
+    const limit = await rateLimit(`admin-read:user:${session.user.id}`, { limit: 120, windowMs: 60 * 1000 });
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
+    }
+
     const allPlans = await getAllPlansForAdmin();
     return NextResponse.json({ plans: allPlans });
   } catch (err) {

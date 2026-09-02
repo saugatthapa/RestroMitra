@@ -9,6 +9,7 @@ import { setEntitlementOverrideSchema, clearEntitlementOverrideSchema } from "@/
 import { explainTenantAccess, setEntitlementOverride, clearEntitlementOverride } from "@/lib/entitlements-db";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Platform Control Center (Phase 5) — the "explain this tenant's access"
@@ -24,7 +25,15 @@ export async function GET(
   ctx: { params: Promise<{ restaurantId: string }> },
 ) {
   try {
-    await requirePlatformPermission(PLATFORM_PERMISSIONS.VIEW_TENANTS);
+    const session = await requirePlatformPermission(PLATFORM_PERMISSIONS.VIEW_TENANTS);
+
+    // QA hardening (P2 backlog) — see ai-providers/route.ts's matching
+    // comment; shares the same admin-read:user bucket.
+    const limit = await rateLimit(`admin-read:user:${session.user.id}`, { limit: 120, windowMs: 60 * 1000 });
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
+    }
+
     const { restaurantId } = await ctx.params;
 
     const [restaurant] = await db

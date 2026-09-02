@@ -8,6 +8,7 @@ import { parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { grantPlatformRoleSchema } from "@/lib/validation/platform-roles";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Platform Control Center (Phase 1) — the real grant/revoke path for
@@ -19,7 +20,14 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
  */
 export async function GET() {
   try {
-    await requirePlatformPermission(PLATFORM_PERMISSIONS.MANAGE_PLATFORM_ADMINS);
+    const session = await requirePlatformPermission(PLATFORM_PERMISSIONS.MANAGE_PLATFORM_ADMINS);
+
+    // QA hardening (P2 backlog) — see ai-providers/route.ts's matching
+    // comment; shares the same admin-read:user bucket.
+    const limit = await rateLimit(`admin-read:user:${session.user.id}`, { limit: 120, windowMs: 60 * 1000 });
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
+    }
 
     const rows = await db
       .select({

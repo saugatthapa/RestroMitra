@@ -10,6 +10,7 @@ import { countAiRequestsThisMonth } from "@/lib/ai/usage-db";
 import { listSupportNotes } from "@/lib/support/notes-db";
 import { listSupportTags } from "@/lib/support/tags-db";
 import { getRestaurantHealthScore } from "@/lib/support/health-score-db";
+import { rateLimit } from "@/lib/rate-limit";
 
 const EVENT_HISTORY_LIMIT = 50;
 
@@ -20,6 +21,18 @@ export async function GET(
 ) {
   try {
     const session = await requirePlatformPermission(PLATFORM_PERMISSIONS.VIEW_TENANTS);
+
+    // QA hardening (P2 backlog): platform-admin list/read endpoints had no
+    // rate limiting of their own — lower severity since they require an
+    // already-authenticated, MFA'd platform-admin session, but still a
+    // defense-in-depth backstop. Shares the `admin-read:user` bucket with
+    // every other admin list/read route, same "one abuse surface" pattern
+    // as menu-write:user.
+    const limit = await rateLimit(`admin-read:user:${session.user.id}`, { limit: 120, windowMs: 60 * 1000 });
+    if (!limit.allowed) {
+      return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
+    }
+
     const { restaurantId } = await ctx.params;
 
     const [restaurant] = await db
