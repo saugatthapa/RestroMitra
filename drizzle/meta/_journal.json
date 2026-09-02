@@ -554,6 +554,13 @@
       "when": 1788352768561,
       "tag": "0078_attendance_workplace_photo",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1788353119116,
+      "tag": "0079_fiscal_invoice_and_tax_ids",
+      "breakpoints": true
     }
   ]
 }

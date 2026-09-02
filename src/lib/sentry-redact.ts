@@ -27,9 +27,10 @@
  *     customer's real phone number (QR orders capture `customerPhone`).
  *   - `customerName` — a QR guest's real name.
  *   - `email` — owner/staff email.
- *   - `panVat` — a restaurant's tax ID (business PII, not sensitive to
- *     Anthropic/Sentry-viewer relationship, but no reason to keep it
- *     either).
+ *   - `panVat`/`panNumber`/`vatNumber` — a restaurant's tax ID(s) (business
+ *     PII, not sensitive to Anthropic/Sentry-viewer relationship, but no
+ *     reason to keep it either). panNumber/vatNumber are the Gap-audit P2
+ *     fiscal-compliance columns — see their comment in schema.ts.
  *   - Session cookies / the `Cookie`/`Set-Cookie`/`Authorization` headers
  *     — a leaked session cookie is a full account-takeover vector, not
  *     just a privacy concern.
@@ -43,7 +44,7 @@
 const REDACTED = "[Redacted]";
 
 const SENSITIVE_KEY_PATTERN =
-  /^(password|passwordhash|phone|customerphone|ownerphone|customername|email|panvat|cookie|set-cookie|authorization|token|tokenhash|qrtoken|sessionid|clientrequestid|bankname|bankaccountnumber|bankaccountholder)$/i;
+  /^(password|passwordhash|phone|customerphone|ownerphone|customername|email|panvat|pannumber|vatnumber|cookie|set-cookie|authorization|token|tokenhash|qrtoken|sessionid|clientrequestid|bankname|bankaccountnumber|bankaccountholder)$/i;
 
 /**
  * Recursively walks a plain-data structure (already-parsed JSON-like

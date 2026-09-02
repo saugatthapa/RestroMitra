@@ -64,6 +64,11 @@ type Order = {
   paymentStatus: PaymentStatus;
   source: string;
   kotSequence: number | null;
+  // Gap-audit P2 fix — assigned once the order reaches "completed" (see
+  // assignFiscalInvoiceNumber's doc comment); null before that point, so
+  // the bill only shows it once it's actually final.
+  fiscalInvoiceNumber: number | null;
+  restaurant: { panNumber: string | null; vatNumber: string | null };
   customerName: string | null;
   customerPhone: string | null;
   notes: string | null;
@@ -284,6 +289,16 @@ export function OrderBillView({
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold text-neutral-900">Order #{order.orderNumber}</h1>
+            {/* Gap-audit P2 fix — the gapless fiscal sequence number, shown
+                alongside (never instead of) the order number above once the
+                order has reached "completed" and one's been assigned; see
+                assignFiscalInvoiceNumber's doc comment for why it doesn't
+                exist before then. */}
+            {order.fiscalInvoiceNumber !== null && (
+              <p className="text-sm font-medium text-neutral-700">
+                Fiscal Invoice #{order.fiscalInvoiceNumber}
+              </p>
+            )}
             <p className="text-sm text-neutral-500">
               {order.table ? order.table.name : "Takeaway"}
               {order.customerName ? ` · ${order.customerName}` : ""}
@@ -292,6 +307,17 @@ export function OrderBillView({
             <p className="text-xs text-neutral-400">
               Placed {formatDate(order.placedAt, dateSystem, { withTime: true })} · source: {order.source}
             </p>
+            {/* Gap-audit P2 fix — printed on the customer-facing bill only
+                when set (never a placeholder "PAN: N/A"); most small
+                restaurants below the VAT-registration threshold set only
+                panNumber, or neither. */}
+            {(order.restaurant.panNumber || order.restaurant.vatNumber) && (
+              <p className="text-xs text-neutral-400">
+                {order.restaurant.panNumber ? `PAN: ${order.restaurant.panNumber}` : ""}
+                {order.restaurant.panNumber && order.restaurant.vatNumber ? " · " : ""}
+                {order.restaurant.vatNumber ? `VAT: ${order.restaurant.vatNumber}` : ""}
+              </p>
+            )}
           </div>
           <div className="flex flex-col items-end gap-1.5">
             <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-700">

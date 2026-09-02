@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { getUserRestaurants } from "@/lib/restaurant";
 import { PERMISSIONS, roleHasPermission } from "@/lib/rbac/permissions";
 import { OrdersBoard } from "./OrdersBoard";
+import { FiscalSettingsPanel } from "./FiscalSettingsPanel";
 
 export default async function OrdersPage() {
   const session = await getSession();
@@ -16,12 +17,17 @@ export default async function OrdersPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-neutral-900">Orders</h1>
-        <p className="text-sm text-neutral-500">
-          Live orders for {active.name} — from QR ordering today, and every other
-          source (POS, waiter) once those phases ship, all through the same board.
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-neutral-900">Orders</h1>
+          <p className="text-sm text-neutral-500">
+            Live orders for {active.name} — from QR ordering today, and every other
+            source (POS, waiter) once those phases ship, all through the same board.
+          </p>
+        </div>
+        {roleHasPermission(active.role, PERMISSIONS.MANAGE_RESTAURANT_SETTINGS) && (
+          <FiscalSettingsPanel slug={active.slug} />
+        )}
       </div>
       <OrdersBoard
         slug={active.slug}

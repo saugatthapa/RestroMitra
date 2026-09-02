@@ -22,6 +22,11 @@ export async function GET(
     const order = await db.query.orders.findFirst({
       where: (o, { and, eq }) => and(eq(o.id, orderId), eq(o.restaurantId, restaurantId)),
       with: {
+        // Gap-audit P2 fix — the customer-facing bill (OrderBillView.tsx)
+        // prints these alongside the order's own orderNumber/
+        // fiscalInvoiceNumber; fetched here rather than a second request
+        // so the bill has everything it needs in one round-trip.
+        restaurant: { columns: { panNumber: true, vatNumber: true } },
         table: { columns: { id: true, name: true } },
         customer: { columns: { id: true, fullName: true, phone: true, loyaltyPointsBalance: true } },
         items: { with: { addons: true } },

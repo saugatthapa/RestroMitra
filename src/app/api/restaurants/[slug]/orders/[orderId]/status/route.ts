@@ -11,6 +11,7 @@ import { isKitchenTransition } from "@/lib/kds";
 import { deductRecipeStockForOrder } from "@/lib/inventory";
 import { recordOrderCompletionLoyalty } from "@/lib/loyalty";
 import { assignKotSequence } from "@/lib/kot";
+import { assignFiscalInvoiceNumber } from "@/lib/fiscal-invoice";
 import { recordSalesLedgerEntry } from "@/lib/ledger";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
@@ -202,6 +203,17 @@ export async function PATCH(
           timezone,
           recordedByUserId: session.user.id,
         });
+      }
+
+      // ->completed is also the single point a Gap-audit P2 fiscal invoice
+      // number is assigned — the bill is now final (see
+      // assignFiscalInvoiceNumber's own doc comment for why this exact
+      // transition, not order creation and not print). Same once-per-order
+      // idempotency argument as the two side effects above and below.
+      if (targetStatus === "completed") {
+        const fiscalInvoice = await assignFiscalInvoiceNumber(tx, { restaurantId, orderId });
+        row.fiscalInvoiceNumber = fiscalInvoice.number;
+        row.fiscalInvoiceAssignedAt = fiscalInvoice.assignedAt;
       }
 
       // ->completed is also the single point a sale is booked into

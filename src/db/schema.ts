@@ -421,7 +421,27 @@ export const restaurants = pgTable(
     // Null/empty falls back to `name` at render time (see buildKotTicket).
     kotHeaderText: varchar("kot_header_text", { length: 200 }),
     type: restaurantTypeEnum("type").notNull().default("restaurant"),
+    // Captured at onboarding (OnboardingWizard) as one freeform field — a
+    // restaurant may type either its PAN, its VAT number, or both jammed
+    // together here ("PAN: 123456789"). Printed on payslips today (see
+    // PayslipView.tsx). Left as-is rather than migrated/parsed, to avoid
+    // disturbing onboarding + payslip behavior that already depends on it.
     panVat: varchar("pan_vat", { length: 40 }),
+    // Gap-audit P2 fix (fiscal compliance) — the STRUCTURED pair a
+    // restaurant sets from Settings (see the tax-settings route + its
+    // FiscalSettingsPanel UI) and that the customer-facing order bill
+    // prints (OrderBillView.tsx), each on its own labeled line. Deliberately
+    // separate columns rather than reusing/splitting panVat above: PAN and
+    // VAT are two distinct Nepal tax-registration identifiers (every
+    // VAT-registered business has a PAN, but most small restaurants are
+    // below the VAT-registration threshold and have only a PAN, or
+    // sometimes neither yet) and a bill needs to be able to show one, the
+    // other, both, or neither with a clear label per line — a single
+    // combined string can't express that unambiguously. Both nullable:
+    // this is opt-in business metadata, never a blocking requirement to
+    // run the POS.
+    panNumber: varchar("pan_number", { length: 20 }),
+    vatNumber: varchar("vat_number", { length: 20 }),
     phone: varchar("phone", { length: 20 }),
     address: text("address"),
     city: varchar("city", { length: 100 }),
@@ -1113,6 +1133,23 @@ export const orders = pgTable(
     // reaching the kitchen (pending -> cancelled) never gets either.
     kotSequence: integer("kot_sequence"),
     kotPrintedAt: timestamp("kot_printed_at", { withTimezone: true }),
+    // Gap-audit P2 fix (fiscal compliance) — a gapless, strictly-increasing
+    // invoice number distinct from orderNumber (see generateOrderNumber in
+    // orders.ts, which is date-prefixed + random, NOT sequential — fine for
+    // a human-facing receipt lookup key, but not what a tax authority means
+    // by "invoice number"). Assigned once, the SAME "served -> completed"
+    // transition that books the sale into Account Books (see the status
+    // route) — not at order creation, and not merely on print: a fiscal
+    // invoice number should correspond to a bill that has actually gone
+    // final (the order is done, its total won't change again), never to a
+    // still-editable draft order or to every reprint of the same bill.
+    // Backed by fiscal_invoice_counters below via the same atomic
+    // upsert-increment pattern as kotSequence/kot_counters — see
+    // assignFiscalInvoiceNumber in src/lib/fiscal-invoice.ts. Both null
+    // until that happens; an order cancelled before ever completing never
+    // gets one (correctly — nothing was ever billed).
+    fiscalInvoiceNumber: integer("fiscal_invoice_number"),
+    fiscalInvoiceAssignedAt: timestamp("fiscal_invoice_assigned_at", { withTimezone: true }),
     placedAt: timestamp("placed_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1144,6 +1181,20 @@ export const orders = pgTable(
     uniqueIndex("orders_restaurant_client_request_id_unique")
       .on(table.restaurantId, table.clientRequestId)
       .where(sql`${table.clientRequestId} IS NOT NULL`),
+    // Gap-audit P2 fix — DB-level backstop for fiscal invoice numbering:
+    // even if a bug ever let two concurrent "served -> completed"
+    // transactions both read the same fiscal_invoice_counters value (they
+    // can't — see assignFiscalInvoiceNumber's atomic UPDATE — but a
+    // constraint here costs nothing and catches anything that writes this
+    // column outside that one path), Postgres refuses the second write
+    // rather than silently letting two orders for the same restaurant
+    // share one invoice number. Partial: most orders never reach
+    // "completed" with a number assigned in every environment (e.g. this
+    // migration runs before any order completes), so this only constrains
+    // rows that actually have one.
+    uniqueIndex("orders_restaurant_fiscal_invoice_number_unique")
+      .on(table.restaurantId, table.fiscalInvoiceNumber)
+      .where(sql`${table.fiscalInvoiceNumber} IS NOT NULL`),
     // RC audit — DB-level backstop for the money columns; app-layer
     // validation (computeOrderTotals/order-adjustments.ts) already keeps
     // these non-negative, this just closes the gap for anything that
@@ -1246,6 +1297,45 @@ export const kotCounters = pgTable(
   },
   (table) => [
     uniqueIndex("kot_counters_restaurant_date_unique").on(table.restaurantId, table.ticketDate),
+  ],
+);
+
+// Gap-audit P2 fix (fiscal compliance) — backs orders.fiscalInvoiceNumber:
+// one row per restaurant (no date/year partitioning, unlike kot_counters
+// above), atomically incremented via the exact same upsert pattern
+// (`INSERT ... ON CONFLICT (restaurant_id) DO UPDATE SET last_number =
+// last_number + 1 RETURNING last_number`, see assignFiscalInvoiceNumber in
+// src/lib/fiscal-invoice.ts) so two bills finalizing at the same moment can
+// never be handed the same number.
+//
+// Deliberately NOT reset per Nepali fiscal year (Shrawan 1 B.S., mid-July)
+// the way a country's VAT return period might expect: auto-resetting a
+// legal invoice sequence on a date boundary is an accounting-policy choice
+// with real consequences if guessed wrong (an auditor may expect the
+// restaurant's own prior paper-based sequence to continue, or expect a
+// fresh start whose exact reset date varies by how the restaurant already
+// operates) — safer for this to stay one continuous gapless sequence per
+// restaurant indefinitely than for this app to silently assume a policy
+// nobody configured. A per-fiscal-year reset can be layered on top later
+// (e.g. an admin action that starts a new counter row) without touching
+// this table's shape.
+export const fiscalInvoiceCounters = pgTable(
+  "fiscal_invoice_counters",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    lastNumber: integer("last_number").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("fiscal_invoice_counters_restaurant_unique").on(table.restaurantId),
   ],
 );
 
