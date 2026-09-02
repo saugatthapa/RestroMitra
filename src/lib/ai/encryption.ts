@@ -1,5 +1,6 @@
 import "server-only";
 import crypto from "node:crypto";
+import { HttpError } from "@/lib/http-error";
 
 /**
  * Platform Control Center (Phase 7) — AES-256-GCM encryption for AI
@@ -24,16 +25,26 @@ const KEY_LENGTH_BYTES = 32;
 function getKey(): Buffer {
   const raw = process.env.AI_CONFIG_ENCRYPTION_KEY;
   if (!raw) {
-    throw new Error(
+    // A plain Error here used to collapse into api-route-helpers.ts's
+    // generic "Something went wrong" 500 — toErrorResponse only special-
+    // cases HttpError. The underlying message was still reaching the
+    // platform health dashboard's "System errors" alert (recordSystemError
+    // logs err.message regardless of type), just not the admin who was
+    // actually staring at the failed /admin/ai-providers form. HttpError
+    // makes toErrorResponse return THIS message to the caller directly, so
+    // a misconfigured deployment says so on the screen where it matters.
+    throw new HttpError(
       "AI_CONFIG_ENCRYPTION_KEY is not set. Generate one with `openssl rand -base64 32` " +
         "and set it before storing or reading any AI provider config.",
+      500,
     );
   }
   const key = Buffer.from(raw, "base64");
   if (key.length !== KEY_LENGTH_BYTES) {
-    throw new Error(
+    throw new HttpError(
       `AI_CONFIG_ENCRYPTION_KEY must decode to exactly ${KEY_LENGTH_BYTES} bytes (base64-encoded). ` +
         "Generate one with `openssl rand -base64 32`.",
+      500,
     );
   }
   return key;

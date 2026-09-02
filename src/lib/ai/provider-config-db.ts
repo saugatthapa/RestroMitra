@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { aiProviderConfigs } from "@/db/schema";
 import { encryptSecret, decryptSecret } from "./encryption";
 import { getAiConfig, type AiConfig } from "./config";
+import { HttpError } from "@/lib/http-error";
 
 /**
  * Platform Control Center (Phase 7) — DB-backed provider configuration.
@@ -130,7 +131,11 @@ export async function upsertProviderConfig(params: {
       : (existing?.apiKeyCiphertext ?? null);
 
   if (!apiKeyCiphertext) {
-    throw new Error("An API key is required when configuring a provider for the first time.");
+    // A genuine client-input mistake (submitted the form with no key on a
+    // brand-new provider row), not a server misconfiguration — 400, not the
+    // 500 encryption.ts's HttpError uses for a missing/malformed
+    // AI_CONFIG_ENCRYPTION_KEY.
+    throw new HttpError("An API key is required when configuring a provider for the first time.", 400);
   }
 
   const [row] = await db
