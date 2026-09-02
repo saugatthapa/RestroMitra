@@ -205,4 +205,26 @@ describe("classifyAttendanceDay", () => {
   it("on_leave takes priority over holiday", () => {
     expect(classifyAttendanceDay(undefined, undefined, true, true)).toBe("on_leave");
   });
+
+  it("a clock-in wins over an approved leave request alone (no holiday)", () => {
+    expect(classifyAttendanceDay(clockedIn, undefined, true, false)).toBe("present");
+  });
+
+  it("a clock-in wins over a declared holiday alone (not on leave)", () => {
+    expect(classifyAttendanceDay(clockedIn, undefined, false, true)).toBe("present");
+  });
+
+  it("a no-show matched shift beats an approved leave request alone (no holiday)", () => {
+    expect(classifyAttendanceDay(undefined, { status: "no_show", lateMinutes: 0 }, true, false)).toBe("no_show");
+  });
+
+  it("a no-show matched shift beats a declared holiday alone (not on leave)", () => {
+    expect(classifyAttendanceDay(undefined, { status: "no_show", lateMinutes: 0 }, false, true)).toBe("no_show");
+  });
+
+  it("an 'upcoming'/'in_progress' matched shift (not yet a no-show) with no clock-in falls through to leave/holiday/null exactly like no matched shift at all", () => {
+    const upcoming = { status: "upcoming" as const, lateMinutes: 0 };
+    expect(classifyAttendanceDay(undefined, upcoming, false, false)).toBeNull();
+    expect(classifyAttendanceDay(undefined, upcoming, true, false)).toBe("on_leave");
+  });
 });

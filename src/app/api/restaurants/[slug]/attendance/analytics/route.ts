@@ -3,7 +3,11 @@ import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
 import { requireBranchAccess } from "@/lib/rbac/guard";
 import { FEATURES } from "@/lib/feature-catalog";
-import { getAttendanceAnalytics } from "@/lib/attendance-analytics-db";
+import {
+  computeAndPersistAttendanceDayStatuses,
+  getAttendanceAnalytics,
+  getAttendanceDayStatuses,
+} from "@/lib/attendance-analytics-db";
 import { restaurantDate } from "@/lib/restaurant-date";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -71,7 +75,19 @@ export async function GET(request: Request, ctx: { params: Promise<{ slug: strin
 
     const staff = await getAttendanceAnalytics(restaurantId, periodStart, periodEnd, timezone, effectiveBranchId);
 
-    return NextResponse.json({ staff, periodStart, periodEnd });
+    // Phase 18 (Attendance overhaul, Track B — Daily status persistence) —
+    // this GET is the on-demand "finalize now" moment for this period's
+    // per-day present/late/no_show/on_leave/holiday classification (see
+    // computeAndPersistAttendanceDayStatuses' own doc comment for why: no
+    // cron/background-job infrastructure exists in this codebase to do it
+    // any other way). The persisted rows are then read back via the
+    // separate, computation-free getAttendanceDayStatuses — proving this
+    // is a genuine stored-and-reused field, not a value computed once and
+    // thrown away.
+    await computeAndPersistAttendanceDayStatuses(restaurantId, periodStart, periodEnd, timezone, effectiveBranchId);
+    const dayStatuses = await getAttendanceDayStatuses(restaurantId, periodStart, periodEnd, effectiveBranchId);
+
+    return NextResponse.json({ staff, dayStatuses, periodStart, periodEnd });
   } catch (err) {
     return toErrorResponse(err);
   }

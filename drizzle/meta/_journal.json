@@ -540,6 +540,13 @@
       "when": 1788351612081,
       "tag": "0076_allow_negative_stock_toggle",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1788352330115,
+      "tag": "0077_attendance_day_status_persistence",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,15 @@
 import "server-only";
 import { and, eq, gte, inArray, isNull, lt, lte, ne, or } from "drizzle-orm";
 import { db } from "@/db";
-import { attendanceRecords, holidays, leaveRequests, scheduledShifts, userRoles, users } from "@/db/schema";
+import {
+  attendanceDayStatuses,
+  attendanceRecords,
+  holidays,
+  leaveRequests,
+  scheduledShifts,
+  userRoles,
+  users,
+} from "@/db/schema";
 import {
   classifyAttendanceDay,
   computeStaffAttendanceAnalytics,
@@ -11,6 +19,7 @@ import {
   type StaffAttendanceAnalytics,
 } from "@/lib/attendance-analytics";
 import { leaveDaysWithinPeriod } from "@/lib/leave";
+import { generateDateRange } from "@/lib/reports-helpers";
 import { matchScheduleWithAttendance, type MatchedShift } from "@/lib/scheduling-db";
 import { restaurantDate, restaurantStartOfDay } from "@/lib/restaurant-date";
 
@@ -450,4 +459,377 @@ export async function getAttendanceExportRows(
   }
 
   return rows.sort((a, b) => a.fullName.localeCompare(b.fullName) || a.date.localeCompare(b.date));
+}
+
+export interface AttendanceDayStatusRow {
+  userId: string;
+  /** See attendance_day_statuses' own schema comment: derived from whichever attendance/shift record the day was classified from, or null when the day has neither (a pure leave/holiday day). */
+  branchId: string | null;
+  /** Restaurant-local "YYYY-MM-DD". */
+  date: string;
+  status: AttendanceDayStatus;
+}
+
+/**
+ * Phase 18 (Attendance overhaul, Track B — Daily status persistence) — the
+ * DB-backed half of classifyAttendanceDay: for every active staff member
+ * in scope (same roster query/branch-scoping rule as getAttendanceAnalytics
+ * above), classifies EVERY restaurant-local calendar day in
+ * [periodStart, periodEnd] that has at least one signal worth classifying
+ * — a clock-in, a scheduled shift, an approved leave request, or a
+ * declared holiday — reusing classifyAttendanceDay as the one place that
+ * priority-ordering decision is made. Days with no signal at all for a
+ * given user are simply never produced (there is nothing to classify —
+ * see classifyAttendanceDay's own null case), not a wasted computation.
+ *
+ * A day with more than one shift/attendance record (see scheduling.ts's
+ * own disclosed split-shift limitation) picks the EARLIEST attendance
+ * record and the EARLIEST-starting matched shift for that day as the
+ * representative pair fed into classifyAttendanceDay — the same "correct
+ * for the overwhelmingly common single-shift-per-day case, a known,
+ * disclosed limitation for genuine split shifts" stance scheduling.ts
+ * already takes, not a new limitation invented here.
+ *
+ * Unlike paidLeaveDaysByUserId above (which deliberately excludes unpaid
+ * leave — a payroll-scoped question), leave here is NOT filtered by
+ * leaveType: an approved unpaid leave day is still a day the person was
+ * legitimately away, which is what "on_leave" attendance status means.
+ * Whether that absence was PAID is a separate, payroll-scoped question
+ * this column doesn't answer.
+ *
+ * A holiday applies to a given user when it's restaurant-wide
+ * (holidays.branchId is null) or matches that user's own branch grant
+ * (userRoles.branchId) — deliberately the person's HOME branch, not
+ * whatever branch their attendance/shift happened to be stamped with that
+ * day, so a pure holiday-only day (no attendance, no shift at all) can
+ * still resolve correctly for a branch-scoped staff member.
+ */
+/**
+ * The same active-staff-roster resolution getAttendanceAnalytics/
+ * computeAttendanceDayStatusRows both need — factored out so
+ * computeAndPersistAttendanceDayStatuses can independently learn WHICH
+ * users are in scope for the stale-row cleanup below even on a run whose
+ * fresh computation produces zero rows (every prior signal for this
+ * roster disappeared at once) — see that function's own doc comment.
+ */
+async function resolveActiveStaffRoster(restaurantId: string, branchId: string | null) {
+  return db
+    .select({ userId: users.id, homeBranchId: userRoles.branchId })
+    .from(userRoles)
+    .innerJoin(users, eq(userRoles.userId, users.id))
+    .where(
+      branchId === null
+        ? and(eq(userRoles.restaurantId, restaurantId), eq(userRoles.isActive, true))
+        : and(
+            eq(userRoles.restaurantId, restaurantId),
+            eq(userRoles.isActive, true),
+            or(isNull(userRoles.branchId), eq(userRoles.branchId, branchId)),
+          ),
+    );
+}
+
+export async function computeAttendanceDayStatusRows(
+  restaurantId: string,
+  periodStart: string,
+  periodEnd: string,
+  timezone: string,
+  branchId: string | null,
+): Promise<AttendanceDayStatusRow[]> {
+  const staffRows = await resolveActiveStaffRoster(restaurantId, branchId);
+  if (staffRows.length === 0) return [];
+
+  const staffByUserId = new Map(staffRows.map((s) => [s.userId, s]));
+  const userIds = [...staffByUserId.keys()];
+
+  const dayStart = restaurantStartOfDay(timezone, periodStart);
+  const dayAfterEnd = new Date(restaurantStartOfDay(timezone, periodEnd).getTime() + 24 * 60 * 60 * 1000);
+
+  const attendanceRows = await db
+    .select({
+      userId: attendanceRecords.userId,
+      branchId: attendanceRecords.branchId,
+      clockInAt: attendanceRecords.clockInAt,
+      clockOutAt: attendanceRecords.clockOutAt,
+    })
+    .from(attendanceRecords)
+    .where(
+      and(
+        eq(attendanceRecords.restaurantId, restaurantId),
+        inArray(attendanceRecords.userId, userIds),
+        gte(attendanceRecords.clockInAt, dayStart),
+        lt(attendanceRecords.clockInAt, dayAfterEnd),
+      ),
+    );
+
+  const localDate = (d: Date) => restaurantDate(timezone, d);
+
+  // Per (user, day): the EARLIEST attendance record — see this function's
+  // own doc comment on the split-shift representative-pair choice.
+  const attendanceByUserDay = new Map<
+    string,
+    Map<string, { clockInAt: Date; clockOutAt: Date | null; branchId: string | null }>
+  >();
+  for (const r of attendanceRows) {
+    const day = localDate(r.clockInAt);
+    const byDay = attendanceByUserDay.get(r.userId) ?? new Map();
+    const existing = byDay.get(day);
+    if (!existing || r.clockInAt.getTime() < existing.clockInAt.getTime()) {
+      byDay.set(day, { clockInAt: r.clockInAt, clockOutAt: r.clockOutAt, branchId: r.branchId });
+    }
+    attendanceByUserDay.set(r.userId, byDay);
+  }
+
+  const shiftRows = await db
+    .select({
+      userId: scheduledShifts.userId,
+      branchId: scheduledShifts.branchId,
+      shiftDate: scheduledShifts.shiftDate,
+      plannedStartAt: scheduledShifts.plannedStartAt,
+      plannedEndAt: scheduledShifts.plannedEndAt,
+    })
+    .from(scheduledShifts)
+    .where(
+      and(
+        eq(scheduledShifts.restaurantId, restaurantId),
+        inArray(scheduledShifts.userId, userIds),
+        gte(scheduledShifts.shiftDate, periodStart),
+        lte(scheduledShifts.shiftDate, periodEnd),
+      ),
+    );
+  // Same "every attendance record regardless of review status" reasoning
+  // as getAttendanceAnalytics above — a late/no-show call is about clock
+  // TIMES, independent of whether a manager has since verified the photo.
+  const matched = matchScheduleWithAttendance(shiftRows, attendanceRows, timezone);
+
+  // Per (user, day): the matched shift with the EARLIEST plannedStartAt.
+  const matchedByUserDay = new Map<
+    string,
+    Map<string, { variance: (typeof matched)[number]["variance"]; branchId: string | null; plannedStartAt: Date }>
+  >();
+  for (const m of matched) {
+    const day = m.shift.shiftDate;
+    const byDay = matchedByUserDay.get(m.shift.userId) ?? new Map();
+    const existing = byDay.get(day);
+    if (!existing || m.shift.plannedStartAt.getTime() < existing.plannedStartAt.getTime()) {
+      byDay.set(day, { variance: m.variance, branchId: m.shift.branchId, plannedStartAt: m.shift.plannedStartAt });
+    }
+    matchedByUserDay.set(m.shift.userId, byDay);
+  }
+
+  // ALL approved leave (every leaveType, including unpaid) — see this
+  // function's own doc comment on why this deliberately differs from
+  // paidLeaveDaysByUserId above.
+  const leaveRows = await db
+    .select({ userId: leaveRequests.userId, startDate: leaveRequests.startDate, endDate: leaveRequests.endDate })
+    .from(leaveRequests)
+    .where(
+      and(
+        eq(leaveRequests.restaurantId, restaurantId),
+        inArray(leaveRequests.userId, userIds),
+        eq(leaveRequests.status, "approved"),
+        lte(leaveRequests.startDate, periodEnd),
+        gte(leaveRequests.endDate, periodStart),
+      ),
+    );
+  const leaveRangesByUserId = new Map<string, typeof leaveRows>();
+  for (const r of leaveRows) {
+    const list = leaveRangesByUserId.get(r.userId);
+    if (list) list.push(r);
+    else leaveRangesByUserId.set(r.userId, [r]);
+  }
+
+  const holidayRows = await db
+    .select({ branchId: holidays.branchId, date: holidays.date })
+    .from(holidays)
+    .where(and(eq(holidays.restaurantId, restaurantId), gte(holidays.date, periodStart), lte(holidays.date, periodEnd)));
+
+  const results: AttendanceDayStatusRow[] = [];
+  for (const userId of userIds) {
+    const homeBranchId = staffByUserId.get(userId)!.homeBranchId;
+    const attendanceDays = attendanceByUserDay.get(userId) ?? new Map();
+    const matchedDays = matchedByUserDay.get(userId) ?? new Map();
+    const userLeaveRanges = leaveRangesByUserId.get(userId) ?? [];
+    const applicableHolidays = holidayRows.filter((h) => h.branchId === null || h.branchId === homeBranchId);
+
+    // Union of every day with at least one signal for this user — see
+    // this function's own doc comment on why a day with none is never
+    // produced at all.
+    const daySet = new Set<string>([...attendanceDays.keys(), ...matchedDays.keys()]);
+    for (const range of userLeaveRanges) {
+      const clippedStart = range.startDate > periodStart ? range.startDate : periodStart;
+      const clippedEnd = range.endDate < periodEnd ? range.endDate : periodEnd;
+      for (const day of generateDateRange(clippedStart, clippedEnd)) daySet.add(day);
+    }
+    for (const h of applicableHolidays) daySet.add(h.date);
+
+    for (const day of daySet) {
+      const attendanceForDay = attendanceDays.get(day);
+      const matchedForDay = matchedDays.get(day);
+      const isOnLeave = userLeaveRanges.some((r) => r.startDate <= day && day <= r.endDate);
+      const isHoliday = applicableHolidays.some((h) => h.date === day);
+
+      const status = classifyAttendanceDay(
+        attendanceForDay ? { clockInAt: attendanceForDay.clockInAt, clockOutAt: attendanceForDay.clockOutAt } : undefined,
+        matchedForDay ? { status: matchedForDay.variance.status, lateMinutes: matchedForDay.variance.lateMinutes } : undefined,
+        isOnLeave,
+        isHoliday,
+      );
+      if (status === null) continue; // nothing to persist — see attendance_day_statuses' own schema comment
+
+      results.push({
+        userId,
+        date: day,
+        status,
+        branchId: matchedForDay?.branchId ?? attendanceForDay?.branchId ?? null,
+      });
+    }
+  }
+  return results;
+}
+
+/**
+ * Freezes computeAttendanceDayStatusRows' output into attendance_day_
+ * statuses — "recompute and overwrite," same upsert-on-recompute pattern as
+ * entitlements-db.ts's setEntitlementOverride, via the (restaurantId,
+ * userId, date) unique index. Runs inside one transaction so a concurrent
+ * reader of the table never observes a half-written period: either it sees
+ * the previous computation in full, or this one in full, never a mix.
+ *
+ * Also deletes any PREVIOUSLY persisted row, for one of this call's own
+ * users within [periodStart, periodEnd], that the fresh computation did
+ * NOT reproduce — the "stale row" case attendance_day_statuses' own schema
+ * comment calls out (e.g. a leave request cancelled after being persisted
+ * as on_leave, with nothing else that day to reclassify it to). Scoped to
+ * exactly the userIds this call's roster covers, so it never touches a
+ * different branch-scoped call's rows for the same restaurant/period.
+ *
+ * Called from the attendance analytics route (see its own doc comment) —
+ * the on-demand path that already exists for viewing a period's attendance
+ * figures is this feature's natural "finalize now" moment, the same way
+ * this codebase's other on-demand, no-cron-infrastructure computations
+ * (Daily Closing's preview/close, payroll's computation batch) are
+ * triggered by a person opening the relevant screen rather than by a
+ * background job this project doesn't otherwise run.
+ *
+ * Deliberately resolves the staff roster itself (via
+ * resolveActiveStaffRoster), rather than deriving "which users are in
+ * scope" purely from computeAttendanceDayStatusRows' own output — a run
+ * whose FRESH computation produces zero rows (every prior signal for this
+ * whole roster disappeared at once — e.g. every leave request for the
+ * period got cancelled) must still reconcile away whatever stale rows
+ * that roster had persisted from an earlier run; deriving scope only from
+ * a possibly-empty `rows` array would silently skip that cleanup.
+ */
+export async function computeAndPersistAttendanceDayStatuses(
+  restaurantId: string,
+  periodStart: string,
+  periodEnd: string,
+  timezone: string,
+  branchId: string | null,
+): Promise<AttendanceDayStatusRow[]> {
+  const staffRows = await resolveActiveStaffRoster(restaurantId, branchId);
+  if (staffRows.length === 0) return [];
+  const userIds = staffRows.map((s) => s.userId);
+
+  const rows = await computeAttendanceDayStatusRows(restaurantId, periodStart, periodEnd, timezone, branchId);
+  const freshKeys = new Set(rows.map((r) => `${r.userId}:${r.date}`));
+
+  await db.transaction(async (tx) => {
+    const existing = await tx
+      .select({ userId: attendanceDayStatuses.userId, date: attendanceDayStatuses.date })
+      .from(attendanceDayStatuses)
+      .where(
+        and(
+          eq(attendanceDayStatuses.restaurantId, restaurantId),
+          inArray(attendanceDayStatuses.userId, userIds),
+          gte(attendanceDayStatuses.date, periodStart),
+          lte(attendanceDayStatuses.date, periodEnd),
+        ),
+      );
+    const staleUserIds: string[] = [];
+    const staleDates: string[] = [];
+    for (const row of existing) {
+      if (!freshKeys.has(`${row.userId}:${row.date}`)) {
+        staleUserIds.push(row.userId);
+        staleDates.push(row.date);
+      }
+    }
+    if (staleUserIds.length > 0) {
+      // No composite-tuple delete helper in this codebase's drizzle usage
+      // elsewhere — same one-row-at-a-time deletion this stale-row case
+      // is expected to be rare/small (a leave cancellation, a corrected
+      // attendance record removed entirely), not a hot path worth a
+      // fancier batched form.
+      for (let i = 0; i < staleUserIds.length; i++) {
+        await tx
+          .delete(attendanceDayStatuses)
+          .where(
+            and(
+              eq(attendanceDayStatuses.restaurantId, restaurantId),
+              eq(attendanceDayStatuses.userId, staleUserIds[i]),
+              eq(attendanceDayStatuses.date, staleDates[i]),
+            ),
+          );
+      }
+    }
+
+    for (const row of rows) {
+      await tx
+        .insert(attendanceDayStatuses)
+        .values({
+          restaurantId,
+          userId: row.userId,
+          branchId: row.branchId,
+          date: row.date,
+          status: row.status,
+          computedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [attendanceDayStatuses.restaurantId, attendanceDayStatuses.userId, attendanceDayStatuses.date],
+          set: { branchId: row.branchId, status: row.status, computedAt: new Date() },
+        });
+    }
+  });
+
+  return rows;
+}
+
+/**
+ * Cheap, computation-free read of already-persisted attendance_day_
+ * statuses rows for a period — the "repeated report reads become cheap
+ * lookups instead of repeated computation" half of this feature. Does NOT
+ * fall back to computing anything live; a caller that also needs the
+ * table kept fresh should call computeAndPersistAttendanceDayStatuses
+ * first (as the analytics route does), same "write path and read path are
+ * separate, composable calls" shape as the rest of this module.
+ */
+export async function getAttendanceDayStatuses(
+  restaurantId: string,
+  periodStart: string,
+  periodEnd: string,
+  branchId: string | null,
+): Promise<AttendanceDayStatusRow[]> {
+  const conditions = [
+    eq(attendanceDayStatuses.restaurantId, restaurantId),
+    gte(attendanceDayStatuses.date, periodStart),
+    lte(attendanceDayStatuses.date, periodEnd),
+  ];
+  // Same "null branchId row is restaurant-wide/unscoped, visible from any
+  // branch filter" convention as holidays/getAttendanceAnalytics — a
+  // ?branchId= filter narrows to that branch's OWN rows plus every
+  // unscoped one, it never hides unscoped rows entirely.
+  if (branchId !== null) {
+    conditions.push(or(isNull(attendanceDayStatuses.branchId), eq(attendanceDayStatuses.branchId, branchId))!);
+  }
+
+  const rows = await db
+    .select({
+      userId: attendanceDayStatuses.userId,
+      branchId: attendanceDayStatuses.branchId,
+      date: attendanceDayStatuses.date,
+      status: attendanceDayStatuses.status,
+    })
+    .from(attendanceDayStatuses)
+    .where(and(...conditions));
+  return rows;
 }

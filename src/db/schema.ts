@@ -3328,6 +3328,106 @@ export const scheduledShifts = pgTable(
   ],
 );
 
+export const attendanceDayStatusEnum = pgEnum("attendance_day_status", [
+  "present",
+  "late",
+  "no_show",
+  "on_leave",
+  "holiday",
+]);
+
+// ---------------------------------------------------------------------------
+// Phase 18 (Attendance overhaul, Track B — Daily status persistence) — the
+// PERSISTED counterpart to attendance-analytics.ts's classifyAttendanceDay:
+// one row per (restaurantId, userId, calendar date) holding that day's settled
+// present/late/no_show/on_leave/holiday classification, so a report can
+// query a stored, indexed column instead of re-deriving the same
+// classification from attendance_records + scheduled_shifts +
+// leave_requests + holidays on every read.
+//
+// Deliberately a NEW, minimal table rather than a column bolted onto
+// attendance_records — attendance_records is naturally one row per SHIFT
+// (a user can clock in and out more than once in a calendar day, and the
+// one-open-shift-per-user unique index is scoped to "currently open," not
+// "one ever per day"), so there is no single row on that table that
+// unambiguously OWNS "this user's status for this day" the way
+// orderItems.recipeCostInPaisa's order item unambiguously owns "this
+// line's COGS." A day can also need a status row with NO attendance_records
+// row at all (no_show, on_leave, holiday), which a column on that table
+// could never represent. One row per (user, date) is the natural shape;
+// scheduled_shifts came closest but has the same "not guaranteed one row
+// per day" issue attendance_records does (see its own doc comment on
+// split shifts) and, more importantly, doesn't exist at all for a plain
+// on_leave/holiday day with no shift ever planned.
+//
+// branchId is informational only (nullable, like holidays.branchId/
+// attendance_records.branchId) — carried through from whichever attendance
+// record or scheduled shift the day's classification was actually derived
+// from (see computeAttendanceDayStatusRows in attendance-analytics-db.ts),
+// or null when the day has neither (a pure leave/holiday day with no
+// branch context to stamp). It is NOT part of the uniqueness below: a
+// restaurant that later reassigns a staff member to a different branch
+// shouldn't be able to accumulate two rows for the same person on the
+// same date.
+//
+// "Freeze it, don't recompute" — same write-once-per-computation, upsert-
+// on-recompute pattern as entitlementOverrides (setEntitlementOverride's
+// onConflictDoUpdate) and daily_closes' broader "computed snapshot" idea,
+// EXCEPT unlike daily_closes this is intentionally NOT immutable: a day's
+// classification legitimately changes after the fact (a late correction
+// to clock-in time, a leave request approved retroactively, a holiday
+// declared after the fact) and there's no product concept yet of "locking"
+// an attendance day the way closing a business day locks its financial
+// snapshot — so every recompute simply overwrites (ON CONFLICT DO UPDATE)
+// rather than being rejected once a row exists. computedAt records when
+// that overwrite last happened, for anyone who needs to know how fresh a
+// stored classification is.
+//
+// A day that classifies to `null` (nothing to classify — see
+// classifyAttendanceDay's own doc comment) gets NO row here at all, same
+// "absence of a row means unknown/inapplicable" convention as every other
+// nullable-FK-scoped table in this schema — there is no sixth enum value
+// for "nothing happened," and a stale row is actively DELETED (not left
+// stale) by computeAndPersistAttendanceDayStatuses when a day that
+// previously had a real status (e.g. a leave request that got cancelled
+// after being persisted as on_leave) reclassifies to null on a later
+// recompute.
+// ---------------------------------------------------------------------------
+export const attendanceDayStatuses = pgTable(
+  "attendance_day_statuses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
+    date: date("date").notNull(),
+    status: attendanceDayStatusEnum("status").notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("attendance_day_statuses_restaurant_id_idx").on(table.restaurantId),
+    index("attendance_day_statuses_user_id_idx").on(table.userId),
+    index("attendance_day_statuses_date_idx").on(table.date),
+    // One settled status per staff member per calendar day PER RESTAURANT
+    // — the upsert target for the "recompute and overwrite" write path
+    // above. Deliberately includes restaurantId, not just (userId, date):
+    // `users` rows are a global identity (see users' own schema comment),
+    // and userRoles allows the same physical person to hold roles at more
+    // than one restaurant, so (userId, date) alone could conflate two
+    // different restaurants' classifications for the same person on the
+    // same calendar date.
+    uniqueIndex("attendance_day_statuses_restaurant_user_date_unique").on(
+      table.restaurantId,
+      table.userId,
+      table.date,
+    ),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // Expenses (Phase 8c, workflow added Phase 21) — operational spending
 // tracking: rent, utilities, salaries paid in cash, supply runs, and the
