@@ -5,11 +5,14 @@ import { db, type Database, type Transaction } from "@/db";
 import {
   orders,
   orderItems,
+  orderItemAddons,
   payments,
   expenses,
   expenseCategories,
   branches,
   recipeItems,
+  addonRecipeItems,
+  menuVariants,
   inventoryItems,
   stockMovements,
   orderStatusHistory,
@@ -1022,6 +1025,98 @@ function excludeFullyRefundedOrders() {
   )`;
 }
 
+/**
+ * Gap-audit P1 fix (recipe costing) — the "live" (recompute-from-current-
+ * costs) recipe cost for one order_items row, correlated against the
+ * OUTER query's orderItems row (used inside a scalar subquery, exactly
+ * like the pre-fix liveRecipeCostSubquery it replaces). Only ever
+ * evaluated for a row whose frozen orderItems.recipeCostInPaisa snapshot
+ * is NULL — see getCogsSummary's own doc comment on why that's a
+ * shrinking minority of rows post-Phase-A.4 (COALESCE short-circuits it).
+ *
+ * Combines the SAME two cost sources deductRecipeStockForOrder now writes
+ * per order at deduction time, live-recomputed instead of frozen:
+ *  - the BASE recipe (recipeItems), scaled by the selected variant's
+ *    recipeQuantityMultiplierBasisPoints (10000 = 1x when no variant, or
+ *    when the variant's multiplier column is at its default) — the
+ *    `* multiplier / 10000` term added to the divisor here is exactly
+ *    that scaling;
+ *  - every selected ADD-ON's own recipe (addonRecipeItems), independent
+ *    of the variant multiplier — same reasoning as
+ *    deductRecipeStockForOrder's own comment on why an addon's recipe
+ *    isn't scaled by the base item's variant.
+ *
+ * Returns NULL only when NEITHER source has any recipe defined right now
+ * (mirrors deductRecipeStockForOrder's hadAnyCostSource === false case) —
+ * this is what lets the outer COALESCE(..., liveRecipeCostSubquery, 0)
+ * fall all the way through to 0 for a genuinely recipe-less line, while
+ * still reporting a real (if partial) number for a line where only the
+ * base OR only an addon has costing defined.
+ */
+function liveRecipeCostSubquery() {
+  // Casting the first factor to numeric forces the WHOLE multiplication
+  // chain to evaluate in numeric, not Postgres's default int4 — with the
+  // variant multiplier added as a 4th factor here (quantity *
+  // quantityPerServingMilliunits * multiplierBasisPoints *
+  // costPerUnitInPaisa), plain int4 arithmetic can overflow BEFORE sum()
+  // ever gets to promote anything (an int4 * int4 * int4 * int4 product
+  // is computed left-to-right in 32-bit ints, not deferred to the
+  // aggregate), even though every individual column value is well within
+  // int4 range on its own. Confirmed by this exact failure in
+  // cogs-reporting.test.ts/product-profitability.test.ts before this cast
+  // was added.
+  const baseCost = sql`(
+    SELECT round(sum(
+      ${orderItems.quantity}::numeric * ${recipeItems.quantityPerServingMilliunits}
+        * COALESCE(${menuVariants.recipeQuantityMultiplierBasisPoints}, 10000)
+        * ${inventoryItems.costPerUnitInPaisa}
+    ) / 10000000.0)
+    FROM ${recipeItems}
+    INNER JOIN ${inventoryItems} ON ${inventoryItems.id} = ${recipeItems.inventoryItemId}
+    LEFT JOIN ${menuVariants} ON ${menuVariants.id} = ${orderItems.variantId}
+    WHERE ${recipeItems.menuItemId} = ${orderItems.menuItemId}
+  )`;
+  const addonCost = sql`(
+    SELECT round(sum(
+      ${orderItems.quantity}::numeric * ${addonRecipeItems.quantityPerServingMilliunits} * ${inventoryItems.costPerUnitInPaisa}
+    ) / 1000.0)
+    FROM ${orderItemAddons}
+    INNER JOIN ${addonRecipeItems} ON ${addonRecipeItems.addonId} = ${orderItemAddons.addonId}
+    INNER JOIN ${inventoryItems} ON ${inventoryItems.id} = ${addonRecipeItems.inventoryItemId}
+    WHERE ${orderItemAddons.orderItemId} = ${orderItems.id}
+  )`;
+  return sql`(
+    CASE
+      WHEN ${baseCost} IS NULL AND ${addonCost} IS NULL THEN NULL
+      ELSE COALESCE(${baseCost}, 0) + COALESCE(${addonCost}, 0)
+    END
+  )`;
+}
+
+/**
+ * Gap-audit P1 fix (recipe costing) — "does this order_items row have ANY
+ * recipe-derived cost source right now" (base recipe on the menu item OR
+ * a recipe on any addon actually selected on this line), correlated
+ * against the outer query's orderItems row. This is the coverage-honesty
+ * check getCogsSummary/getProductProfitability OR together with
+ * `orderItems.recipeCostInPaisa IS NOT NULL` — see those functions' own
+ * comments — extended from "does the base menu item have a recipe" to
+ * also credit a line whose cost is fully (or partially) known through an
+ * addon's own recipe, so a variant/addon-costed line is no longer
+ * misreported as partial just because this specific historical check
+ * only ever looked at the base item.
+ */
+function hasRecipeNowSubquery() {
+  return sql`(
+    EXISTS (SELECT 1 FROM ${recipeItems} WHERE ${recipeItems.menuItemId} = ${orderItems.menuItemId})
+    OR EXISTS (
+      SELECT 1 FROM ${orderItemAddons}
+      INNER JOIN ${addonRecipeItems} ON ${addonRecipeItems.addonId} = ${orderItemAddons.addonId}
+      WHERE ${orderItemAddons.orderItemId} = ${orderItems.id}
+    )
+  )`;
+}
+
 export type CogsSummary = {
   cogsInPaisa: number;
   /** How many distinct menu items sold in this range actually had a
@@ -1049,36 +1144,47 @@ export type CogsSummary = {
  * instead — see getReportSummary below and BRANCH_INVENTORY.md's sibling
  * COGS write-up for the full reasoning.
  *
- * A menu item with no recipe defined contributes 0 to cogsInPaisa for
- * every unit sold — recipes are opt-in (same convention
- * deductRecipeStockForOrder already uses for stock deduction), so this is
- * silently a PARTIAL total whenever any sold item lacks a recipe, which
- * itemsWithRecipeCount/soldItemCount exist to make visible rather than
- * hide behind a single confident-looking number.
+ * A menu item with no recipe defined AND no costed addon selected
+ * contributes 0 to cogsInPaisa for every unit sold — recipes are opt-in
+ * (same convention deductRecipeStockForOrder already uses for stock
+ * deduction), so this is silently a PARTIAL total whenever any sold item
+ * lacks both, which itemsWithRecipeCount/soldItemCount exist to make
+ * visible rather than hide behind a single confident-looking number.
+ *
+ * Gap-audit P1 fix (recipe costing) — a variant's cost is the base
+ * recipe's quantities scaled by its recipeQuantityMultiplierBasisPoints,
+ * and a selected add-on with its own addonRecipeItems adds its own cost
+ * on top — see deductRecipeStockForOrder's doc comment (src/lib/
+ * inventory.ts) and liveRecipeCostSubquery's own comment above for the
+ * exact formula. itemsWithRecipeCount now also counts a line whose cost
+ * is known ONLY through an addon (no base recipe) as covered — see
+ * hasRecipeNowSubquery's own comment — so a previously-partial line that
+ * now has full addon/variant costing is no longer flagged partial, while
+ * a line with neither still is.
  *
  * The per-line cost formula — Math.round((quantityPerServingMilliunits /
  * 1000) * costPerUnitInPaisa) per unit sold, summed — matches the recipe
  * detail route's own lineCostInPaisa/costPerServingInPaisa exactly (see
- * the recipe route's GET handler), so a menu item's "cost per serving"
- * shown there and its contribution to this report's COGS always agree.
- * Done as one rounded SUM in SQL rather than per-line in JS since this is
- * a management report, not a financial transaction that must reconcile to
- * the exact paisa (unlike a payment or purchase line total) — a
- * rounding difference of a paisa or two across many order lines is
- * immaterial here.
+ * the recipe route's GET handler) for the UNSCALED (1x, no addons) case,
+ * so a menu item's base "cost per serving" shown there and its
+ * contribution to this report's COGS still agree when no variant/addon
+ * scaling applies. Done as one rounded SUM in SQL rather than per-line in
+ * JS since this is a management report, not a financial transaction that
+ * must reconcile to the exact paisa (unlike a payment or purchase line
+ * total) — a rounding difference of a paisa or two across many order
+ * lines is immaterial here.
  *
  * Phase A.4 — each line PREFERS orderItems.recipeCostInPaisa, the frozen
  * snapshot written by deductRecipeStockForOrder at the moment stock was
  * actually deducted (see that function's own comment for why: costPerUnit
  * is a live weighted average, so recomputing an old order's COGS from
  * TODAY's cost would silently misstate history). Only when that snapshot
- * is NULL — an order placed before this column existed, or an item that
- * genuinely had no recipe at deduction time — does this fall back to the
- * live recipeItems/inventoryItems join, i.e. exactly the query this
- * function ran before Phase A.4. Postgres's COALESCE short-circuits (per
- * its own docs: arguments after the first non-null aren't evaluated), so
- * the correlated subquery below only runs for that shrinking minority of
- * rows, not for every line.
+ * is NULL — an order placed before this column existed, or a line that
+ * genuinely had no cost source at deduction time — does this fall back to
+ * liveRecipeCostSubquery's live join. Postgres's COALESCE short-circuits
+ * (per its own docs: arguments after the first non-null aren't
+ * evaluated), so that correlated subquery only runs for that shrinking
+ * minority of rows, not for every line.
  */
 export async function getCogsSummary(
   restaurantId: string,
@@ -1089,22 +1195,14 @@ export async function getCogsSummary(
 ): Promise<CogsSummary> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
-  const liveRecipeCostSubquery = sql`(
-    SELECT round(sum(${orderItems.quantity} * ${recipeItems.quantityPerServingMilliunits} * ${inventoryItems.costPerUnitInPaisa}) / 1000.0)
-    FROM ${recipeItems}
-    INNER JOIN ${inventoryItems} ON ${inventoryItems.id} = ${recipeItems.inventoryItemId}
-    WHERE ${recipeItems.menuItemId} = ${orderItems.menuItemId}
-  )`;
-  const hasRecipeNowSubquery = sql`EXISTS (SELECT 1 FROM ${recipeItems} WHERE ${recipeItems.menuItemId} = ${orderItems.menuItemId})`;
-
   const [row] = await dbOrTx
     .select({
       cogsInPaisa: sql<string>`
-        coalesce(sum(coalesce(${orderItems.recipeCostInPaisa}, ${liveRecipeCostSubquery}, 0)), 0)
+        coalesce(sum(coalesce(${orderItems.recipeCostInPaisa}, ${liveRecipeCostSubquery()}, 0)), 0)
       `,
       soldItemCount: sql<string>`count(distinct ${orderItems.menuItemId})`,
       itemsWithRecipeCount: sql<string>`
-        count(distinct case when ${orderItems.recipeCostInPaisa} is not null or ${hasRecipeNowSubquery}
+        count(distinct case when ${orderItems.recipeCostInPaisa} is not null or ${hasRecipeNowSubquery()}
           then ${orderItems.menuItemId} end)
       `,
     })
@@ -1150,9 +1248,13 @@ export type ProductProfitabilityRow = {
    *  misleading 0% or "-Infinity%". */
   marginPercent: number | null;
   /** Same coverage-honesty signal as CogsSummary.itemsWithRecipeCount,
-   *  but per row here: false means this item's cogsInPaisa (and therefore
-   *  grossProfitInPaisa/marginPercent) is a partial/unknown-cost figure —
-   *  no recipe was ever defined for at least one unit sold in this range. */
+   *  but per row here: false means at least one unit sold in this range
+   *  had neither a base recipe NOR a costed add-on selected — this item's
+   *  cogsInPaisa (and therefore grossProfitInPaisa/marginPercent) is a
+   *  partial/unknown-cost figure. Gap-audit P1 fix (recipe costing): a
+   *  unit whose cost came entirely from a costed add-on (no base recipe),
+   *  or a variant-scaled base recipe, counts as covered — see
+   *  hasRecipeNowSubquery's own comment. */
   hasFullCostCoverage: boolean;
 };
 
@@ -1182,21 +1284,13 @@ export async function getProductProfitability(
 ): Promise<ProductProfitabilityRow[]> {
   const { dayStart, dayAfterEnd } = dayBounds(range, timezone);
 
-  const liveRecipeCostSubquery = sql`(
-    SELECT round(sum(${orderItems.quantity} * ${recipeItems.quantityPerServingMilliunits} * ${inventoryItems.costPerUnitInPaisa}) / 1000.0)
-    FROM ${recipeItems}
-    INNER JOIN ${inventoryItems} ON ${inventoryItems.id} = ${recipeItems.inventoryItemId}
-    WHERE ${recipeItems.menuItemId} = ${orderItems.menuItemId}
-  )`;
-  const hasRecipeNowSubquery = sql`EXISTS (SELECT 1 FROM ${recipeItems} WHERE ${recipeItems.menuItemId} = ${orderItems.menuItemId})`;
-
   const rows = await dbOrTx
     .select({
       name: orderItems.menuItemNameSnapshot,
       quantitySold: sql<string>`sum(${orderItems.quantity})`,
       revenueInPaisa: sql<string>`sum(${orderItems.lineTotalInPaisa})`,
-      cogsInPaisa: sql<string>`coalesce(sum(coalesce(${orderItems.recipeCostInPaisa}, ${liveRecipeCostSubquery}, 0)), 0)`,
-      hasFullCostCoverage: sql<boolean>`bool_and(${orderItems.recipeCostInPaisa} is not null or ${hasRecipeNowSubquery})`,
+      cogsInPaisa: sql<string>`coalesce(sum(coalesce(${orderItems.recipeCostInPaisa}, ${liveRecipeCostSubquery()}, 0)), 0)`,
+      hasFullCostCoverage: sql<boolean>`bool_and(${orderItems.recipeCostInPaisa} is not null or ${hasRecipeNowSubquery()})`,
     })
     .from(orderItems)
     .innerJoin(orders, eq(orderItems.orderId, orders.id))

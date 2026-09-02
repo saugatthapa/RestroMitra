@@ -61,6 +61,7 @@ export async function POST(
         menuItemId: itemId,
         name: parsed.data.name,
         priceInPaisa: parsed.data.price,
+        recipeQuantityMultiplierBasisPoints: parsed.data.recipeQuantityMultiplierPercent,
         sortOrder: total,
       })
       .returning();

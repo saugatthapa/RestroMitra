@@ -199,3 +199,23 @@ export const replaceRecipeSchema = z.object({
       "Each ingredient can only appear once in a recipe.",
     ),
 });
+
+// Gap-audit P1 fix (recipe costing) — identical shape/semantics to
+// replaceRecipeSchema above, for an add-on's own ingredient list
+// (addon_recipe_items). See the addon recipe route's own comment for why
+// this is a separate schema/table rather than reusing recipeItems.
+export const replaceAddonRecipeSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        inventoryItemId: z.string().uuid(),
+        quantityPerServing: quantityAmount,
+      }),
+    )
+    .max(50)
+    .default([])
+    .refine(
+      (items) => new Set(items.map((i) => i.inventoryItemId)).size === items.length,
+      "Each ingredient can only appear once in a recipe.",
+    ),
+});

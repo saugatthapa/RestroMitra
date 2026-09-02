@@ -82,14 +82,30 @@ export const updateMenuItemSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+// Gap-audit P1 fix (recipe costing) — how many times the base menu item's
+// recipe (recipeItems, keyed by menuItemId) this variant consumes, as a
+// percent (100 = same as the base recipe, 200 = double). Transformed to
+// basis points (10000 = 100%) to match
+// menuVariants.recipeQuantityMultiplierBasisPoints — see that column's
+// schema comment for why a multiplier rather than a per-variant recipe.
+// Bounded at 1000% (10x) as a sanity backstop, same spirit as the other
+// "unreasonably large" caps in this file.
+const recipeMultiplierPercent = z
+  .number()
+  .positive("Recipe quantity multiplier must be greater than zero.")
+  .max(1000, "Recipe quantity multiplier is unreasonably large.")
+  .transform((percent) => Math.round(percent * 100));
+
 export const createVariantSchema = z.object({
   name: z.string().trim().min(1, "Variant name is required.").max(60),
   price: rupeeAmount,
+  recipeQuantityMultiplierPercent: recipeMultiplierPercent.optional().default(100),
 });
 
 export const updateVariantSchema = z.object({
   name: z.string().trim().min(1).max(60).optional(),
   price: rupeeAmount.optional(),
+  recipeQuantityMultiplierPercent: recipeMultiplierPercent.optional(),
   isActive: z.boolean().optional(),
 });
 

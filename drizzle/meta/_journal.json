@@ -498,6 +498,13 @@
       "when": 1788331706709,
       "tag": "0070_supplier_ledger_link",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1788332987405,
+      "tag": "0071_variant_addon_recipe_costing",
+      "breakpoints": true
     }
   ]
 }

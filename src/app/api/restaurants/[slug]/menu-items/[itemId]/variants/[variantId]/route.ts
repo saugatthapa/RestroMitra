@@ -59,14 +59,27 @@ export async function PATCH(
       return NextResponse.json({ error: "No changes provided." }, { status: 400 });
     }
 
-    const { price, ...rest } = parsed.data;
+    const { price, recipeQuantityMultiplierPercent, ...rest } = parsed.data;
     if (price !== undefined) {
       await requirePermission(session.user.id, restaurantId, PERMISSIONS.EDIT_PRICE, role);
+    }
+    // Gap-audit P1 fix (recipe costing) — this multiplier drives real
+    // inventory deduction and COGS, the same sensitivity as recipeItems
+    // (gated by MANAGE_INVENTORY on the recipe route), not a customer-
+    // facing price change, so it's gated separately from EDIT_PRICE above.
+    if (recipeQuantityMultiplierPercent !== undefined) {
+      await requirePermission(session.user.id, restaurantId, PERMISSIONS.MANAGE_INVENTORY, role);
     }
 
     const [updated] = await db
       .update(menuVariants)
-      .set({ ...rest, ...(price !== undefined ? { priceInPaisa: price } : {}) })
+      .set({
+        ...rest,
+        ...(price !== undefined ? { priceInPaisa: price } : {}),
+        ...(recipeQuantityMultiplierPercent !== undefined
+          ? { recipeQuantityMultiplierBasisPoints: recipeQuantityMultiplierPercent }
+          : {}),
+      })
       .where(and(eq(menuVariants.id, variantId), eq(menuVariants.menuItemId, itemId)))
       .returning();
 

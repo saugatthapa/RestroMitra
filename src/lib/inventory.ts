@@ -5,7 +5,10 @@ import {
   inventoryItems,
   stockMovements,
   orderItems,
+  orderItemAddons,
   recipeItems,
+  addonRecipeItems,
+  menuVariants,
   branches,
   branchInventoryLevels,
   ledgerEntries,
@@ -261,20 +264,43 @@ export async function applyPurchaseCosting(
  * preparing -> confirmed, so this specific transition can only ever fire
  * once per order — no separate "already deducted" flag needed.
  *
- * Order items with no menuItemId (the menu item was deleted since the
- * order was placed) or no recipe defined are silently skipped for stock
- * deduction — recipes are opt-in per menu item, not a hard requirement to
- * take an order.
+ * An order item's total cost/deduction here has up to two independent
+ * sources, both gap-audit P1 fixes (recipe costing) on top of the
+ * original base-recipe-only behavior:
+ *
+ *  1. The BASE recipe (recipeItems, keyed by menuItemId), scaled by the
+ *     selected variant's recipeQuantityMultiplierBasisPoints (10000 = 1x,
+ *     unset/no-variant defaults to 10000 too — see menuVariants' own
+ *     schema comment for why a multiplier rather than per-variant recipe
+ *     overrides). Skipped entirely (not scaled to zero) when the item has
+ *     no menuItemId (deleted since the order was placed) or no recipe was
+ *     ever defined — recipes stay opt-in, same as before this fix.
+ *  2. Each selected ADD-ON's own recipe (addonRecipeItems, keyed by
+ *     addonId) — consumed once per unit of the item sold, same
+ *     per-unit-scaling convention computeOrderPricing already uses for
+ *     addon PRICE (addonUnitTotal * quantity), now extended to addon
+ *     COST. Independent of the item's variant multiplier: an add-on's
+ *     ingredient list is its own bill of materials, not a fraction of the
+ *     base item's. An add-on with no addonRecipeItems rows contributes 0
+ *     and does NOT by itself mark the line as cost-unknown — see
+ *     addonRecipeItems' own schema comment for why a costless add-on is
+ *     treated as a genuine (not missing) zero, unlike a menu item with no
+ *     recipe at all.
+ *
+ * recipeCostInPaisa is left NULL (not zero, or partially summed) only
+ * when NEITHER source applied — no base recipe AND no addon with its own
+ * recipe — so a report reading this column can still tell "genuinely free
+ * ingredients" apart from "cost unknown, no recipe existed anywhere on
+ * this line." A line with a costed addon but no base recipe (or vice
+ * versa) is NOT left NULL: whatever cost IS known is captured, same
+ * "capture what's known" spirit as the rest of this fix — see
+ * getCogsSummary's coverage-flag comment (reports.ts) for how the
+ * aggregate-level "partial coverage" signal handles that same case.
  *
  * Commercial-launch Phase A.4 — this is ALSO the one moment
  * orderItems.recipeCostInPaisa gets written: the line's COGS, computed
- * from whatever inventoryItems.costPerUnitInPaisa is right now (the same
- * formula getCogsSummary's SQL and the recipe-preview route both use:
- * quantity * quantityPerServingMilliunits * costPerUnitInPaisa / 1000,
- * summed across every recipe line), then frozen — never recomputed later.
- * Left NULL (not zero) for an item with no menuItemId or no recipe, so a
- * report reading this column can still tell "genuinely free ingredients"
- * apart from "cost unknown, no recipe existed."
+ * from whatever inventoryItems.costPerUnitInPaisa is right now, then
+ * frozen — never recomputed later.
  */
 export async function deductRecipeStockForOrder(
   tx: Transaction,
@@ -291,40 +317,118 @@ export async function deductRecipeStockForOrder(
     .where(eq(orderItems.orderId, params.orderId));
 
   for (const item of items) {
-    if (!item.menuItemId) continue;
-
-    const recipe = await tx
-      .select({
-        inventoryItemId: recipeItems.inventoryItemId,
-        quantityPerServingMilliunits: recipeItems.quantityPerServingMilliunits,
-        costPerUnitInPaisa: inventoryItems.costPerUnitInPaisa,
-      })
-      .from(recipeItems)
-      .innerJoin(inventoryItems, eq(inventoryItems.id, recipeItems.inventoryItemId))
-      .where(eq(recipeItems.menuItemId, item.menuItemId));
-
-    if (recipe.length === 0) continue; // recipeCostInPaisa stays NULL — unknown, not zero
-
     let recipeCostInPaisa = 0;
-    for (const line of recipe) {
-      const deductionMilliunits = line.quantityPerServingMilliunits * item.quantity;
-      recipeCostInPaisa += Math.round(
-        (line.quantityPerServingMilliunits * item.quantity * line.costPerUnitInPaisa) / 1000,
-      );
-      if (deductionMilliunits === 0) continue;
+    let hadAnyCostSource = false;
 
-      await recordStockMovement(tx, {
-        restaurantId: params.restaurantId,
-        branchId: params.branchId,
-        inventoryItemId: line.inventoryItemId,
-        type: "sale_deduction",
-        quantityDeltaMilliunits: -deductionMilliunits,
-        referenceType: "order",
-        referenceId: params.orderId,
-        note: `${item.quantity}x ${item.menuItemNameSnapshot}`,
-        recordedByUserId: params.recordedByUserId ?? null,
-      });
+    if (item.menuItemId) {
+      // 10000 basis points = 1x — the default for "no variant selected"
+      // AND the default column value for every variant (see
+      // menuVariants.recipeQuantityMultiplierBasisPoints), so a plain
+      // base-item order behaves identically to before this fix.
+      let multiplierBasisPoints = 10000;
+      if (item.variantId) {
+        const [variant] = await tx
+          .select({
+            recipeQuantityMultiplierBasisPoints: menuVariants.recipeQuantityMultiplierBasisPoints,
+          })
+          .from(menuVariants)
+          .where(eq(menuVariants.id, item.variantId))
+          .limit(1);
+        // Variant row may be gone (onDelete: "set null" only prevents a
+        // dangling FK going forward — this order's variantId snapshot can
+        // still point at an id that existed at order time but was since
+        // deleted through a path that predates that constraint, or in a
+        // concurrent edge case). Fall back to 1x rather than throwing —
+        // same "don't block deduction on a stale menu reference" spirit
+        // as skipping a deleted menu item's recipe below.
+        if (variant) multiplierBasisPoints = variant.recipeQuantityMultiplierBasisPoints;
+      }
+
+      const recipe = await tx
+        .select({
+          inventoryItemId: recipeItems.inventoryItemId,
+          quantityPerServingMilliunits: recipeItems.quantityPerServingMilliunits,
+          costPerUnitInPaisa: inventoryItems.costPerUnitInPaisa,
+        })
+        .from(recipeItems)
+        .innerJoin(inventoryItems, eq(inventoryItems.id, recipeItems.inventoryItemId))
+        .where(eq(recipeItems.menuItemId, item.menuItemId));
+
+      if (recipe.length > 0) {
+        hadAnyCostSource = true;
+        for (const line of recipe) {
+          // Scale the per-serving quantity by the variant multiplier
+          // FIRST (so "2x" means literally double the ingredients of one
+          // serving), then multiply by how many were sold — matches the
+          // "per serving" naming of quantityPerServingMilliunits.
+          const scaledQuantityPerServingMilliunits = Math.round(
+            (line.quantityPerServingMilliunits * multiplierBasisPoints) / 10000,
+          );
+          const deductionMilliunits = scaledQuantityPerServingMilliunits * item.quantity;
+          recipeCostInPaisa += Math.round((deductionMilliunits * line.costPerUnitInPaisa) / 1000);
+          if (deductionMilliunits === 0) continue;
+
+          await recordStockMovement(tx, {
+            restaurantId: params.restaurantId,
+            branchId: params.branchId,
+            inventoryItemId: line.inventoryItemId,
+            type: "sale_deduction",
+            quantityDeltaMilliunits: -deductionMilliunits,
+            referenceType: "order",
+            referenceId: params.orderId,
+            note: `${item.quantity}x ${item.menuItemNameSnapshot}`,
+            recordedByUserId: params.recordedByUserId ?? null,
+          });
+        }
+      }
     }
+
+    const addonSelections = await tx
+      .select({ addonId: orderItemAddons.addonId, nameSnapshot: orderItemAddons.nameSnapshot })
+      .from(orderItemAddons)
+      .where(eq(orderItemAddons.orderItemId, item.id));
+
+    for (const addon of addonSelections) {
+      if (!addon.addonId) continue; // addon deleted since order was placed — same skip as a deleted menu item
+
+      const addonRecipe = await tx
+        .select({
+          inventoryItemId: addonRecipeItems.inventoryItemId,
+          quantityPerServingMilliunits: addonRecipeItems.quantityPerServingMilliunits,
+          costPerUnitInPaisa: inventoryItems.costPerUnitInPaisa,
+        })
+        .from(addonRecipeItems)
+        .innerJoin(inventoryItems, eq(inventoryItems.id, addonRecipeItems.inventoryItemId))
+        .where(eq(addonRecipeItems.addonId, addon.addonId));
+
+      if (addonRecipe.length === 0) continue; // opt-in — a costless add-on, not a cost gap
+
+      hadAnyCostSource = true;
+      for (const line of addonRecipe) {
+        // Same per-unit-sold scaling as computeOrderPricing uses for
+        // addon PRICE (addonUnitTotal * quantity) — one selection of this
+        // addon per unit of the item, deliberately NOT scaled by the
+        // item's own variant multiplier (see this function's own doc
+        // comment).
+        const deductionMilliunits = line.quantityPerServingMilliunits * item.quantity;
+        recipeCostInPaisa += Math.round((deductionMilliunits * line.costPerUnitInPaisa) / 1000);
+        if (deductionMilliunits === 0) continue;
+
+        await recordStockMovement(tx, {
+          restaurantId: params.restaurantId,
+          branchId: params.branchId,
+          inventoryItemId: line.inventoryItemId,
+          type: "sale_deduction",
+          quantityDeltaMilliunits: -deductionMilliunits,
+          referenceType: "order",
+          referenceId: params.orderId,
+          note: `${item.quantity}x ${item.menuItemNameSnapshot} (${addon.nameSnapshot})`,
+          recordedByUserId: params.recordedByUserId ?? null,
+        });
+      }
+    }
+
+    if (!hadAnyCostSource) continue; // recipeCostInPaisa stays NULL — unknown, not zero
 
     await tx.update(orderItems).set({ recipeCostInPaisa }).where(eq(orderItems.id, item.id));
   }

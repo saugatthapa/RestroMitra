@@ -736,6 +736,36 @@ export const menuVariants = pgTable(
       .references(() => menuItems.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 60 }).notNull(), // e.g. "Small" / "Medium" / "Large"
     priceInPaisa: integer("price_in_paisa").notNull(), // absolute price, not a delta
+    // Gap-audit P1 fix (recipe costing) — a variant reuses the SAME
+    // recipe_items rows as its parent menu item (see recipeItems above)
+    // rather than getting its own parallel ingredient list. This basis-
+    // points multiplier (10000 = 100% = 1x, same convention as
+    // taxRateBasisPoints/serviceChargeBasisPoints elsewhere in this file)
+    // scales every one of the base recipe's quantityPerServingMilliunits
+    // when this variant is ordered — e.g. a "Large" at 20000 (2x) deducts
+    // and costs double what the base recipe alone would.
+    //
+    // Multiplier, not per-variant recipe overrides: inspected the only
+    // real variant data in this codebase (e.g. order-pricing.test.ts's/
+    // combos.test.ts's "Small"/"Large" fixtures, the menuVariants.name
+    // column comment above) — every variant is a straightforward size step
+    // on an otherwise-identical dish; nothing here models a variant with a
+    // genuinely different ingredient list. A multiplier is a single
+    // number staff can set once per variant with no new ingredient-editing
+    // UI, and it keeps recipeItems as the one source of truth for WHICH
+    // ingredients a dish uses — only the quantity scales. If a future
+    // variant genuinely needs different ingredients (not just more of the
+    // same), that's a distinct enough case to model separately later
+    // rather than forcing every existing size-only variant through a
+    // heavier override mechanism today.
+    //
+    // Defaults to 10000 (1x, i.e. identical to the base item's recipe) so
+    // every existing variant — created before this column existed —
+    // behaves exactly as it did before this fix: no silent cost change for
+    // data that predates variant-aware costing.
+    recipeQuantityMultiplierBasisPoints: integer("recipe_quantity_multiplier_basis_points")
+      .notNull()
+      .default(10000),
     sortOrder: integer("sort_order").notNull().default(0),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -745,6 +775,10 @@ export const menuVariants = pgTable(
   (table) => [
     index("menu_variants_menu_item_id_idx").on(table.menuItemId),
     check("menu_variants_price_non_negative", sql`${table.priceInPaisa} >= 0`),
+    check(
+      "menu_variants_recipe_multiplier_positive",
+      sql`${table.recipeQuantityMultiplierBasisPoints} > 0`,
+    ),
   ],
 );
 
@@ -2417,6 +2451,55 @@ export const recipeItems = pgTable(
     index("recipe_items_menu_item_id_idx").on(table.menuItemId),
     uniqueIndex("recipe_items_menu_item_ingredient_unique").on(
       table.menuItemId,
+      table.inventoryItemId,
+    ),
+  ],
+);
+
+// Gap-audit P1 fix (recipe costing) — an add-on's own bill-of-materials,
+// mirroring recipeItems above exactly (same columns/units/constraints,
+// keyed by addonId instead of menuItemId). Before this table existed an
+// add-on ("Extra cheese", "Add bacon") had zero link to inventory: it
+// carried a customer-facing price but consumed no stock and contributed
+// nothing to COGS no matter how much ingredient it actually used — this
+// closes that gap the same way recipeItems already does for a base menu
+// item. Opt-in, same convention as recipeItems/deductRecipeStockForOrder:
+// an add-on with no rows here is a genuinely zero-ingredient choice (e.g.
+// "Extra spicy") and stays that way, contributing 0 to cost — it is NOT
+// treated as a costing gap the way a menu item with literally no recipe
+// is (see getCogsSummary's coverage comment for why the base item and the
+// add-on are held to different "missing = partial" standards).
+export const addonRecipeItems = pgTable(
+  "addon_recipe_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    addonId: uuid("addon_id")
+      .notNull()
+      .references(() => menuAddons.id, { onDelete: "cascade" }),
+    inventoryItemId: uuid("inventory_item_id")
+      .notNull()
+      .references(() => inventoryItems.id, { onDelete: "restrict" }),
+    // How much of this ingredient ONE selection of this add-on consumes
+    // (i.e. per unit of the order item it's attached to — see
+    // computeOrderPricing's addonUnitTotal * quantity for the identical
+    // per-unit-scaling convention this mirrors for price), in the
+    // ingredient's own unit, milliunits.
+    quantityPerServingMilliunits: integer("quantity_per_serving_milliunits").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("addon_recipe_items_restaurant_id_idx").on(table.restaurantId),
+    index("addon_recipe_items_addon_id_idx").on(table.addonId),
+    uniqueIndex("addon_recipe_items_addon_ingredient_unique").on(
+      table.addonId,
       table.inventoryItemId,
     ),
   ],
@@ -4646,11 +4729,12 @@ export const menuVariantsRelations = relations(menuVariants, ({ one }) => ({
   }),
 }));
 
-export const menuAddonsRelations = relations(menuAddons, ({ one }) => ({
+export const menuAddonsRelations = relations(menuAddons, ({ one, many }) => ({
   menuItem: one(menuItems, {
     fields: [menuAddons.menuItemId],
     references: [menuItems.id],
   }),
+  recipeItems: many(addonRecipeItems),
 }));
 
 export const menuCombosRelations = relations(menuCombos, ({ one, many }) => ({
@@ -4840,6 +4924,7 @@ export const inventoryItemsRelations = relations(inventoryItems, ({ one, many })
   purchaseItems: many(purchaseItems),
   stockMovements: many(stockMovements),
   recipeItems: many(recipeItems),
+  addonRecipeItems: many(addonRecipeItems),
   branchLevels: many(branchInventoryLevels),
 }));
 
@@ -4915,6 +5000,21 @@ export const recipeItemsRelations = relations(recipeItems, ({ one }) => ({
   }),
   inventoryItem: one(inventoryItems, {
     fields: [recipeItems.inventoryItemId],
+    references: [inventoryItems.id],
+  }),
+}));
+
+export const addonRecipeItemsRelations = relations(addonRecipeItems, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [addonRecipeItems.restaurantId],
+    references: [restaurants.id],
+  }),
+  addon: one(menuAddons, {
+    fields: [addonRecipeItems.addonId],
+    references: [menuAddons.id],
+  }),
+  inventoryItem: one(inventoryItems, {
+    fields: [addonRecipeItems.inventoryItemId],
     references: [inventoryItems.id],
   }),
 }));
