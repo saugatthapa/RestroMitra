@@ -236,6 +236,7 @@ export async function POST(
         timezone,
         markAsDue: data.isCredit,
         recordedByUserId: session.user.id,
+        supplierId: data.supplierId ?? null,
       });
 
       return { purchase, items: insertedItems, ledgerEntry };

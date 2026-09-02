@@ -83,6 +83,29 @@ type SupplierDueReport = {
   rows: SupplierDueRow[];
 };
 
+type SupplierStatementLine = {
+  id: string;
+  type: "purchase" | "payment" | "adjustment";
+  entryDate: string;
+  description: string;
+  note: string | null;
+  deltaInPaisa: number;
+  runningBalanceInPaisa: number;
+};
+
+type SupplierStatement = {
+  supplierId: string;
+  supplierName: string;
+  from: string | null;
+  to: string;
+  openingBalanceInPaisa: number;
+  closingBalanceInPaisa: number;
+  totalPurchasesInPaisa: number;
+  totalPaymentsInPaisa: number;
+  totalAdjustmentsInPaisa: number;
+  lines: SupplierStatementLine[];
+};
+
 type StockCountStatus = "open" | "pending_approval" | "applied" | "rejected";
 
 type StockCountSummary = {
@@ -192,7 +215,7 @@ export function InventoryBoard({
       </div>
 
       {tab === "Items" && <ItemsTab slug={slug} canViewProfit={canViewProfit} />}
-      {tab === "Suppliers" && <SuppliersTab slug={slug} />}
+      {tab === "Suppliers" && <SuppliersTab slug={slug} canManageAccountBooks={canManageAccountBooks} />}
       {tab === "Purchases" && (
         <PurchasesTab slug={slug} canViewProfit={canViewProfit} canManageAccountBooks={canManageAccountBooks} />
       )}
@@ -743,11 +766,12 @@ function RecordWasteModal({
 // Suppliers tab
 // ---------------------------------------------------------------------------
 
-function SuppliersTab({ slug }: { slug: string }) {
+function SuppliersTab({ slug, canManageAccountBooks }: { slug: string; canManageAccountBooks: boolean }) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [statementSupplier, setStatementSupplier] = useState<Supplier | null>(null);
 
   async function load() {
     try {
@@ -831,7 +855,13 @@ function SuppliersTab({ slug }: { slug: string }) {
                     <span className="text-neutral-400">Inactive</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-right">
+                <td className="px-3 py-2 text-right space-x-3 whitespace-nowrap">
+                  <button
+                    onClick={() => setStatementSupplier(s)}
+                    className="text-xs font-medium text-orange-700 hover:underline"
+                  >
+                    Statement
+                  </button>
                   <button
                     onClick={() => toggleActive(s)}
                     className="text-xs font-medium text-orange-700 hover:underline"
@@ -844,6 +874,15 @@ function SuppliersTab({ slug }: { slug: string }) {
           </tbody>
         </table>
       </div>
+
+      {statementSupplier && (
+        <SupplierStatementModal
+          slug={slug}
+          supplier={statementSupplier}
+          canManageAccountBooks={canManageAccountBooks}
+          onClose={() => setStatementSupplier(null)}
+        />
+      )}
     </div>
   );
 }
@@ -890,6 +929,397 @@ function CreateSupplierForm({ slug, onCreated }: { slug: string; onCreated: () =
         {saving ? "Creating…" : "Create supplier"}
       </button>
     </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Supplier statement — a running ledger (opening balance + purchases -
+// payments +/- adjustments = closing balance) for one supplier, over an
+// optional date range. Reconciles with the Supplier dues tab's own
+// outstanding figure by construction — see getSupplierStatement's doc
+// comment in src/lib/supplier-statement.ts.
+// ---------------------------------------------------------------------------
+
+const STATEMENT_LINE_LABELS: Record<SupplierStatementLine["type"], string> = {
+  purchase: "Purchase",
+  payment: "Payment",
+  adjustment: "Adjustment",
+};
+
+function SupplierStatementModal({
+  slug,
+  supplier,
+  canManageAccountBooks,
+  onClose,
+}: {
+  slug: string;
+  supplier: Supplier;
+  canManageAccountBooks: boolean;
+  onClose: () => void;
+}) {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [statement, setStatement] = useState<SupplierStatement | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showPay, setShowPay] = useState(false);
+  const [showAdjust, setShowAdjust] = useState(false);
+  const dateSystem = useDateSystem();
+
+  async function load() {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      const qs = params.toString();
+      const res = await apiGet<SupplierStatement>(
+        `${base(slug)}/suppliers/${supplier.id}/statement${qs ? `?${qs}` : ""}`,
+      );
+      setStatement(res);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load the supplier statement.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, supplier.id, from, to]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
+        <div className="mb-3 flex items-start justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-neutral-900">Statement — {supplier.name}</h2>
+            <p className="text-xs text-neutral-500">Running ledger of purchases, payments, and adjustments.</p>
+          </div>
+          <button onClick={onClose} className="text-sm text-neutral-500 hover:text-neutral-800">
+            Close
+          </button>
+        </div>
+
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+        <div className="mb-3 flex flex-wrap items-end gap-3">
+          <label className="text-sm">
+            <span className="mb-1 block text-neutral-600">From (optional)</span>
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input" />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-neutral-600">To (optional)</span>
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input" />
+          </label>
+          {(from || to) && (
+            <button
+              onClick={() => {
+                setFrom("");
+                setTo("");
+              }}
+              className="text-xs font-medium text-neutral-500 hover:underline"
+            >
+              Clear range
+            </button>
+          )}
+          {canManageAccountBooks && (
+            <div className="ml-auto flex gap-2">
+              <button onClick={() => setShowAdjust(true)} className="btn-secondary text-xs">
+                + Adjustment
+              </button>
+              <button onClick={() => setShowPay(true)} className="btn-primary text-xs">
+                Record payment
+              </button>
+            </div>
+          )}
+        </div>
+
+        {loading && <p className="text-sm text-neutral-500">Loading statement…</p>}
+
+        {!loading && statement && (
+          <>
+            <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+              <div className="rounded-xl border border-neutral-200 bg-white p-3">
+                <p className="text-xs text-neutral-500">Opening balance</p>
+                <p className="text-sm font-semibold text-neutral-900">{formatNPR(statement.openingBalanceInPaisa)}</p>
+              </div>
+              <div className="rounded-xl border border-neutral-200 bg-white p-3">
+                <p className="text-xs text-neutral-500">Purchases</p>
+                <p className="text-sm font-semibold text-neutral-900">{formatNPR(statement.totalPurchasesInPaisa)}</p>
+              </div>
+              <div className="rounded-xl border border-neutral-200 bg-white p-3">
+                <p className="text-xs text-neutral-500">Payments</p>
+                <p className="text-sm font-semibold text-green-700">{formatNPR(statement.totalPaymentsInPaisa)}</p>
+              </div>
+              <div className="rounded-xl border border-neutral-200 bg-white p-3">
+                <p className="text-xs text-neutral-500">Adjustments</p>
+                <p className="text-sm font-semibold text-neutral-900">{formatNPR(statement.totalAdjustmentsInPaisa)}</p>
+              </div>
+              <div className="rounded-xl border border-orange-200 bg-orange-50 p-3">
+                <p className="text-xs text-orange-600">Closing balance</p>
+                <p className="text-sm font-semibold text-orange-700">{formatNPR(statement.closingBalanceInPaisa)}</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+              <table className="w-full text-sm">
+                <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
+                  <tr>
+                    <th className="px-3 py-2">Date</th>
+                    <th className="px-3 py-2">Type</th>
+                    <th className="px-3 py-2">Description</th>
+                    <th className="px-3 py-2 text-right">Amount</th>
+                    <th className="px-3 py-2 text-right">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t border-neutral-100 bg-neutral-50">
+                    <td className="px-3 py-2 text-neutral-500" colSpan={4}>
+                      Opening balance{statement.from ? ` as of ${formatDate(statement.from, dateSystem)}` : ""}
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium text-neutral-900">
+                      {formatNPR(statement.openingBalanceInPaisa)}
+                    </td>
+                  </tr>
+                  {statement.lines.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
+                        No activity in this range.
+                      </td>
+                    </tr>
+                  )}
+                  {statement.lines.map((l) => (
+                    <tr key={l.id} className="border-t border-neutral-100">
+                      <td className="px-3 py-2 text-neutral-500">{formatDate(l.entryDate, dateSystem)}</td>
+                      <td className="px-3 py-2 text-neutral-500">{STATEMENT_LINE_LABELS[l.type]}</td>
+                      <td className="px-3 py-2 text-neutral-900">
+                        {l.description}
+                        {l.note && <span className="block text-xs text-neutral-400">{l.note}</span>}
+                      </td>
+                      <td
+                        className={`px-3 py-2 text-right ${l.deltaInPaisa >= 0 ? "text-neutral-900" : "text-green-700"}`}
+                      >
+                        {l.deltaInPaisa >= 0 ? "+" : "-"}
+                        {formatNPR(Math.abs(l.deltaInPaisa))}
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium text-neutral-900">
+                        {formatNPR(l.runningBalanceInPaisa)}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-neutral-200 bg-neutral-50">
+                    <td className="px-3 py-2 font-medium text-neutral-900" colSpan={4}>
+                      Closing balance as of {formatDate(statement.to, dateSystem)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold text-neutral-900">
+                      {formatNPR(statement.closingBalanceInPaisa)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {showPay && (
+          <RecordSupplierPaymentModal
+            slug={slug}
+            supplier={supplier}
+            outstandingInPaisa={statement?.closingBalanceInPaisa ?? 0}
+            onClose={() => setShowPay(false)}
+            onSaved={() => {
+              setShowPay(false);
+              load();
+            }}
+          />
+        )}
+        {showAdjust && (
+          <RecordSupplierAdjustmentModal
+            slug={slug}
+            supplier={supplier}
+            onClose={() => setShowAdjust(false)}
+            onSaved={() => {
+              setShowAdjust(false);
+              load();
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RecordSupplierPaymentModal({
+  slug,
+  supplier,
+  outstandingInPaisa,
+  onClose,
+  onSaved,
+}: {
+  slug: string;
+  supplier: Supplier;
+  outstandingInPaisa: number;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [amount, setAmount] = useState(outstandingInPaisa > 0 ? String(outstandingInPaisa / 100) : "");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/suppliers/${supplier.id}/payments`, { amount: Number(amount), note });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not record the payment.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Record payment — {supplier.name}</h2>
+        <p className="mb-3 text-xs text-neutral-500">
+          Applied oldest-due-first across this supplier&apos;s outstanding purchases. Current balance owed:{" "}
+          {formatNPR(outstandingInPaisa)}
+        </p>
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <form onSubmit={submit} className="space-y-3">
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-600">Amount paid (Rs.)</span>
+            <input
+              required
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="input"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-600">Note (optional)</span>
+            <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
+          </label>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="btn-secondary">
+              Cancel
+            </button>
+            <button disabled={saving} className="btn-primary">
+              {saving ? "Recording…" : "Record payment"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function RecordSupplierAdjustmentModal({
+  slug,
+  supplier,
+  onClose,
+  onSaved,
+}: {
+  slug: string;
+  supplier: Supplier;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [direction, setDirection] = useState<"debit" | "credit">("debit");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [note, setNote] = useState("");
+  const [entryDate, setEntryDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/suppliers/${supplier.id}/adjustments`, {
+        direction,
+        amount: Number(amount),
+        description,
+        note,
+        entryDate: entryDate || undefined,
+      });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not record the adjustment.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Add adjustment — {supplier.name}</h2>
+        <p className="mb-3 text-xs text-neutral-500">
+          A manual credit/debit note against this supplier&apos;s balance — not tied to any one purchase.
+        </p>
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <form onSubmit={submit} className="space-y-3">
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-600">Type</span>
+            <select value={direction} onChange={(e) => setDirection(e.target.value as "debit" | "credit")} className="input">
+              <option value="debit">Debit note (we owe more)</option>
+              <option value="credit">Credit note (we owe less)</option>
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-600">Amount (Rs.)</span>
+            <input
+              required
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="input"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-600">Description</span>
+            <input
+              required
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="input"
+              placeholder="e.g. Return credit for damaged crates"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-600">Date (optional, defaults to today)</span>
+            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="input" />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-neutral-600">Note (optional)</span>
+            <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
+          </label>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="btn-secondary">
+              Cancel
+            </button>
+            <button disabled={saving} className="btn-primary">
+              {saving ? "Saving…" : "Add adjustment"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 

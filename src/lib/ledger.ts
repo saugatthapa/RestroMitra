@@ -96,6 +96,10 @@ export async function recordLedgerEntry(
     // lookups), same trust boundary as every other id this function
     // accepts without re-checking tenancy itself.
     customerId?: string | null;
+    // Supplier Statement (Gap Audit P1). Same trust boundary/shape as
+    // customerId above, mirrored for suppliers — see the supplierId
+    // column's own comment in schema.ts.
+    supplierId?: string | null;
   },
 ) {
   if (!Number.isInteger(params.amountInPaisa) || params.amountInPaisa <= 0) {
@@ -118,6 +122,7 @@ export async function recordLedgerEntry(
       dueStatus: params.markAsDue ? "outstanding" : "none",
       recordedByUserId: params.recordedByUserId ?? null,
       customerId: params.customerId ?? null,
+      supplierId: params.supplierId ?? null,
     })
     .returning();
 
@@ -337,6 +342,13 @@ export async function recordPurchaseLedgerEntry(
     timezone: string;
     markAsDue?: boolean;
     recordedByUserId?: string | null;
+    // Supplier Statement (Gap Audit P1). Stamped on every purchase entry
+    // regardless of markAsDue/isCredit — cash purchases get it too, same
+    // as every other field here — getSupplierStatement itself is what
+    // filters cash purchases back out (dueStatus stays "none" for them
+    // forever, since they're never handed to settleLedgerDue; see that
+    // function's own doc comment), not this recording step.
+    supplierId?: string | null;
   },
 ) {
   if (params.totalInPaisa <= 0) return null;
@@ -353,6 +365,7 @@ export async function recordPurchaseLedgerEntry(
     referenceId: params.purchaseId,
     markAsDue: params.markAsDue,
     recordedByUserId: params.recordedByUserId ?? null,
+    supplierId: params.supplierId ?? null,
   });
 }
 
@@ -463,6 +476,10 @@ export async function settleLedgerDue(
     // getCustomerOutstandingBalance/settleCustomerCredit below) shows the
     // payment alongside the charge it paid down.
     customerId: original.customerId,
+    // Same carry-forward for the supplier side (Gap Audit P1) — a supplier
+    // due settled here shows up as a "payment" line in that supplier's own
+    // statement (getSupplierStatement in supplier-statement.ts).
+    supplierId: original.supplierId,
   });
 
   return { original: updated, settlementEntry };
@@ -619,4 +636,148 @@ export async function settleCustomerCredit(
   }
 
   return { settlements, appliedInPaisa: params.amountInPaisa - remainingInPaisa };
+}
+
+// ---------------------------------------------------------------------------
+// Supplier Statement (Gap Audit P1). Mirrors the Customer Credit section
+// immediately above: a supplier's balance is never a second stored
+// column, only the sum of that supplier's own ledgerEntries rows (linked
+// via supplierId — see the column's own comment in schema.ts). What was
+// missing for the supplier side, that the customer side already had via
+// settleCustomerCredit, is a lump-sum "pay this supplier" allocator; the
+// per-purchase settlement path already existed (settleLedgerDue via the
+// generic /ledger/[entryId]/settle route — see recordPurchaseLedgerEntry's
+// own comment) and needed no changes. What was missing outright is any way
+// to record a manual credit/debit note against a supplier (a price
+// correction, a return credit) outside of a purchase — recordSupplierAdjustment
+// below is that new mechanism. See supplier-statement.ts for the read side
+// that turns both of these, plus ordinary purchases, into one running
+// ledger.
+// ---------------------------------------------------------------------------
+
+/**
+ * Applies a single lump-sum payment against a supplier's outstanding
+ * credit-purchase dues, oldest-due-date-then-oldest-entry first — the
+ * real-world shape of "we're paying this supplier off," as opposed to
+ * settling one specific purchase (still possible directly via
+ * settleLedgerDue/the /ledger/[entryId]/settle route, e.g. from the
+ * Supplier Dues report's own per-row "Record payment" action).
+ *
+ * Same all-or-nothing behavior as settleCustomerCredit: rejects upfront if
+ * the payment would exceed the supplier's current total outstanding
+ * balance (no entry touched in that case), and if a concurrent settlement
+ * touches one of these entries mid-loop, that entry's own CAS throws and —
+ * because this always runs inside a caller-provided transaction — the
+ * WHOLE payment rolls back rather than applying partially.
+ */
+export async function recordSupplierPayment(
+  tx: Transaction,
+  params: {
+    restaurantId: string;
+    supplierId: string;
+    amountInPaisa: number;
+    note?: string | null;
+    timezone: string;
+    recordedByUserId?: string | null;
+  },
+) {
+  if (!Number.isInteger(params.amountInPaisa) || params.amountInPaisa <= 0) {
+    throw new LedgerError("Payment amount must be a positive whole-paisa amount.");
+  }
+
+  const outstanding = await tx
+    .select()
+    .from(ledgerEntries)
+    .where(
+      and(
+        eq(ledgerEntries.restaurantId, params.restaurantId),
+        eq(ledgerEntries.supplierId, params.supplierId),
+        eq(ledgerEntries.category, "purchase"),
+        eq(ledgerEntries.dueStatus, "outstanding"),
+        eq(ledgerEntries.isVoided, false),
+      ),
+    )
+    .orderBy(asc(ledgerEntries.entryDate), asc(ledgerEntries.createdAt));
+
+  const totalOutstandingInPaisa = outstanding.reduce(
+    (sum, entry) => sum + (entry.amountInPaisa - entry.settledAmountInPaisa),
+    0,
+  );
+  if (totalOutstandingInPaisa <= 0) {
+    throw new LedgerError("This supplier has no outstanding balance to settle.");
+  }
+  if (params.amountInPaisa > totalOutstandingInPaisa) {
+    throw new LedgerError(
+      `Payment exceeds this supplier's outstanding balance (${totalOutstandingInPaisa} paisa owed).`,
+    );
+  }
+
+  let remainingInPaisa = params.amountInPaisa;
+  const settlements: Awaited<ReturnType<typeof settleLedgerDue>>[] = [];
+  for (const entry of outstanding) {
+    if (remainingInPaisa <= 0) break;
+    const dueRemainingInPaisa = entry.amountInPaisa - entry.settledAmountInPaisa;
+    if (dueRemainingInPaisa <= 0) continue;
+    const applyInPaisa = Math.min(dueRemainingInPaisa, remainingInPaisa);
+    const result = await settleLedgerDue(tx, {
+      restaurantId: params.restaurantId,
+      entryId: entry.id,
+      amountInPaisa: applyInPaisa,
+      note: params.note ?? null,
+      timezone: params.timezone,
+      recordedByUserId: params.recordedByUserId ?? null,
+    });
+    settlements.push(result);
+    remainingInPaisa -= applyInPaisa;
+  }
+
+  return { settlements, appliedInPaisa: params.amountInPaisa - remainingInPaisa };
+}
+
+/**
+ * Records a manual adjustment against a supplier's running balance — a
+ * credit note (they owe us less: a return, a price correction in our
+ * favor) or a debit note (we owe them more: a late fee, a shortfall found
+ * after the fact) — outside of the normal purchase flow. There is
+ * deliberately no purchases/ledger_entries row this adjusts; it is its own
+ * standalone ledgerEntries row, category "other" (see
+ * MANUAL_LEDGER_CATEGORIES — "other" is the generic bucket every manual
+ * entry not tied to a more specific flow uses) with referenceType
+ * "supplier_adjustment" so getSupplierStatement can find it via the same
+ * supplierId + category filter it uses for everything else.
+ *
+ * direction carries the sign the same way it does everywhere else in this
+ * file: "debit" increases what this restaurant owes the supplier (same
+ * direction as a purchase); "credit" decreases it (same direction as a
+ * payment). amountInPaisa is always positive; the caller picks direction
+ * to say which way the adjustment moves the balance.
+ */
+export async function recordSupplierAdjustment(
+  tx: Transaction,
+  params: {
+    restaurantId: string;
+    supplierId: string;
+    direction: LedgerDirection;
+    amountInPaisa: number;
+    description: string;
+    note?: string | null;
+    entryDate?: string;
+    timezone: string;
+    recordedByUserId?: string | null;
+  },
+) {
+  return recordLedgerEntry(tx, {
+    restaurantId: params.restaurantId,
+    direction: params.direction,
+    category: "other",
+    amountInPaisa: params.amountInPaisa,
+    entryDate: params.entryDate,
+    timezone: params.timezone,
+    description: params.description,
+    note: params.note ?? null,
+    referenceType: "supplier_adjustment",
+    referenceId: null,
+    recordedByUserId: params.recordedByUserId ?? null,
+    supplierId: params.supplierId,
+  });
 }

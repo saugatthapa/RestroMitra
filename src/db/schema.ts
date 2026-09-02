@@ -1893,6 +1893,20 @@ export const ledgerEntries = pgTable(
     // never disappear even in the hypothetical case a customer row is
     // removed some other way.
     customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    // Supplier Statement (Gap Audit P1). Same shape/rationale as customerId
+    // immediately above, mirrored for the supplier side of Account Books: a
+    // supplier's running-ledger statement (getSupplierStatement in
+    // supplier-statement.ts) filters this one indexed column instead of
+    // joining back through `purchases` on every read. Populated
+    // automatically on every purchase-category entry
+    // (recordPurchaseLedgerEntry) and carried forward onto the resulting
+    // due_settlement entry (settleLedgerDue), exactly like customerId; also
+    // set directly for a manual supplier adjustment (credit/debit note) via
+    // recordSupplierAdjustment, which has no purchases row to derive it
+    // from. onDelete "set null": a supplier is never hard-deleted (soft
+    // isActive toggle only — see suppliers PATCH route's own comment), but
+    // this stays defensive the same way customerId is.
+    supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
     dueStatus: ledgerDueStatusEnum("due_status").notNull().default("none"),
     // Running total of what's been collected/paid against an outstanding
     // entry via settleLedgerDue — supports partial settlement (a customer
@@ -1916,6 +1930,7 @@ export const ledgerEntries = pgTable(
     index("ledger_entries_entry_date_idx").on(table.entryDate),
     index("ledger_entries_due_status_idx").on(table.dueStatus),
     index("ledger_entries_customer_id_idx").on(table.customerId),
+    index("ledger_entries_supplier_id_idx").on(table.supplierId),
     // QA hardening pass (dependency/CI/migration/index audit, P2) — the
     // amountInPaisa column comment above already documents "always
     // positive, direction carries the sign"; this just makes that an
