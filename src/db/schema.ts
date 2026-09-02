@@ -480,6 +480,24 @@ export const restaurants = pgTable(
     // when storage is actually available, but the column exists either way
     // so flipping storage on/off later doesn't need a migration.
     selfieClockInRequired: boolean("selfie_clock_in_required").notNull().default(false),
+    // P2 gap audit — "negative stock is always allowed by deliberate,
+    // disclosed design, with no restaurant-level toggle to disallow it."
+    // Default TRUE preserves that original design (see PHASE_7_NOTES.md
+    // and every stock-mutating function's own comment in
+    // src/lib/inventory.ts/stock-count.ts/stock-transfer.ts) for every
+    // existing restaurant and every brand-new one — this is opt-IN hard
+    // enforcement, never a silent behavior change. When an owner flips this
+    // to false, recordStockMovement (the single choke point every stock
+    // deduction ultimately calls — sale deduction, manual adjustment,
+    // waste, stock-count variance, transfer dispatch) rejects any movement
+    // whose delta is negative and would leave the BRANCH's cached stock
+    // (branch_inventory_levels, not this table's restaurant-wide total)
+    // below zero, instead of allowing it. A positive-delta movement
+    // (purchase, transfer receipt) is never blocked by this flag, even if
+    // the branch is still negative afterward from before the toggle was
+    // turned on — enforcement stops NEW negative stock, it doesn't
+    // retroactively fix old negative stock.
+    allowNegativeStock: boolean("allow_negative_stock").notNull().default(true),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1724,7 +1742,11 @@ export const inventoryItems = pgTable(
     unit: inventoryUnitEnum("unit").notNull(),
     // Cached — see schema-section comment above. Can go negative (stock
     // wasn't blocked at order time — see PHASE_7_NOTES.md); never
-    // hand-edited outside src/lib/inventory.ts.
+    // hand-edited outside src/lib/inventory.ts. A restaurant can turn on
+    // restaurants.allowNegativeStock to have recordStockMovement reject new
+    // deductions that would take a BRANCH's cached level (branch_inventory_
+    // levels, not this restaurant-wide total) negative — see that column's
+    // own comment.
     currentStockMilliunits: integer("current_stock_milliunits").notNull().default(0),
     // Low-stock threshold in the item's own unit, milliunits. Null = no
     // alerting configured for this item.

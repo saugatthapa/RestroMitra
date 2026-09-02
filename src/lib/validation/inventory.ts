@@ -184,6 +184,13 @@ export const cancelStockTransferSchema = z.object({
   reason: z.string().trim().min(1, "A reason is required.").max(300),
 });
 
+// P2 gap audit — the owner-facing toggle for hard stock enforcement (see
+// restaurants.allowNegativeStock's own schema comment and
+// recordStockMovement in src/lib/inventory.ts, the actual enforcement).
+export const updateInventorySettingsSchema = z.object({
+  allowNegativeStock: z.boolean(),
+});
+
 export const replaceRecipeSchema = z.object({
   items: z
     .array(

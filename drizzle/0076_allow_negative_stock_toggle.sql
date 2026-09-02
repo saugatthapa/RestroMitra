@@ -1,0 +1,1 @@
+ALTER TABLE "restaurants" ADD COLUMN "allow_negative_stock" boolean DEFAULT true NOT NULL;

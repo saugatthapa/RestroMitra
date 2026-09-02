@@ -41,6 +41,7 @@ export default async function InventoryPage() {
         canViewProfit={roleHasPermission(active.role, PERMISSIONS.VIEW_PROFIT)}
         canManageAccountBooks={roleHasPermission(active.role, PERMISSIONS.MANAGE_ACCOUNT_BOOKS)}
         canApproveStockCount={roleHasPermission(active.role, PERMISSIONS.APPROVE_STOCK_COUNT)}
+        canManageRestaurantSettings={roleHasPermission(active.role, PERMISSIONS.MANAGE_RESTAURANT_SETTINGS)}
       />
     </div>
   );

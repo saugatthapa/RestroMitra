@@ -138,7 +138,10 @@ export async function approveStockTransfer(
  * recordStockMovement exactly like every other movement type. Stock is
  * allowed to go negative here, same as everywhere else in this codebase
  * (purchases/waste/adjustments) — dispatch doesn't block on "insufficient
- * stock," it just records what actually happened.
+ * stock," it just records what actually happened — UNLESS the restaurant
+ * has turned on hard enforcement (restaurants.allowNegativeStock = false),
+ * in which case recordStockMovement itself rejects a dispatch that would
+ * take the source branch negative (see that function's own comment).
  */
 export async function dispatchStockTransfer(
   tx: Transaction,

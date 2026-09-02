@@ -533,6 +533,13 @@
       "when": 1788351318397,
       "tag": "0075_entitlement_override_expiry",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1788351612081,
+      "tag": "0076_allow_negative_stock_toggle",
+      "breakpoints": true
     }
   ]
 }

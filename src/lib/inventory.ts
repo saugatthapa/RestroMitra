@@ -13,8 +13,10 @@ import {
   branchInventoryLevels,
   ledgerEntries,
   purchases,
+  restaurants,
 } from "@/db/schema";
 import { HttpError } from "@/lib/http-error";
+import { formatQuantity } from "@/lib/quantity";
 import type { WasteReasonValue } from "@/lib/waste-reasons";
 
 export class InventoryError extends HttpError {
@@ -84,14 +86,18 @@ export async function recordStockMovement(
     throw new InventoryError("wasteReason only applies to waste movements.");
   }
 
+  // Joins restaurants in to pick up allowNegativeStock in the same
+  // round-trip this branch-ownership check already made — no extra query.
   const branchRows = await tx
-    .select({ id: branches.id })
+    .select({ id: branches.id, allowNegativeStock: restaurants.allowNegativeStock })
     .from(branches)
+    .innerJoin(restaurants, eq(restaurants.id, branches.restaurantId))
     .where(and(eq(branches.id, params.branchId), eq(branches.restaurantId, params.restaurantId)))
     .limit(1);
   if (!branchRows[0]) {
     throw new InventoryError("Branch not found for this restaurant.");
   }
+  const allowNegativeStock = branchRows[0].allowNegativeStock;
 
   // Read/update the item FIRST (before inserting the movement row) so its
   // resulting costPerUnitInPaisa — for a "purchase" movement this is
@@ -161,6 +167,45 @@ export async function recordStockMovement(
       },
     })
     .returning();
+
+  // P2 gap audit — hard stock enforcement (restaurants.allowNegativeStock,
+  // see its own schema comment). Checked AFTER the atomic `+= delta`
+  // writes above (both are `SET x = x + delta` SQL, not read-then-write in
+  // JS, so the returned branchLevel is the true post-write value even
+  // under concurrent movements against the same branch/item — same
+  // reasoning as this function's own top-of-file comment) rather than
+  // pre-checking, so a violation is caught with a single extra comparison
+  // and no extra lock; throwing here rolls back this entire transaction
+  // (the ledger insert and both cache updates included), so nothing is
+  // left half-applied — same "throw to abort" idiom this codebase already
+  // uses for every other CAS-style rejection (see stock-count.ts/
+  // stock-transfer.ts).
+  //
+  // Only a NEGATIVE delta that leaves the branch negative is rejected — a
+  // positive delta (purchase, transfer receipt, a stock-count overage) is
+  // never blocked, even if the branch is still negative afterward from
+  // stock that went negative before this toggle was turned on: this stops
+  // NEW negative stock, it doesn't retroactively fix old negative stock.
+  // Checked against the per-BRANCH cached level, not the restaurant-wide
+  // total on `inventoryItems` — every caller of this function already
+  // scopes the deduction to one physical branch (an order's branch, a
+  // count's branch, a transfer's fromBranchId), and that branch's own
+  // shelf is what "would take stock negative" means operationally; a
+  // multi-branch restaurant's restaurant-wide total can stay negative from
+  // another branch's pre-toggle history without blocking THIS branch's
+  // otherwise-fine deduction.
+  if (
+    !allowNegativeStock &&
+    params.quantityDeltaMilliunits < 0 &&
+    branchLevel.currentStockMilliunits < 0
+  ) {
+    throw new InventoryError(
+      `Not enough stock: this would leave "${updatedItem.name}" at ${formatQuantity(
+        branchLevel.currentStockMilliunits,
+        updatedItem.unit,
+      )} at this branch, which is below zero. This restaurant has "Allow negative stock" turned off in Inventory settings — reduce the quantity, restock first, or turn the setting back on if this deduction should go through anyway.`,
+    );
+  }
 
   return { movement, item: updatedItem, branchLevel };
 }
