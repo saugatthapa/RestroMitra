@@ -26,6 +26,9 @@ type Record_ = {
   note: string | null;
   hasClockInPhoto: boolean;
   hasClockOutPhoto: boolean;
+  // P2 gap-audit fix — the separate workplace/surroundings photo.
+  hasClockInWorkplacePhoto: boolean;
+  hasClockOutWorkplacePhoto: boolean;
   status: AttendanceStatus;
   reviewNote: string | null;
 };
@@ -63,7 +66,9 @@ export function AttendanceReviewModal({
   const [reviewNote, setReviewNote] = useState(record.reviewNote ?? "");
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
-  const [photoLoadingKind, setPhotoLoadingKind] = useState<"clock_in" | "clock_out" | null>(null);
+  const [photoLoadingKind, setPhotoLoadingKind] = useState<
+    "clock_in" | "clock_out" | "clock_in_workplace" | "clock_out_workplace" | null
+  >(null);
 
   const [clockInAt, setClockInAt] = useState(toDatetimeLocal(record.clockInAt));
   const [clockOutAt, setClockOutAt] = useState(record.clockOutAt ? toDatetimeLocal(record.clockOutAt) : "");
@@ -72,7 +77,7 @@ export function AttendanceReviewModal({
   const [correctBusy, setCorrectBusy] = useState(false);
   const [correctError, setCorrectError] = useState<string | null>(null);
 
-  async function viewPhoto(kind: "clock_in" | "clock_out") {
+  async function viewPhoto(kind: "clock_in" | "clock_out" | "clock_in_workplace" | "clock_out_workplace") {
     setPhotoLoadingKind(kind);
     try {
       const res = await apiGet<{ url: string }>(`${base}/attendance/${record.id}/photo?kind=${kind}`);
@@ -159,7 +164,7 @@ export function AttendanceReviewModal({
 
         {mode === "review" && (
           <div>
-            <div className="mb-3 flex gap-2">
+            <div className="mb-3 flex flex-wrap gap-2">
               {record.hasClockInPhoto && (
                 <button
                   type="button"
@@ -167,7 +172,7 @@ export function AttendanceReviewModal({
                   onClick={() => viewPhoto("clock_in")}
                   className="btn-secondary text-xs"
                 >
-                  View clock-in photo
+                  View clock-in selfie
                 </button>
               )}
               {record.hasClockOutPhoto && (
@@ -177,12 +182,38 @@ export function AttendanceReviewModal({
                   onClick={() => viewPhoto("clock_out")}
                   className="btn-secondary text-xs"
                 >
-                  View clock-out photo
+                  View clock-out selfie
                 </button>
               )}
-              {!record.hasClockInPhoto && !record.hasClockOutPhoto && (
-                <p className="text-xs text-neutral-400">No photo was captured for this shift.</p>
+              {/* P2 gap-audit fix — the separate workplace/surroundings
+                  photo, clearly labeled "workplace" so a reviewer never
+                  confuses it for the identity-proving selfie above. */}
+              {record.hasClockInWorkplacePhoto && (
+                <button
+                  type="button"
+                  disabled={photoLoadingKind === "clock_in_workplace"}
+                  onClick={() => viewPhoto("clock_in_workplace")}
+                  className="btn-secondary text-xs"
+                >
+                  View clock-in workplace photo
+                </button>
               )}
+              {record.hasClockOutWorkplacePhoto && (
+                <button
+                  type="button"
+                  disabled={photoLoadingKind === "clock_out_workplace"}
+                  onClick={() => viewPhoto("clock_out_workplace")}
+                  className="btn-secondary text-xs"
+                >
+                  View clock-out workplace photo
+                </button>
+              )}
+              {!record.hasClockInPhoto &&
+                !record.hasClockOutPhoto &&
+                !record.hasClockInWorkplacePhoto &&
+                !record.hasClockOutWorkplacePhoto && (
+                  <p className="text-xs text-neutral-400">No photo was captured for this shift.</p>
+                )}
             </div>
 
             <label className="mb-2 block text-xs font-medium text-neutral-600">Status</label>

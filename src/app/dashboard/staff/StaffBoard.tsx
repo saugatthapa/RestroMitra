@@ -43,6 +43,9 @@ type AttendanceRecord = {
   note: string | null;
   hasClockInPhoto: boolean;
   hasClockOutPhoto: boolean;
+  // P2 gap-audit fix — the separate workplace/surroundings photo.
+  hasClockInWorkplacePhoto: boolean;
+  hasClockOutWorkplacePhoto: boolean;
   status: AttendanceStatus;
   reviewedAt: string | null;
   reviewNote: string | null;
@@ -730,8 +733,20 @@ function AttendanceTab({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [selfieRequired, setSelfieRequired] = useState(false);
+  // P2 gap-audit fix — the separate, independently-toggleable
+  // workplace-photo requirement.
+  const [workplacePhotoRequired, setWorkplacePhotoRequired] = useState(false);
   const [objectStorageConfigured, setObjectStorageConfigured] = useState(false);
-  const [selfieModalKind, setSelfieModalKind] = useState<"clock_in" | "clock_out" | null>(null);
+  // Queue of captures still needed before the pending clock-in/out can
+  // actually submit — e.g. ["selfie", "workplace"] when both are required.
+  // Rendered one modal at a time (SelfieClockModal, reused/parameterized
+  // per P2 gap-audit fix) so this never asks for two camera streams at
+  // once.
+  const [pendingClockKind, setPendingClockKind] = useState<"clock_in" | "clock_out" | null>(null);
+  const [captureQueue, setCaptureQueue] = useState<("selfie" | "workplace")[]>([]);
+  const [pendingSelfieKey, setPendingSelfieKey] = useState<string | undefined>(undefined);
+  const [pendingWorkplaceKey, setPendingWorkplaceKey] = useState<string | undefined>(undefined);
+  const [attachWorkplacePhoto, setAttachWorkplacePhoto] = useState(false);
   const [photoLoadingId, setPhotoLoadingId] = useState<string | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -743,13 +758,16 @@ function AttendanceTab({
     try {
       const [attendanceRes, settingsRes] = await Promise.all([
         apiGet<{ records: AttendanceRecord[]; canViewAll: boolean }>(`${base(slug)}/attendance`),
-        apiGet<{ selfieClockInRequired: boolean; objectStorageConfigured: boolean }>(
-          `${base(slug)}/attendance/settings`,
-        ),
+        apiGet<{
+          selfieClockInRequired: boolean;
+          workplacePhotoRequired: boolean;
+          objectStorageConfigured: boolean;
+        }>(`${base(slug)}/attendance/settings`),
       ]);
       setRecords(attendanceRes.records);
       setCanViewAll(attendanceRes.canViewAll);
       setSelfieRequired(settingsRes.selfieClockInRequired);
+      setWorkplacePhotoRequired(settingsRes.workplacePhotoRequired);
       setObjectStorageConfigured(settingsRes.objectStorageConfigured);
       setError(null);
     } catch (err) {
@@ -774,6 +792,23 @@ function AttendanceTab({
     }
   }
 
+  // P2 gap-audit fix — same shape as toggleSelfieRequired above, for the
+  // separate workplace-photo requirement.
+  async function toggleWorkplacePhotoRequired(next: boolean) {
+    setSettingsBusy(true);
+    setSettingsError(null);
+    try {
+      const res = await apiPatch<{ workplacePhotoRequired: boolean }>(`${base(slug)}/attendance/settings`, {
+        workplacePhotoRequired: next,
+      });
+      setWorkplacePhotoRequired(res.workplacePhotoRequired);
+    } catch (err) {
+      setSettingsError(err instanceof ApiError ? err.message : "Could not update this setting.");
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
+
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -784,14 +819,16 @@ function AttendanceTab({
   // open one isn't necessarily mine. Both buttons are always shown; the
   // server enforces "already clocked in" / "not clocked in" and the alert
   // on failure tells the person which state they're actually in.
-  async function submitClock(kind: "clock_in" | "clock_out", photoObjectKey?: string) {
+  async function submitClock(kind: "clock_in" | "clock_out", photoObjectKey?: string, workplacePhotoObjectKey?: string) {
     setBusy(true);
     try {
       await apiPost(`${base(slug)}/attendance/${kind === "clock_in" ? "clock-in" : "clock-out"}`, {
         note: note || undefined,
         photoObjectKey,
+        workplacePhotoObjectKey,
       });
       setNote("");
+      setAttachWorkplacePhoto(false);
       await load();
     } catch (err) {
       alert(err instanceof ApiError ? err.message : `Could not ${kind === "clock_in" ? "clock in" : "clock out"}.`);
@@ -800,15 +837,59 @@ function AttendanceTab({
     }
   }
 
+  // P2 gap-audit fix — builds the queue of photo(s) to capture before this
+  // clock-in/out can submit: the selfie when the restaurant requires it,
+  // then the separate workplace photo when the restaurant requires THAT
+  // (independent toggle) or the staff member opted into attaching one
+  // voluntarily. Captures run one at a time (see the modal rendering
+  // below) so at most one camera stream is ever open.
   function startClock(kind: "clock_in" | "clock_out") {
-    if (selfieRequired) {
-      setSelfieModalKind(kind);
+    const queue: ("selfie" | "workplace")[] = [];
+    if (selfieRequired) queue.push("selfie");
+    if (workplacePhotoRequired || attachWorkplacePhoto) queue.push("workplace");
+
+    if (queue.length === 0) {
+      submitClock(kind);
       return;
     }
-    submitClock(kind);
+    setPendingClockKind(kind);
+    setPendingSelfieKey(undefined);
+    setPendingWorkplaceKey(undefined);
+    setCaptureQueue(queue);
   }
 
-  async function viewPhoto(recordId: string, kind: "clock_in" | "clock_out") {
+  // Called when one capture in the queue finishes — either submits (this
+  // was the last one needed) or advances to the next.
+  function handleCaptureDone(purpose: "selfie" | "workplace", photoObjectKey: string) {
+    const selfieKey = purpose === "selfie" ? photoObjectKey : pendingSelfieKey;
+    const workplaceKey = purpose === "workplace" ? photoObjectKey : pendingWorkplaceKey;
+    const remaining = captureQueue.slice(1);
+
+    if (remaining.length === 0) {
+      const kind = pendingClockKind;
+      setCaptureQueue([]);
+      setPendingClockKind(null);
+      setPendingSelfieKey(undefined);
+      setPendingWorkplaceKey(undefined);
+      if (kind) submitClock(kind, selfieKey, workplaceKey);
+      return;
+    }
+    setPendingSelfieKey(selfieKey);
+    setPendingWorkplaceKey(workplaceKey);
+    setCaptureQueue(remaining);
+  }
+
+  function cancelCapture() {
+    setCaptureQueue([]);
+    setPendingClockKind(null);
+    setPendingSelfieKey(undefined);
+    setPendingWorkplaceKey(undefined);
+  }
+
+  async function viewPhoto(
+    recordId: string,
+    kind: "clock_in" | "clock_out" | "clock_in_workplace" | "clock_out_workplace",
+  ) {
     setPhotoLoadingId(`${recordId}:${kind}`);
     try {
       const res = await apiGet<{ url: string }>(`${base(slug)}/attendance/${recordId}/photo?kind=${kind}`);
@@ -836,6 +917,25 @@ function AttendanceTab({
             This restaurant requires a selfie to clock in and out.
           </p>
         )}
+        {workplacePhotoRequired && (
+          <p className="mb-2 text-xs text-neutral-500">
+            This restaurant also requires a workplace photo to clock in and out.
+          </p>
+        )}
+        {/* P2 gap-audit fix — voluntary opt-in when the restaurant hasn't
+            made the workplace photo mandatory; hidden (and irrelevant)
+            once it already is, or when this deployment has no photo
+            storage to upload it to. */}
+        {!workplacePhotoRequired && objectStorageConfigured && (
+          <label className="mb-2 flex items-center gap-2 text-xs text-neutral-600">
+            <input
+              type="checkbox"
+              checked={attachWorkplacePhoto}
+              onChange={(e) => setAttachWorkplacePhoto(e.target.checked)}
+            />
+            Also attach a workplace photo
+          </label>
+        )}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             value={note}
@@ -856,15 +956,16 @@ function AttendanceTab({
 
       {canManageAttendanceSettings && (
         <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-          <p className="mb-1 text-sm font-semibold text-neutral-900">Selfie-verified attendance</p>
+          <p className="mb-1 text-sm font-semibold text-neutral-900">Photo-verified attendance</p>
           {objectStorageConfigured ? (
             <>
               <p className="mb-2 text-xs text-neutral-500">
-                When on, every staff member (including you) must take a selfie to clock in and out. Staff
-                are shown a consent notice the first time this applies to them.
+                Two separate, independent checks: a selfie proves WHO is clocking in; a workplace photo
+                proves they&apos;re actually AT the restaurant. Turn on either, both, or neither. Staff are
+                shown a consent notice the first time either applies to them.
               </p>
               {settingsError && <p className="mb-2 text-sm text-red-600">{settingsError}</p>}
-              <label className="flex items-center gap-2 text-sm text-neutral-700">
+              <label className="mb-1 flex items-center gap-2 text-sm text-neutral-700">
                 <input
                   type="checkbox"
                   checked={selfieRequired}
@@ -872,6 +973,15 @@ function AttendanceTab({
                   onChange={(e) => toggleSelfieRequired(e.target.checked)}
                 />
                 Require a selfie to clock in/out
+              </label>
+              <label className="flex items-center gap-2 text-sm text-neutral-700">
+                <input
+                  type="checkbox"
+                  checked={workplacePhotoRequired}
+                  disabled={settingsBusy}
+                  onChange={(e) => toggleWorkplacePhotoRequired(e.target.checked)}
+                />
+                Require a workplace photo to clock in/out
               </label>
             </>
           ) : (
@@ -882,16 +992,25 @@ function AttendanceTab({
         </div>
       )}
 
-      {selfieModalKind && (
+      {/* P2 gap-audit fix — one capture modal at a time, driven by
+          captureQueue; SelfieClockModal is reused unmodified, just
+          parameterized by `purpose`. */}
+      {pendingClockKind && captureQueue[0] === "selfie" && (
         <SelfieClockModal
           slug={slug}
-          kind={selfieModalKind}
-          onDone={(photoObjectKey) => {
-            const kind = selfieModalKind;
-            setSelfieModalKind(null);
-            submitClock(kind, photoObjectKey);
-          }}
-          onClose={() => setSelfieModalKind(null)}
+          kind={pendingClockKind}
+          purpose="selfie"
+          onDone={(photoObjectKey) => handleCaptureDone("selfie", photoObjectKey)}
+          onClose={cancelCapture}
+        />
+      )}
+      {pendingClockKind && captureQueue[0] === "workplace" && (
+        <SelfieClockModal
+          slug={slug}
+          kind={pendingClockKind}
+          purpose="workplace"
+          onDone={(photoObjectKey) => handleCaptureDone("workplace", photoObjectKey)}
+          onClose={cancelCapture}
         />
       )}
 
@@ -951,6 +1070,7 @@ function AttendanceTab({
                         disabled={photoLoadingId === `${r.id}:clock_in`}
                         onClick={() => viewPhoto(r.id, "clock_in")}
                         className="text-orange-700 underline hover:text-orange-800"
+                        title="Selfie at clock-in"
                       >
                         In
                       </button>
@@ -961,11 +1081,38 @@ function AttendanceTab({
                         disabled={photoLoadingId === `${r.id}:clock_out`}
                         onClick={() => viewPhoto(r.id, "clock_out")}
                         className="text-orange-700 underline hover:text-orange-800"
+                        title="Selfie at clock-out"
                       >
                         Out
                       </button>
                     )}
-                    {!r.hasClockInPhoto && !r.hasClockOutPhoto && <span className="text-neutral-300">—</span>}
+                    {/* P2 gap-audit fix — the separate workplace photo, clearly distinguished by label from the selfie above. */}
+                    {r.hasClockInWorkplacePhoto && (
+                      <button
+                        type="button"
+                        disabled={photoLoadingId === `${r.id}:clock_in_workplace`}
+                        onClick={() => viewPhoto(r.id, "clock_in_workplace")}
+                        className="text-teal-700 underline hover:text-teal-800"
+                        title="Workplace photo at clock-in"
+                      >
+                        Workplace (in)
+                      </button>
+                    )}
+                    {r.hasClockOutWorkplacePhoto && (
+                      <button
+                        type="button"
+                        disabled={photoLoadingId === `${r.id}:clock_out_workplace`}
+                        onClick={() => viewPhoto(r.id, "clock_out_workplace")}
+                        className="text-teal-700 underline hover:text-teal-800"
+                        title="Workplace photo at clock-out"
+                      >
+                        Workplace (out)
+                      </button>
+                    )}
+                    {!r.hasClockInPhoto &&
+                      !r.hasClockOutPhoto &&
+                      !r.hasClockInWorkplacePhoto &&
+                      !r.hasClockOutWorkplacePhoto && <span className="text-neutral-300">—</span>}
                   </div>
                 </td>
                 {canViewAll && (

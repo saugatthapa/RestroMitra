@@ -7,14 +7,20 @@ import { z } from "zod";
 // this schema is.
 const photoObjectKeySchema = z.string().trim().min(1).max(500);
 
+// P2 gap-audit fix — workplacePhotoObjectKey is the SEPARATE, always-
+// optional workplace/surroundings photo (never the staff member's selfie,
+// see schema.ts's clockInWorkplacePhotoObjectKey comment); it goes through
+// the exact same object-storage key bounds as photoObjectKey above.
 export const clockInSchema = z.object({
   note: z.string().trim().max(300).optional().or(z.literal("")),
   photoObjectKey: photoObjectKeySchema.optional(),
+  workplacePhotoObjectKey: photoObjectKeySchema.optional(),
 });
 
 export const clockOutSchema = z.object({
   note: z.string().trim().max(300).optional().or(z.literal("")),
   photoObjectKey: photoObjectKeySchema.optional(),
+  workplacePhotoObjectKey: photoObjectKeySchema.optional(),
 });
 
 // Phase 13 (Attendance overhaul, Track B) — a manual correction to a

@@ -14,17 +14,22 @@
  *   storage — the same "resolve, don't trust" pattern this codebase uses
  *   for client-supplied ids everywhere else (see e.g. staff/route.ts's
  *   branchId handling).
- * - kind is "clock_in" | "clock_out", matching the two DB columns it can
- *   end up written into.
+ * - kind is "clock_in" | "clock_out" | "clock_in_workplace" |
+ *   "clock_out_workplace", matching the FOUR DB columns it can end up
+ *   written into (P2 gap-audit fix added the two "_workplace" kinds,
+ *   alongside the original selfie-only pair, for the separate
+ *   workplace/surroundings photo — same key shape, just one more segment
+ *   value, so the upload-URL route, the clock-in/out routes, and this
+ *   parser all keep working unmodified for both photo types).
  * - token is a random opaque id (minted by the upload-URL route, never
  *   client-chosen) so a key can't be guessed or enumerated even by someone
  *   who knows a restaurantId/userId pair.
  */
 
-export type AttendancePhotoKind = "clock_in" | "clock_out";
+export type AttendancePhotoKind = "clock_in" | "clock_out" | "clock_in_workplace" | "clock_out_workplace";
 
 const KEY_PATTERN =
-  /^attendance-photos\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/(clock_in|clock_out)\/[0-9T:.Z-]+-([A-Za-z0-9_-]{16,64})\.jpg$/;
+  /^attendance-photos\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/(clock_in_workplace|clock_out_workplace|clock_in|clock_out)\/[0-9T:.Z-]+-([A-Za-z0-9_-]{16,64})\.jpg$/;
 
 export function buildAttendancePhotoKey(params: {
   restaurantId: string;

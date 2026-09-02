@@ -50,6 +50,16 @@ export async function POST(
       kind: "clock_in",
       photoObjectKey: parsed.data.photoObjectKey,
     });
+    // P2 gap-audit fix — the separate, always-optional workplace photo;
+    // same resolver, gated by workplacePhotoRequired instead. Also runs
+    // before the open-shift check for the same "no side effect to undo"
+    // reason as the selfie resolve above.
+    const clockInWorkplacePhotoObjectKey = await resolveAttendancePhotoForClock({
+      restaurantId,
+      userId: session.user.id,
+      kind: "clock_in_workplace",
+      photoObjectKey: parsed.data.workplacePhotoObjectKey,
+    });
 
     const open = await db
       .select({ id: attendanceRecords.id })
@@ -82,7 +92,14 @@ export async function POST(
           branchId,
           note: parsed.data.note || null,
           clockInPhotoObjectKey,
-          // Phase 13 — see initialAttendanceStatus's own comment.
+          clockInWorkplacePhotoObjectKey,
+          // Phase 13 — see initialAttendanceStatus's own comment. Only the
+          // selfie's presence drives review status, unchanged by this
+          // P2 fix — the workplace photo is additional evidence attached
+          // to the record for a manager to look at, not itself a trigger
+          // for the needs_review workflow (see initialAttendanceStatus's
+          // own doc comment on what it verifies: WHO clocked in, which
+          // the workplace photo doesn't speak to).
           status: initialAttendanceStatus(clockInPhotoObjectKey !== null),
         })
         .returning();

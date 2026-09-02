@@ -4,6 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost, ApiError } from "@/lib/api-client";
 
 type Kind = "clock_in" | "clock_out";
+// P2 gap-audit fix — "selfie" (the original, staff-identity photo) or
+// "workplace" (the new, separate surroundings photo proving they're
+// actually AT the restaurant). Deliberately NOT a second, near-duplicate
+// modal component: every step here (consent → camera → capture → confirm
+// → upload) is identical for both, so this same component is reused,
+// parameterized by `purpose`, rather than forking the capture logic.
+type Purpose = "selfie" | "workplace";
 
 type ConsentStatus = {
   hasCurrentConsent: boolean;
@@ -22,6 +29,11 @@ type UploadUrlResponse = { uploadUrl: string; key: string; contentType: string }
  * verified object key back to the caller, which then calls clock-in/out
  * with it (see AttendanceTab in StaffBoard.tsx).
  *
+ * P2 gap-audit fix — also reused, unmodified in structure, for the
+ * separate workplace/surroundings photo via the `purpose` prop: same
+ * consent → camera → capture → confirm → upload steps, just a different
+ * object-storage kind, camera facing hint, and copy.
+ *
  * The upload step PUTs straight to the presigned URL with the browser's
  * own fetch — NOT through this app's api-client (that's for this app's
  * own JSON API, not a cross-origin bucket PUT). This means the bucket
@@ -34,11 +46,14 @@ type UploadUrlResponse = { uploadUrl: string; key: string; contentType: string }
 export function SelfieClockModal({
   slug,
   kind,
+  purpose = "selfie",
   onDone,
   onClose,
 }: {
   slug: string;
   kind: Kind;
+  /** P2 gap-audit fix — which of the two distinct photos this capture is for. Defaults to "selfie" so every pre-existing call site keeps behaving exactly as before. */
+  purpose?: Purpose;
   onDone: (photoObjectKey: string) => void;
   onClose: () => void;
 }) {
@@ -82,8 +97,13 @@ export function SelfieClockModal({
     let cancelled = false;
     (async () => {
       try {
+        // P2 gap-audit fix — a workplace photo wants the REAR camera (the
+        // surroundings, not the staff member's own face); "environment" is
+        // only a hint a device may ignore (e.g. most laptops have no rear
+        // camera at all), so this degrades gracefully to whatever camera
+        // is actually available either way.
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" },
+          video: { facingMode: purpose === "workplace" ? "environment" : "user" },
           audio: false,
         });
         if (cancelled) {
@@ -106,6 +126,11 @@ export function SelfieClockModal({
     return () => {
       cancelled = true;
     };
+    // purpose is a prop that doesn't change over the modal's lifetime (the
+    // caller mounts a fresh modal per purpose); omitted so a hypothetical
+    // parent re-render doesn't tear down and restart an in-progress camera
+    // stream.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   // Always stop the camera stream when it's no longer needed (leaving
@@ -180,9 +205,14 @@ export function SelfieClockModal({
     setStep("uploading");
     setError(null);
     try {
+      // P2 gap-audit fix — the workplace photo mints its key under a
+      // distinct "..._workplace" kind (see attendance-photo-key.ts) so it
+      // can never collide with, or be confused for, the selfie key for
+      // the same shift event.
+      const uploadKind = purpose === "workplace" ? (`${kind}_workplace` as const) : kind;
       const { uploadUrl, key, contentType } = await apiPost<UploadUrlResponse>(
         `${base}/attendance/photo-upload-url`,
-        { kind },
+        { kind: uploadKind },
       );
       const putRes = await fetch(uploadUrl, {
         method: "PUT",
@@ -208,7 +238,13 @@ export function SelfieClockModal({
       <div className="w-full max-w-sm rounded-2xl bg-white p-5">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-neutral-900">
-            {kind === "clock_in" ? "Selfie to clock in" : "Selfie to clock out"}
+            {purpose === "workplace"
+              ? kind === "clock_in"
+                ? "Workplace photo to clock in"
+                : "Workplace photo to clock out"
+              : kind === "clock_in"
+                ? "Selfie to clock in"
+                : "Selfie to clock out"}
           </h3>
           <button type="button" onClick={onClose} className="text-sm text-neutral-400 hover:text-neutral-600">
             Cancel
@@ -260,6 +296,11 @@ export function SelfieClockModal({
               className="mb-3 aspect-square w-full rounded-lg bg-neutral-900 object-cover"
             />
             <canvas ref={canvasRef} className="hidden" />
+            {purpose === "workplace" && (
+              <p className="mb-2 text-xs text-neutral-500">
+                Point the camera at your surroundings — this photo doesn&apos;t need to show your face.
+              </p>
+            )}
             <button type="button" onClick={capture} className="btn-primary w-full">
               Take photo
             </button>
@@ -272,7 +313,7 @@ export function SelfieClockModal({
             {/* eslint-disable-next-line @next/next/no-img-element -- a transient in-memory object URL, not a servable asset next/image can optimize */}
             <img
               src={capturedPreviewUrl}
-              alt="Captured selfie preview"
+              alt={purpose === "workplace" ? "Captured workplace photo preview" : "Captured selfie preview"}
               className="mb-3 aspect-square w-full rounded-lg object-cover"
             />
             <div className="flex gap-2">

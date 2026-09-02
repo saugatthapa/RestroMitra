@@ -58,7 +58,10 @@ describe.skipIf(!hasDb)("attendance-photos-db (integration)", () => {
   });
 
   afterEach(async () => {
-    await db.update(schema.restaurants).set({ selfieClockInRequired: false }).where(eq(schema.restaurants.id, restaurantId));
+    await db
+      .update(schema.restaurants)
+      .set({ selfieClockInRequired: false, workplacePhotoRequired: false })
+      .where(eq(schema.restaurants.id, restaurantId));
   });
 
   describe("consent ledger", () => {
@@ -202,6 +205,164 @@ describe.skipIf(!hasDb)("attendance-photos-db (integration)", () => {
     });
   });
 
+  // P2 gap-audit fix — the separate, always-optional workplace/surroundings
+  // photo. resolveAttendancePhotoForClock is the exact same shared function
+  // exercised above for the selfie kinds, just called with a
+  // "clock_in_workplace"/"clock_out_workplace" kind and gated by
+  // workplacePhotoRequired instead of selfieClockInRequired — these mirror
+  // the selfie describe block's coverage for that other branch.
+  describe("resolveAttendancePhotoForClock — workplace photo", () => {
+    it("returns null when no key is sent and workplacePhotoRequired is off, independent of selfieClockInRequired", async () => {
+      const result = await photosDb.resolveAttendancePhotoForClock({
+        restaurantId,
+        userId,
+        kind: "clock_in_workplace",
+        photoObjectKey: undefined,
+      });
+      expect(result).toBeNull();
+    });
+
+    it("throws when workplacePhotoRequired is on and no key was sent, even though selfieClockInRequired is off", async () => {
+      await db
+        .update(schema.restaurants)
+        .set({ workplacePhotoRequired: true })
+        .where(eq(schema.restaurants.id, restaurantId));
+
+      await expect(
+        photosDb.resolveAttendancePhotoForClock({
+          restaurantId,
+          userId,
+          kind: "clock_in_workplace",
+          photoObjectKey: undefined,
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it("a selfie key is rejected for a workplace-photo request, even for the same restaurant/user/clock event", async () => {
+      await photosDb.recordConsent({ userId, restaurantId, ipAddress: null });
+      const selfieKey = photoKey.buildAttendancePhotoKey({
+        restaurantId,
+        userId,
+        kind: "clock_in",
+        token: "selfie-not-workplace1",
+      });
+
+      await expect(
+        photosDb.resolveAttendancePhotoForClock({
+          restaurantId,
+          userId,
+          kind: "clock_in_workplace",
+          photoObjectKey: selfieKey,
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it("returns the key when it's well-formed, consented, AND actually exists in storage — the workplace-photo happy path", async () => {
+      await photosDb.recordConsent({ userId, restaurantId, ipAddress: null });
+      const key = photoKey.buildAttendancePhotoKey({
+        restaurantId,
+        userId,
+        kind: "clock_in_workplace",
+        token: "real-workplace-token1",
+      });
+      const { url } = await storage.createAttendancePhotoUploadUrl(key);
+      const putRes = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "image/jpeg" },
+        body: Buffer.from("real test workplace bytes"),
+      });
+      expect(putRes.ok).toBe(true);
+
+      const result = await photosDb.resolveAttendancePhotoForClock({
+        restaurantId,
+        userId,
+        kind: "clock_in_workplace",
+        photoObjectKey: key,
+      });
+      expect(result).toBe(key);
+
+      await storage.deleteAttendancePhoto(key);
+    });
+  });
+
+  // P2 gap-audit fix — the actual attendance_records row: proves a
+  // clock-in can carry BOTH photos at once, and that omitting the
+  // workplace photo (the pre-existing, selfie-only shape) still persists
+  // exactly as it did before this column existed.
+  describe("attendance_records: selfie + workplace photo columns", () => {
+    it("a clock-in with BOTH a selfie and a workplace photo key persists both, independently", async () => {
+      const selfieKey = photoKey.buildAttendancePhotoKey({
+        restaurantId,
+        userId,
+        kind: "clock_in",
+        token: "both-photos-selfie1234",
+      });
+      const workplaceKey = photoKey.buildAttendancePhotoKey({
+        restaurantId,
+        userId,
+        kind: "clock_in_workplace",
+        token: "both-photos-workplace1",
+      });
+
+      const [record] = await db
+        .insert(schema.attendanceRecords)
+        .values({
+          restaurantId,
+          userId,
+          clockInPhotoObjectKey: selfieKey,
+          clockInWorkplacePhotoObjectKey: workplaceKey,
+          clockOutAt: new Date(), // closed shift — keeps this test independent of the one-open-shift-per-user constraint
+        })
+        .returning();
+
+      expect(record.clockInPhotoObjectKey).toBe(selfieKey);
+      expect(record.clockInWorkplacePhotoObjectKey).toBe(workplaceKey);
+
+      await db.delete(schema.attendanceRecords).where(eq(schema.attendanceRecords.id, record.id));
+    });
+
+    it("a clock-in with ONLY a selfie (workplace photo omitted) still works exactly as before — the column is null, nothing else breaks", async () => {
+      const selfieKey = photoKey.buildAttendancePhotoKey({
+        restaurantId,
+        userId,
+        kind: "clock_in",
+        token: "selfie-only-legacy1234",
+      });
+
+      const [record] = await db
+        .insert(schema.attendanceRecords)
+        .values({
+          restaurantId,
+          userId,
+          clockInPhotoObjectKey: selfieKey,
+          clockOutAt: new Date(),
+        })
+        .returning();
+
+      expect(record.clockInPhotoObjectKey).toBe(selfieKey);
+      expect(record.clockInWorkplacePhotoObjectKey).toBeNull();
+      expect(record.clockOutWorkplacePhotoObjectKey).toBeNull();
+
+      await db.delete(schema.attendanceRecords).where(eq(schema.attendanceRecords.id, record.id));
+    });
+
+    it("a clock-in with NEITHER photo (the original, pre-Phase-12 shape) still works — both selfie and workplace columns are null", async () => {
+      const [record] = await db
+        .insert(schema.attendanceRecords)
+        .values({
+          restaurantId,
+          userId,
+          clockOutAt: new Date(),
+        })
+        .returning();
+
+      expect(record.clockInPhotoObjectKey).toBeNull();
+      expect(record.clockInWorkplacePhotoObjectKey).toBeNull();
+
+      await db.delete(schema.attendanceRecords).where(eq(schema.attendanceRecords.id, record.id));
+    });
+  });
+
   describe("purgeExpiredAttendancePhotos", () => {
     // purgeExpiredAttendancePhotos deliberately queries attendance_records
     // across ALL restaurants (it's a platform-wide retention job, not
@@ -269,6 +430,46 @@ describe.skipIf(!hasDb)("attendance-photos-db (integration)", () => {
         .from(schema.attendanceRecords)
         .where(eq(schema.attendanceRecords.id, recentRecord.id));
       expect(recentAfter.clockInPhotoObjectKey).toBe(recentKey); // untouched — not old enough
+    });
+
+    // P2 gap-audit fix — the workplace photo columns must be swept by the
+    // same retention job as the selfie columns, on their own (a record
+    // with ONLY a workplace photo and no selfie at all — e.g. a
+    // restaurant with workplacePhotoRequired on but selfieClockInRequired
+    // off) rather than only when riding along with a selfie.
+    it("also purges a record whose ONLY photo is the workplace one, with no selfie at all", async () => {
+      const oldWorkplaceKey = photoKey.buildAttendancePhotoKey({
+        restaurantId,
+        userId,
+        kind: "clock_in_workplace",
+        token: "old-workplace-token12",
+      });
+      const { url } = await storage.createAttendancePhotoUploadUrl(oldWorkplaceKey);
+      await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "image/jpeg" },
+        body: Buffer.from("old workplace photo"),
+      });
+
+      const veryOld = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000);
+      const [oldRecord] = await db
+        .insert(schema.attendanceRecords)
+        .values({
+          restaurantId,
+          userId,
+          clockInAt: veryOld,
+          clockOutAt: new Date(veryOld.getTime() + 3600_000),
+          clockInWorkplacePhotoObjectKey: oldWorkplaceKey,
+        })
+        .returning();
+
+      await photosDb.purgeExpiredAttendancePhotos(90);
+
+      const [after] = await db
+        .select()
+        .from(schema.attendanceRecords)
+        .where(eq(schema.attendanceRecords.id, oldRecord.id));
+      expect(after.clockInWorkplacePhotoObjectKey).toBeNull();
     });
   });
 });

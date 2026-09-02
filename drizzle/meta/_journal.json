@@ -547,6 +547,13 @@
       "when": 1788352330115,
       "tag": "0077_attendance_day_status_persistence",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1788352768561,
+      "tag": "0078_attendance_workplace_photo",
+      "breakpoints": true
     }
   ]
 }

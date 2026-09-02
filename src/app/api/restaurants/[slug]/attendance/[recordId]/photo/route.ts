@@ -42,8 +42,15 @@ export async function GET(
 
     const url = new URL(request.url);
     const kind = url.searchParams.get("kind");
-    if (kind !== "clock_in" && kind !== "clock_out") {
-      throw new HttpError("kind must be clock_in or clock_out.", 400);
+    // P2 gap-audit fix — the two "_workplace" kinds view the separate
+    // workplace/surroundings photo through this same signed-URL route.
+    if (
+      kind !== "clock_in" &&
+      kind !== "clock_out" &&
+      kind !== "clock_in_workplace" &&
+      kind !== "clock_out_workplace"
+    ) {
+      throw new HttpError("kind must be clock_in, clock_out, clock_in_workplace, or clock_out_workplace.", 400);
     }
 
     const [record] = await db
@@ -51,6 +58,8 @@ export async function GET(
         userId: attendanceRecords.userId,
         clockInPhotoObjectKey: attendanceRecords.clockInPhotoObjectKey,
         clockOutPhotoObjectKey: attendanceRecords.clockOutPhotoObjectKey,
+        clockInWorkplacePhotoObjectKey: attendanceRecords.clockInWorkplacePhotoObjectKey,
+        clockOutWorkplacePhotoObjectKey: attendanceRecords.clockOutWorkplacePhotoObjectKey,
       })
       .from(attendanceRecords)
       .where(and(eq(attendanceRecords.id, recordId), eq(attendanceRecords.restaurantId, restaurantId)))
@@ -66,7 +75,13 @@ export async function GET(
       }
     }
 
-    const key = kind === "clock_in" ? record.clockInPhotoObjectKey : record.clockOutPhotoObjectKey;
+    const keyByKind = {
+      clock_in: record.clockInPhotoObjectKey,
+      clock_out: record.clockOutPhotoObjectKey,
+      clock_in_workplace: record.clockInWorkplacePhotoObjectKey,
+      clock_out_workplace: record.clockOutWorkplacePhotoObjectKey,
+    } as const;
+    const key = keyByKind[kind];
     if (!key) {
       throw new HttpError("No photo was captured for this shift event.", 404);
     }

@@ -33,13 +33,18 @@ export async function GET(
     const { restaurantId } = await resolveRestaurantContext(slug);
 
     const [row] = await db
-      .select({ selfieClockInRequired: restaurants.selfieClockInRequired })
+      .select({
+        selfieClockInRequired: restaurants.selfieClockInRequired,
+        workplacePhotoRequired: restaurants.workplacePhotoRequired,
+      })
       .from(restaurants)
       .where(eq(restaurants.id, restaurantId))
       .limit(1);
 
     return NextResponse.json({
       selfieClockInRequired: row?.selfieClockInRequired ?? false,
+      // P2 gap-audit fix — the separate workplace-photo requirement toggle.
+      workplacePhotoRequired: row?.workplacePhotoRequired ?? false,
       objectStorageConfigured: isObjectStorageConfigured(),
     });
   } catch (err) {
@@ -78,18 +83,39 @@ export async function PATCH(
     const parsed = await parseJsonBody(request, updateAttendanceSettingsSchema);
     if (!parsed.ok) return parsed.response;
 
-    if (parsed.data.selfieClockInRequired && !isObjectStorageConfigured()) {
+    // Either toggle turning ON needs somewhere to actually store the
+    // resulting photos — same check, applied to whichever field(s) this
+    // call actually provided.
+    if (
+      (parsed.data.selfieClockInRequired || parsed.data.workplacePhotoRequired) &&
+      !isObjectStorageConfigured()
+    ) {
       return NextResponse.json(
-        { error: "Selfie-verified attendance isn't available on this deployment yet — object storage isn't configured." },
+        { error: "Photo-verified attendance isn't available on this deployment yet — object storage isn't configured." },
         { status: 400 },
       );
     }
 
+    // P2 gap-audit fix — a partial update: only the field(s) this call
+    // actually sent are touched, so a PATCH that sets only
+    // workplacePhotoRequired can't accidentally reset selfieClockInRequired
+    // (or vice versa) back to some default.
+    const updates: Partial<typeof restaurants.$inferInsert> = { updatedAt: new Date() };
+    if (parsed.data.selfieClockInRequired !== undefined) {
+      updates.selfieClockInRequired = parsed.data.selfieClockInRequired;
+    }
+    if (parsed.data.workplacePhotoRequired !== undefined) {
+      updates.workplacePhotoRequired = parsed.data.workplacePhotoRequired;
+    }
+
     const [updated] = await db
       .update(restaurants)
-      .set({ selfieClockInRequired: parsed.data.selfieClockInRequired, updatedAt: new Date() })
+      .set(updates)
       .where(eq(restaurants.id, restaurantId))
-      .returning({ selfieClockInRequired: restaurants.selfieClockInRequired });
+      .returning({
+        selfieClockInRequired: restaurants.selfieClockInRequired,
+        workplacePhotoRequired: restaurants.workplacePhotoRequired,
+      });
 
     await recordAuditLog({
       restaurantId,
@@ -98,11 +124,15 @@ export async function PATCH(
       resourceType: "restaurant",
       resourceId: restaurantId,
       ipAddress: getClientIp(request),
-      metadata: { selfieClockInRequired: parsed.data.selfieClockInRequired },
+      metadata: {
+        selfieClockInRequired: parsed.data.selfieClockInRequired,
+        workplacePhotoRequired: parsed.data.workplacePhotoRequired,
+      },
     });
 
     return NextResponse.json({
       selfieClockInRequired: updated?.selfieClockInRequired ?? false,
+      workplacePhotoRequired: updated?.workplacePhotoRequired ?? false,
       objectStorageConfigured: isObjectStorageConfigured(),
     });
   } catch (err) {

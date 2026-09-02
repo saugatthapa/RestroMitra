@@ -480,6 +480,17 @@ export const restaurants = pgTable(
     // when storage is actually available, but the column exists either way
     // so flipping storage on/off later doesn't need a migration.
     selfieClockInRequired: boolean("selfie_clock_in_required").notNull().default(false),
+    // P2 gap-audit fix (workplace photo) — same "owner opt-in, off by
+    // default" shape as selfieClockInRequired directly above, applied to
+    // the SEPARATE, optional workplace/surroundings photo instead of the
+    // selfie: when true, the clock-in/out routes require a
+    // clockIn/OutWorkplacePhotoObjectKey in addition to whatever the
+    // selfie toggle already demands. Independent of selfieClockInRequired
+    // — a restaurant can require one, both, or neither — and independent
+    // of object storage configuration for the same "column exists either
+    // way, the Settings UI only offers it when storage is available"
+    // reason.
+    workplacePhotoRequired: boolean("workplace_photo_required").notNull().default(false),
     // P2 gap audit — "negative stock is always allowed by deliberate,
     // disclosed design, with no restaurant-level toggle to disallow it."
     // Default TRUE preserves that original design (see PHASE_7_NOTES.md
@@ -3045,6 +3056,20 @@ export const attendanceRecords = pgTable(
     // string and have it accepted as proof a photo was taken.
     clockInPhotoObjectKey: varchar("clock_in_photo_object_key", { length: 500 }),
     clockOutPhotoObjectKey: varchar("clock_out_photo_object_key", { length: 500 }),
+    // P2 gap-audit fix — a SECOND, distinct photo per shift event: not a
+    // selfie of the staff member (who's clocking in), but a photo of the
+    // workplace/surroundings itself (evidence they're actually AT the
+    // restaurant). Same object-storage-key-not-URL shape and same
+    // verify-before-trust handling as the selfie columns above (see
+    // resolveAttendancePhotoForClock in attendance-photos-db.ts, which
+    // both selfie and workplace kinds share) — just a different, entirely
+    // independent optional capture. Always nullable/optional regardless of
+    // workplacePhotoRequired below: even a restaurant that turns the
+    // requirement on only enforces it going forward, never retroactively,
+    // so old rows and rows from restaurants that never turn it on stay
+    // null forever.
+    clockInWorkplacePhotoObjectKey: varchar("clock_in_workplace_photo_object_key", { length: 500 }),
+    clockOutWorkplacePhotoObjectKey: varchar("clock_out_workplace_photo_object_key", { length: 500 }),
     // Phase 13 — see attendance.ts's initialAttendanceStatus/
     // attendanceStatusAfterClockOut for how this is actually computed;
     // the DB default below is only a safety net (every write path sets it

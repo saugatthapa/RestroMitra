@@ -51,6 +51,9 @@ export async function GET(
         note: attendanceRecords.note,
         clockInPhotoObjectKey: attendanceRecords.clockInPhotoObjectKey,
         clockOutPhotoObjectKey: attendanceRecords.clockOutPhotoObjectKey,
+        // P2 gap-audit fix — the separate workplace/surroundings photo.
+        clockInWorkplacePhotoObjectKey: attendanceRecords.clockInWorkplacePhotoObjectKey,
+        clockOutWorkplacePhotoObjectKey: attendanceRecords.clockOutWorkplacePhotoObjectKey,
         status: attendanceRecords.status,
         reviewedAt: attendanceRecords.reviewedAt,
         reviewNote: attendanceRecords.reviewNote,
@@ -78,8 +81,14 @@ export async function GET(
       ...r,
       hasClockInPhoto: r.clockInPhotoObjectKey !== null,
       hasClockOutPhoto: r.clockOutPhotoObjectKey !== null,
+      // P2 gap-audit fix — same "boolean only, key stays server-side"
+      // treatment as the selfie photos above.
+      hasClockInWorkplacePhoto: r.clockInWorkplacePhotoObjectKey !== null,
+      hasClockOutWorkplacePhoto: r.clockOutWorkplacePhotoObjectKey !== null,
       clockInPhotoObjectKey: undefined,
       clockOutPhotoObjectKey: undefined,
+      clockInWorkplacePhotoObjectKey: undefined,
+      clockOutWorkplacePhotoObjectKey: undefined,
     }));
 
     return NextResponse.json({ records, canViewAll });

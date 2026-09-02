@@ -49,4 +49,43 @@ describe("attendance-photo-key", () => {
     expect(isAttendancePhotoKeyFor(keyA, { restaurantId, userId, kind: "clock_in" })).toBe(true);
     expect(isAttendancePhotoKeyFor(keyB, { restaurantId, userId, kind: "clock_in" })).toBe(true);
   });
+
+  // P2 gap-audit fix — the two "_workplace" kinds for the separate
+  // workplace/surroundings photo share this exact same parser/builder;
+  // these confirm they're validated as their own distinct kind rather
+  // than accidentally matching (or being matched by) the selfie kinds.
+  describe("workplace photo kinds", () => {
+    it("a key built for clock_in_workplace validates for that exact kind", () => {
+      const key = buildAttendancePhotoKey({
+        restaurantId,
+        userId,
+        kind: "clock_in_workplace",
+        token: "abc123XYZ_-token1",
+      });
+      expect(isAttendancePhotoKeyFor(key, { restaurantId, userId, kind: "clock_in_workplace" })).toBe(true);
+    });
+
+    it("a clock_in_workplace key is rejected for the plain clock_in (selfie) kind, and vice versa", () => {
+      const workplaceKey = buildAttendancePhotoKey({
+        restaurantId,
+        userId,
+        kind: "clock_in_workplace",
+        token: "abc123XYZ_-token1",
+      });
+      expect(isAttendancePhotoKeyFor(workplaceKey, { restaurantId, userId, kind: "clock_in" })).toBe(false);
+
+      const selfieKey = buildAttendancePhotoKey({ restaurantId, userId, kind: "clock_in", token: "abc123XYZ_-token1" });
+      expect(isAttendancePhotoKeyFor(selfieKey, { restaurantId, userId, kind: "clock_in_workplace" })).toBe(false);
+    });
+
+    it("a clock_in_workplace key is rejected for clock_out_workplace", () => {
+      const key = buildAttendancePhotoKey({
+        restaurantId,
+        userId,
+        kind: "clock_in_workplace",
+        token: "abc123XYZ_-token1",
+      });
+      expect(isAttendancePhotoKeyFor(key, { restaurantId, userId, kind: "clock_out_workplace" })).toBe(false);
+    });
+  });
 });

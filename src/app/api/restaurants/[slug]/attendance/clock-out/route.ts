@@ -33,6 +33,15 @@ export async function POST(
       kind: "clock_out",
       photoObjectKey: parsed.data.photoObjectKey,
     });
+    // P2 gap-audit fix — the separate, always-optional workplace photo
+    // for the clock-out side of the shift; see clock-in/route.ts's own
+    // comment on the same call.
+    const clockOutWorkplacePhotoObjectKey = await resolveAttendancePhotoForClock({
+      restaurantId,
+      userId: session.user.id,
+      kind: "clock_out_workplace",
+      photoObjectKey: parsed.data.workplacePhotoObjectKey,
+    });
 
     const openRows = await db
       .select()
@@ -65,7 +74,10 @@ export async function POST(
         // Appended, not overwritten — preserves any note left at clock-in.
         note: parsed.data.note ? [open.note, parsed.data.note].filter(Boolean).join(" / ") : open.note,
         clockOutPhotoObjectKey,
-        // Phase 13 — see attendanceStatusAfterClockOut's own comment.
+        clockOutWorkplacePhotoObjectKey,
+        // Phase 13 — see attendanceStatusAfterClockOut's own comment. Same
+        // "selfie only" scope as the clock-in route above — the workplace
+        // photo doesn't drive review status here either.
         status: attendanceStatusAfterClockOut(open.status, clockOutPhotoObjectKey !== null),
       })
       .where(and(eq(attendanceRecords.id, open.id), isNull(attendanceRecords.clockOutAt)))

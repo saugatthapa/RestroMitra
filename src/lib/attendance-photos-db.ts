@@ -94,12 +94,23 @@ export async function purgeExpiredAttendancePhotos(
       restaurantId: attendanceRecords.restaurantId,
       clockInPhotoObjectKey: attendanceRecords.clockInPhotoObjectKey,
       clockOutPhotoObjectKey: attendanceRecords.clockOutPhotoObjectKey,
+      // P2 gap-audit fix — the workplace photo columns sweep through the
+      // same retention job as the selfie columns; a workplace photo is
+      // just as much "a photo of where someone was" as a selfie is, so it
+      // gets the same expiry, not an indefinite retention by omission.
+      clockInWorkplacePhotoObjectKey: attendanceRecords.clockInWorkplacePhotoObjectKey,
+      clockOutWorkplacePhotoObjectKey: attendanceRecords.clockOutWorkplacePhotoObjectKey,
     })
     .from(attendanceRecords)
     .where(
       and(
         lt(attendanceRecords.clockInAt, cutoff),
-        or(isNotNull(attendanceRecords.clockInPhotoObjectKey), isNotNull(attendanceRecords.clockOutPhotoObjectKey)),
+        or(
+          isNotNull(attendanceRecords.clockInPhotoObjectKey),
+          isNotNull(attendanceRecords.clockOutPhotoObjectKey),
+          isNotNull(attendanceRecords.clockInWorkplacePhotoObjectKey),
+          isNotNull(attendanceRecords.clockOutWorkplacePhotoObjectKey),
+        ),
       ),
     );
 
@@ -107,9 +118,12 @@ export async function purgeExpiredAttendancePhotos(
   let failures = 0;
 
   for (const row of rows) {
-    const keys = [row.clockInPhotoObjectKey, row.clockOutPhotoObjectKey].filter(
-      (k): k is string => k !== null,
-    );
+    const keys = [
+      row.clockInPhotoObjectKey,
+      row.clockOutPhotoObjectKey,
+      row.clockInWorkplacePhotoObjectKey,
+      row.clockOutWorkplacePhotoObjectKey,
+    ].filter((k): k is string => k !== null);
     let allOk = true;
     for (const key of keys) {
       try {
@@ -125,7 +139,12 @@ export async function purgeExpiredAttendancePhotos(
 
     await db
       .update(attendanceRecords)
-      .set({ clockInPhotoObjectKey: null, clockOutPhotoObjectKey: null })
+      .set({
+        clockInPhotoObjectKey: null,
+        clockOutPhotoObjectKey: null,
+        clockInWorkplacePhotoObjectKey: null,
+        clockOutWorkplacePhotoObjectKey: null,
+      })
       .where(eq(attendanceRecords.id, row.id));
 
     await recordAuditLog({
@@ -141,6 +160,14 @@ export async function purgeExpiredAttendancePhotos(
   return { recordsPurged: rows.length, photosDeleted, failures };
 }
 
+// P2 gap-audit fix — true for the two "_workplace" kinds, false for the
+// original selfie pair. Used below to pick which restaurant-level
+// required-toggle and which user-facing copy applies, without the two
+// photo types needing two near-duplicate resolver functions.
+function isWorkplacePhotoKind(kind: AttendancePhotoKind): boolean {
+  return kind === "clock_in_workplace" || kind === "clock_out_workplace";
+}
+
 /**
  * Shared by both clock-in and clock-out routes: resolves whatever
  * photoObjectKey the client sent into either a verified key to persist or
@@ -151,9 +178,17 @@ export async function purgeExpiredAttendancePhotos(
  * that doesn't actually exist in the bucket — is one the route should stop
  * and reject on, not silently work around.
  *
- * Returns null (not an error) when no photo applies: selfieClockInRequired
- * is off AND the client sent no key — the ordinary, still fully-supported
- * no-photo clock-in/out.
+ * Returns null (not an error) when no photo applies: the relevant
+ * required-toggle is off AND the client sent no key — the ordinary, still
+ * fully-supported no-photo clock-in/out.
+ *
+ * P2 gap-audit fix — this same function now also resolves the separate
+ * workplace/surroundings photo (kind "clock_in_workplace" /
+ * "clock_out_workplace"), gated by restaurants.workplacePhotoRequired
+ * instead of selfieClockInRequired; every other check (key-shape/tenant
+ * match, consent, bucket existence) is identical for both photo types, so
+ * one shared resolver — not a parallel copy — handles both, called twice
+ * (once per photo) from each clock-in/out route.
  */
 export async function resolveAttendancePhotoForClock(params: {
   restaurantId: string;
@@ -162,15 +197,26 @@ export async function resolveAttendancePhotoForClock(params: {
   photoObjectKey: string | undefined;
 }): Promise<string | null> {
   const [restaurantRow] = await db
-    .select({ selfieClockInRequired: restaurants.selfieClockInRequired })
+    .select({
+      selfieClockInRequired: restaurants.selfieClockInRequired,
+      workplacePhotoRequired: restaurants.workplacePhotoRequired,
+    })
     .from(restaurants)
     .where(eq(restaurants.id, params.restaurantId))
     .limit(1);
-  const required = restaurantRow?.selfieClockInRequired ?? false;
+  const workplace = isWorkplacePhotoKind(params.kind);
+  const required = workplace
+    ? (restaurantRow?.workplacePhotoRequired ?? false)
+    : (restaurantRow?.selfieClockInRequired ?? false);
 
   if (!params.photoObjectKey) {
     if (required) {
-      throw new HttpError("This restaurant requires a selfie to clock in/out. Please take a photo first.", 400);
+      throw new HttpError(
+        workplace
+          ? "This restaurant requires a workplace photo to clock in/out. Please take a photo first."
+          : "This restaurant requires a selfie to clock in/out. Please take a photo first.",
+        400,
+      );
     }
     return null;
   }
@@ -179,6 +225,10 @@ export async function resolveAttendancePhotoForClock(params: {
     throw new HttpError("That photo doesn't match this request — please retake it.", 400);
   }
 
+  // Both photo types share the one consent notice recorded at
+  // photo-consent — the notice covers "attendance photos" generally, not
+  // only the selfie, so a workplace-only capture still requires it before
+  // this server will mint an upload URL or accept a key.
   const consented = await hasCurrentConsentForUser(params.userId, params.restaurantId);
   if (!consented) {
     throw new HttpError("You need to accept the selfie-capture consent notice first.", 403);
