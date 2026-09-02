@@ -17,7 +17,7 @@ import { generateToken, hashToken } from "./session";
  * authenticator app is the only realistic second factor.
  */
 
-const ISSUER = "RestroMitra";
+const ISSUER = "RestroKendra";
 const TOTP_PERIOD_SECONDS = 30;
 // otplib's `epochTolerance` is denominated in SECONDS (not time steps,
 // despite how easy that is to misread) — see @otplib/totp's own examples

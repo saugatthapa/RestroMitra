@@ -23,7 +23,7 @@ export default async function SupportPage() {
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-neutral-900">Support</h1>
         <p className="text-sm text-neutral-500">
-          File an issue with the RestroMitra team and track it here — from a billing question to
+          File an issue with the RestroKendra team and track it here — from a billing question to
           something broken in the app.
         </p>
       </div>

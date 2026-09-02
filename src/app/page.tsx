@@ -132,10 +132,10 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Do I need to install anything or buy hardware?",
     answer:
-      "No. RestroMitra runs entirely in your browser — on a phone, tablet, or computer you already own. There's nothing to install, and a receipt printer is optional, not required.",
+      "No. RestroKendra runs entirely in your browser — on a phone, tablet, or computer you already own. There's nothing to install, and a receipt printer is optional, not required.",
   },
   {
-    question: "Is RestroMitra only for restaurants in Itahari and Sunsari?",
+    question: "Is RestroKendra only for restaurants in Itahari and Sunsari?",
     answer:
       "We're launching first in Itahari and Sunsari, Eastern Nepal — that's home, and where we're testing everything closely with real restaurants before scaling up. The platform itself already works for any restaurant, cafe, or momo shop anywhere in Nepal, and we're expanding city by city right behind the launch.",
   },
@@ -157,7 +157,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "What if I only run a small tea shop or momo cart?",
     answer:
-      "RestroMitra scales down as easily as it scales up. Use just the POS and billing if that's all you need today, and turn on QR ordering, inventory, or reports whenever you're ready for them.",
+      "RestroKendra scales down as easily as it scales up. Use just the POS and billing if that's all you need today, and turn on QR ordering, inventory, or reports whenever you're ready for them.",
   },
   {
     question: "Can I cancel anytime?",
@@ -175,7 +175,7 @@ export default function LandingPage() {
             {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset from /public */}
             <img
               src="/brand/logo-horizontal.png"
-              alt="RestroMitra"
+              alt="RestroKendra"
               className="h-9 w-auto transition-transform duration-500 ease-out group-hover:scale-105 sm:h-10"
             />
           </Link>
@@ -366,7 +366,7 @@ export default function LandingPage() {
           <p className="mt-4 text-neutral-600">
             Spreadsheets and register tape don&apos;t talk to your kitchen. Generic,
             one-size-fits-all POS software wasn&apos;t built with Nepal&apos;s restaurants in
-            mind. RestroMitra was.
+            mind. RestroKendra was.
           </p>
         </Reveal>
 
@@ -376,7 +376,7 @@ export default function LandingPage() {
               <thead>
                 <tr className="bg-neutral-50 text-left text-xs font-semibold tracking-wide text-neutral-500 uppercase">
                   <th className="px-5 py-3.5">Capability</th>
-                  <th className="bg-orange-50 px-5 py-3.5 text-orange-700">RestroMitra</th>
+                  <th className="bg-orange-50 px-5 py-3.5 text-orange-700">RestroKendra</th>
                   <th className="px-5 py-3.5">Paper &amp; spreadsheets</th>
                   <th className="px-5 py-3.5">Generic POS software</th>
                 </tr>
@@ -458,7 +458,7 @@ export default function LandingPage() {
               {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset from /public */}
               <img
                 src="/brand/logo-horizontal.png"
-                alt="RestroMitra"
+                alt="RestroKendra"
                 className="h-12 w-auto transition-transform duration-500 ease-out group-hover:scale-105 sm:h-14"
               />
             </Link>
@@ -487,7 +487,7 @@ export default function LandingPage() {
         </div>
         <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-6">
           <p className="text-xs text-neutral-400">
-            © {new Date().getFullYear()} RestroMitra · by Saugat Thapa
+            © {new Date().getFullYear()} RestroKendra · by Saugat Thapa
           </p>
           <span className="hidden text-neutral-300 sm:inline" aria-hidden="true">
             ·
@@ -534,7 +534,7 @@ function HeroDashboardMockup() {
           <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
           <span className="h-2.5 w-2.5 rounded-full bg-green-300" />
           <span className="ml-2 truncate text-[11px] font-medium text-neutral-400">
-            RestroMitra — Dashboard
+            RestroKendra — Dashboard
           </span>
           <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-ring" />

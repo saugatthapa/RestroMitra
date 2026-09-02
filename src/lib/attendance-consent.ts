@@ -38,7 +38,7 @@ Why: to verify attendance records are genuine — the same purpose your clock-in
 serve.
 
 Who can see it: your restaurant's owner and managers (the same people who can already see your \
-clock-in/out times), and RestroMitra platform staff for support or legal purposes. Never shared outside \
+clock-in/out times), and RestroKendra platform staff for support or legal purposes. Never shared outside \
 that.
 
 How long it's kept: retained for a limited period and then automatically deleted (ask your owner/manager \

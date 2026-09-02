@@ -49,7 +49,7 @@ const DICTIONARY = {
   // --- Dashboard shell: header chrome ---
   "nav.openPos": { en: "Open POS", ne: "पिओएस खोल्नुहोस्" },
   "nav.logOut": { en: "Log out", ne: "लगआउट" },
-  "nav.poweredBy": { en: "Powered by RestroMitra", ne: "RestroMitra द्वारा संचालित" },
+  "nav.poweredBy": { en: "Powered by RestroKendra", ne: "RestroKendra द्वारा संचालित" },
   "nav.collapseSidebar": { en: "Collapse sidebar", ne: "साइडबार साँघुरो गर्नुहोस्" },
   "nav.expandSidebar": { en: "Expand sidebar", ne: "साइडबार फराकिलो गर्नुहोस्" },
   "nav.notifications": { en: "Notifications", ne: "सूचनाहरू" },
@@ -74,7 +74,7 @@ const DICTIONARY = {
   "publicMenu.totalLabel": { en: "Total", ne: "जम्मा" },
   "publicMenu.orderMore": { en: "Order more", ne: "थप अर्डर गर्नुहोस्" },
   "publicMenu.add": { en: "Add", ne: "थप्नुहोस्" },
-  "publicMenu.poweredBy": { en: "Powered by RestroMitra", ne: "RestroMitra द्वारा संचालित" },
+  "publicMenu.poweredBy": { en: "Powered by RestroKendra", ne: "RestroKendra द्वारा संचालित" },
   "publicMenu.viewCart": { en: "View cart", ne: "कार्ट हेर्नुहोस्" },
   "publicMenu.chooseOption": { en: "Choose an option", ne: "एउटा विकल्प छान्नुहोस्" },
   "publicMenu.addons": { en: "Add-ons", ne: "थप चीजहरू" },

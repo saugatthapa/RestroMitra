@@ -39,7 +39,7 @@ export default async function MaintenancePage() {
           <h1 className="text-lg font-semibold text-amber-900">Down for maintenance</h1>
           <p className="mt-2 text-sm text-amber-800">
             {maintenanceMode.message ??
-              "RestroMitra is temporarily unavailable while we perform scheduled maintenance. Your data is safe."}
+              "RestroKendra is temporarily unavailable while we perform scheduled maintenance. Your data is safe."}
           </p>
           <p className="mt-3 text-sm text-amber-800">Please check back shortly.</p>
         </div>

@@ -265,7 +265,7 @@ export default async function PublicWebsitePage({
           rel="noopener noreferrer"
           className="transition hover:underline"
         >
-          Powered by RestroMitra
+          Powered by RestroKendra
         </a>
       </footer>
     </div>

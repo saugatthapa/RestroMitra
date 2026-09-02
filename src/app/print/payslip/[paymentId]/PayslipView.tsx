@@ -190,7 +190,7 @@ export function PayslipView({ slug, paymentId }: { slug: string; paymentId: stri
         )}
 
         <footer className="mt-8 text-[11px] leading-relaxed text-neutral-400">
-          This is a system-generated payslip. It reflects amounts recorded in RestroMitra at the
+          This is a system-generated payslip. It reflects amounts recorded in RestroKendra at the
           time of payment and does not include any statutory tax/PF/SSF computation.
         </footer>
       </div>

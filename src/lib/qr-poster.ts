@@ -9,7 +9,7 @@
 // branding — isn't something an owner can put in front of a customer and
 // expect them to trust or even understand. The poster adds the restaurant's
 // own identity front and center (name, optional table label), a plain-
-// language call to action, and a small "Powered by RestroMitra" credit at
+// language call to action, and a small "Powered by RestroKendra" credit at
 // the very bottom — same customer-facing hierarchy as the public site and
 // QR-menu footers (src/app/site/[slug]/page.tsx, PublicOrderMenu.tsx): the
 // restaurant leads, the platform is the quiet small print.
@@ -182,11 +182,11 @@ export async function downloadQrPoster(opts: QrPosterOptions): Promise<void> {
   ctx.fillText(ctaText, W / 2, ctaY + ctaHeight / 2 + 2, ctaWidth - ctaPadX);
   ctx.textBaseline = "alphabetic";
 
-  // Footer — "Powered by RestroMitra", deliberately the smallest, quietest
+  // Footer — "Powered by RestroKendra", deliberately the smallest, quietest
   // element on the page (see file header comment).
   const footerY = H - 96;
   const footerMarkSize = 40;
-  const footerLabel = "Powered by RestroMitra";
+  const footerLabel = "Powered by RestroKendra";
   ctx.font = "600 24px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
   const labelWidth = ctx.measureText(footerLabel).width;
   const totalWidth = footerMarkSize + 10 + labelWidth;

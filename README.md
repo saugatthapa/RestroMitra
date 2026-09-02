@@ -1,4 +1,4 @@
-# RestroMitra
+# RestroKendra
 
 An all-in-one, multi-tenant restaurant management SaaS built for restaurants, cafes,
 momo shops, bars, and small food businesses in Itahari, Sunsari, and Eastern Nepal.

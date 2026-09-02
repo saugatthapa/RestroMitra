@@ -620,7 +620,7 @@ function AddStaffForm({
         </label>
       </div>
       <p className="mt-2 text-xs text-neutral-400">
-        If this phone number already has a RestroMitra account, they&apos;re just granted a role here —
+        If this phone number already has a RestroKendra account, they&apos;re just granted a role here —
         name and password are ignored. Otherwise a new account is created with the name and password
         above.
       </p>
@@ -1786,7 +1786,7 @@ function PaySalaryModal({
           </p>
         ) : (
           <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            RestroMitra can&apos;t automatically verify {PAYOUT_METHOD_LABELS[method].toLowerCase()} transfers — only
+            RestroKendra can&apos;t automatically verify {PAYOUT_METHOD_LABELS[method].toLowerCase()} transfers — only
             confirm this once the money has actually been sent.
           </p>
         )}

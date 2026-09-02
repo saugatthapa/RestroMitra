@@ -134,7 +134,7 @@ export function TicketThread({ slug, ticketId }: { slug: string; ticketId: strin
                 }`}
               >
                 <div className="mb-1 text-xs font-medium text-neutral-500">
-                  {m.isFromPlatform ? "RestroMitra support" : (m.authorFullName ?? "You")} ·{" "}
+                  {m.isFromPlatform ? "RestroKendra support" : (m.authorFullName ?? "You")} ·{" "}
                   {formatDateTime(m.createdAt)}
                 </div>
                 <p className="whitespace-pre-wrap text-neutral-800">{m.body}</p>

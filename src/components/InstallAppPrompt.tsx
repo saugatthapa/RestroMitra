@@ -103,7 +103,7 @@ export function InstallAppPrompt() {
 
       {showIosTip && (
         <div className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-neutral-200 bg-white p-3 text-xs text-neutral-600 shadow-lg">
-          <p className="font-semibold text-neutral-900">Add RestroMitra to your Home Screen</p>
+          <p className="font-semibold text-neutral-900">Add RestroKendra to your Home Screen</p>
           <p className="mt-1">
             Tap the Share icon in Safari, then choose <span className="font-medium">Add to Home Screen</span>.
             It&apos;ll open full-screen, just like an app.

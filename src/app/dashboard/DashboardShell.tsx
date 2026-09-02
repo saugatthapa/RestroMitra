@@ -834,8 +834,8 @@ function DashboardShellContent({
   }
 
   // The sidebar's top brand slot — the restaurant's own logo (if set) or a
-  // colored monogram, plus its name, with "Powered by RestroMitra" as a small
-  // subtitle. This used to be a plain "RestroMitra" wordmark; a restaurant
+  // colored monogram, plus its name, with "Powered by RestroKendra" as a small
+  // subtitle. This used to be a plain "RestroKendra" wordmark; a restaurant
   // owner living in this screen all day cares about *their own* brand, not
   // the vendor's, so the tenant's identity now leads and the platform name
   // is the small print — matching how the reference dashboard the user

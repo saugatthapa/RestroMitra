@@ -46,11 +46,11 @@ export default async function SuspendedPage() {
         <div className="rounded-xl border border-red-200 bg-red-50 p-6">
           <h1 className="text-lg font-semibold text-red-900">Access suspended</h1>
           <p className="mt-2 text-sm text-red-800">
-            {active.name}&apos;s access to RestroMitra has been suspended by the platform. Your
+            {active.name}&apos;s access to RestroKendra has been suspended by the platform. Your
             data is preserved and nothing has been deleted — this can be reversed.
           </p>
           <p className="mt-3 text-sm text-red-800">
-            Contact RestroMitra support for details or to request reinstatement.
+            Contact RestroKendra support for details or to request reinstatement.
           </p>
         </div>
       </main>

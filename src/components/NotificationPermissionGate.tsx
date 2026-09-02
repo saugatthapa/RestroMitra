@@ -206,7 +206,7 @@ export function NotificationPermissionGate({ slug }: { slug: string }) {
             📲
           </span>
           On iPhone/iPad, order notifications only work after adding this to your Home Screen: tap the Share
-          icon, then &quot;Add to Home Screen,&quot; and open RestroMitra from that icon instead of Safari.
+          icon, then &quot;Add to Home Screen,&quot; and open RestroKendra from that icon instead of Safari.
         </span>
         <button
           type="button"

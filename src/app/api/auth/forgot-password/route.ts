@@ -100,8 +100,8 @@ async function handleForgotPassword(request: Request) {
 
     await sendTransactionalEmail(
       user.email,
-      "Reset your RestroMitra password",
-      `Someone (hopefully you) asked to reset the password for your RestroMitra account.\n\n` +
+      "Reset your RestroKendra password",
+      `Someone (hopefully you) asked to reset the password for your RestroKendra account.\n\n` +
         `Reset it here: ${resetLink}\n\n` +
         `This link works once and expires in 30 minutes. If you didn't request this, you can safely ignore this email — your password hasn't been changed.`,
     );

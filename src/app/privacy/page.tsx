@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { LegalPageShell, LegalDisclaimer, LegalSection } from "@/components/legal/LegalPageShell";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — RestroMitra",
-  description: "What personal data RestroMitra collects, why, how it's stored, and how long it's kept.",
+  title: "Privacy Policy — RestroKendra",
+  description: "What personal data RestroKendra collects, why, how it's stored, and how long it's kept.",
 };
 
 // Rendered content mirrors PRIVACY.md at the repo root — that file is the
@@ -16,15 +16,15 @@ export default function PrivacyPolicyPage() {
       <LegalDisclaimer>
         This document is <strong>not legal advice</strong>, and it is not a substitute for a qualified
         lawyer&apos;s review before commercial launch. It is a plain, honest description of what
-        RestroMitra actually collects, stores, and does with personal data today. If you run a
-        restaurant on RestroMitra, you are responsible for your own lawful basis to collect your
+        RestroKendra actually collects, stores, and does with personal data today. If you run a
+        restaurant on RestroKendra, you are responsible for your own lawful basis to collect your
         customers&apos; and staff&apos;s data — this page describes what the software does, not your own
         legal obligations to the people whose data you put into it.
       </LegalDisclaimer>
 
       <LegalSection heading="Who this covers">
         <p>
-          This policy applies to personal data processed by the RestroMitra platform: the software
+          This policy applies to personal data processed by the RestroKendra platform: the software
           used by restaurant owners, managers, and staff to run point-of-sale, ordering, staff, and
           accounting operations, and by their customers using a restaurant&apos;s QR ordering, loyalty,
           or reservation features.
@@ -39,7 +39,7 @@ export default function PrivacyPolicyPage() {
         <p>
           For paid staff, a restaurant&apos;s owner/manager can record salary configuration, bank
           account details (if they choose to), payroll payment history, attendance records, leave
-          requests, and holidays. RestroMitra does not initiate bank transfers — this data exists for
+          requests, and holidays. RestroKendra does not initiate bank transfers — this data exists for
           the restaurant&apos;s own record-keeping.
         </p>
       </LegalSection>
@@ -50,7 +50,7 @@ export default function PrivacyPolicyPage() {
           <li>Consent is required before the first photo — a staff member is shown a plain-language notice explaining what&apos;s collected, why, who can see it, and how long it&apos;s kept, and must actively agree. Every consent version anyone has ever agreed to is kept permanently, never overwritten.</li>
           <li>Photos are stored in <strong>private object storage</strong> (an S3-compatible bucket), never in the application database, never publicly reachable.</li>
           <li>Photos are only ever viewed through a <strong>short-lived, signed URL</strong> minted at the moment someone with permission looks at it — no permanent public link exists.</li>
-          <li>Who can see a photo: that restaurant&apos;s own owner/managers, and RestroMitra platform staff for support or legal purposes if genuinely needed.</li>
+          <li>Who can see a photo: that restaurant&apos;s own owner/managers, and RestroKendra platform staff for support or legal purposes if genuinely needed.</li>
           <li>
             <strong>Retention: 90 days by default</strong> (configurable per deployment via
             <code className="mx-1 rounded bg-neutral-100 px-1.5 py-0.5 text-[13px]">ATTENDANCE_PHOTO_RETENTION_DAYS</code>
@@ -65,7 +65,7 @@ export default function PrivacyPolicyPage() {
           Depending on which features a restaurant uses, a customer may have their phone number,
           name, optional email/date of birth, order history, loyalty points/tier, visit streaks, and
           any notes staff add stored against their profile. This is collected by the restaurant
-          operating RestroMitra for its own CRM and loyalty purposes. Each restaurant&apos;s customer
+          operating RestroKendra for its own CRM and loyalty purposes. Each restaurant&apos;s customer
           list is isolated from every other restaurant&apos;s on the platform — none of it is sold,
           rented, or shared across restaurants.
         </p>
@@ -93,7 +93,7 @@ export default function PrivacyPolicyPage() {
           <li>Every restaurant&apos;s data is isolated from every other restaurant&apos;s at the application layer.</li>
           <li>Passwords are one-way hashed; attendance selfies live in private object storage behind signed URLs; AI provider keys are encrypted at rest.</li>
           <li>Sensitive actions (payroll changes, refunds, staff management, platform-admin actions) are recorded in an audit log.</li>
-          <li>RestroMitra has not undergone an independent third-party security audit or penetration test as of this writing.</li>
+          <li>RestroKendra has not undergone an independent third-party security audit or penetration test as of this writing.</li>
         </ul>
       </LegalSection>
 
@@ -120,7 +120,7 @@ export default function PrivacyPolicyPage() {
 
       <LegalSection heading="Children's data">
         <p>
-          RestroMitra is a business tool, not intended for use by children, and does not knowingly
+          RestroKendra is a business tool, not intended for use by children, and does not knowingly
           collect data about children beyond what a restaurant might record about its own staff.
         </p>
       </LegalSection>

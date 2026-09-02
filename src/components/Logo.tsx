@@ -1,4 +1,4 @@
-// RestroMitra's brand mark — the studio-designed circular badge (chef's hat
+// RestroKendra's brand mark — the studio-designed circular badge (chef's hat
 // "Design", the covered dish "Service & Hospitality", the fork "Food &
 // Dining", the handshake "Mitra/Partnership" — see public/brand for the
 // full mark rationale) supplied as the official logo. This replaced an

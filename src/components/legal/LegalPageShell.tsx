@@ -22,7 +22,7 @@ export function LegalPageShell({
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
           <Link href="/" className="flex items-center">
             {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset from /public */}
-            <img src="/brand/logo-horizontal.png" alt="RestroMitra" className="h-8 w-auto sm:h-9" />
+            <img src="/brand/logo-horizontal.png" alt="RestroKendra" className="h-8 w-auto sm:h-9" />
           </Link>
           <Link href="/" className="text-sm font-medium text-neutral-500 transition hover:text-neutral-800">
             ← Back to home
@@ -38,7 +38,7 @@ export function LegalPageShell({
 
       <footer className="border-t border-neutral-100 px-4 py-8 sm:px-6">
         <div className="mx-auto flex w-full max-w-3xl flex-col items-center justify-between gap-3 text-sm text-neutral-500 sm:flex-row">
-          <p>© {new Date().getFullYear()} RestroMitra</p>
+          <p>© {new Date().getFullYear()} RestroKendra</p>
           <nav className="flex items-center gap-5">
             <Link href="/privacy" className="transition hover:text-neutral-900">
               Privacy Policy

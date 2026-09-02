@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { LegalPageShell, LegalDisclaimer, LegalSection } from "@/components/legal/LegalPageShell";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — RestroMitra",
-  description: "The terms that apply when a restaurant creates an account and uses RestroMitra.",
+  title: "Terms of Service — RestroKendra",
+  description: "The terms that apply when a restaurant creates an account and uses RestroKendra.",
 };
 
 // Rendered content mirrors TERMS.md at the repo root — that file is the
@@ -15,14 +15,14 @@ export default function TermsOfServicePage() {
     <LegalPageShell title="Terms of Service" lastUpdated="August 31, 2026">
       <LegalDisclaimer>
         This document is <strong>not legal advice</strong>. It is a straightforward, honest draft
-        describing what RestroMitra actually does and does not do today, written by reading the
+        describing what RestroKendra actually does and does not do today, written by reading the
         product&apos;s real behavior rather than a generic template. Have this reviewed by a qualified
         lawyer before commercial launch — especially the billing, liability, and termination
-        sections below. By creating an account or using RestroMitra (&quot;the Service&quot;), a restaurant
+        sections below. By creating an account or using RestroKendra (&quot;the Service&quot;), a restaurant
         and its authorized users agree to these terms.
       </LegalDisclaimer>
 
-      <LegalSection heading="1. What RestroMitra is">
+      <LegalSection heading="1. What RestroKendra is">
         <p>
           A restaurant management platform providing point-of-sale, QR ordering, kitchen display,
           inventory, staff/attendance/payroll, customer loyalty, expense tracking, an internal
@@ -47,7 +47,7 @@ export default function TermsOfServicePage() {
           <li>
             <strong>There is currently no automated payment gateway for subscription billing itself.</strong>{" "}
             Requesting or changing a plan is a manual, sales-assisted process handled by a
-            RestroMitra platform administrator — not an automatic credit-card checkout.
+            RestroKendra platform administrator — not an automatic credit-card checkout.
           </li>
           <li>Pricing already quoted to an existing restaurant is protected against future catalog price changes — a restaurant already on a plan keeps its existing price unless explicitly changed for it.</li>
           <li>
@@ -70,13 +70,13 @@ export default function TermsOfServicePage() {
       </LegalSection>
 
       <LegalSection heading="4. Acceptable use">
-        <p>You agree not to use the Service unlawfully or in a way that violates others&apos; rights (including your own customers&apos;/staff&apos;s privacy rights); attempt to access another restaurant&apos;s data or attack the Service&apos;s security; reverse-engineer, resell, or white-label the Service without a separate agreement; upload content you don&apos;t have the right to use; or use the attendance-photo feature in a way that violates applicable law or your staff&apos;s consent rights — RestroMitra provides a consent mechanism, but you are responsible for lawfully operating it.</p>
+        <p>You agree not to use the Service unlawfully or in a way that violates others&apos; rights (including your own customers&apos;/staff&apos;s privacy rights); attempt to access another restaurant&apos;s data or attack the Service&apos;s security; reverse-engineer, resell, or white-label the Service without a separate agreement; upload content you don&apos;t have the right to use; or use the attendance-photo feature in a way that violates applicable law or your staff&apos;s consent rights — RestroKendra provides a consent mechanism, but you are responsible for lawfully operating it.</p>
       </LegalSection>
 
       <LegalSection heading="5. Data ownership">
         <p>
           <strong>A restaurant owns its own business data</strong> — its menu, orders, customers,
-          staff records, inventory, financial records, and uploaded content. RestroMitra does not
+          staff records, inventory, financial records, and uploaded content. RestroKendra does not
           claim ownership of it and needs only the license required to store, process, and display
           it back to you as part of operating the Service. See our Privacy Policy for how personal
           data specifically is handled.
@@ -84,23 +84,23 @@ export default function TermsOfServicePage() {
       </LegalSection>
 
       <LegalSection heading="6. Third-party services">
-        <p>RestroMitra integrates with third-party services for certain features — an AI provider for the assistant, S3-compatible object storage for attendance photos, and (where configured) payment gateways for customer-facing order payments. Using those features means the relevant data is processed by that provider as needed, subject to its own terms.</p>
+        <p>RestroKendra integrates with third-party services for certain features — an AI provider for the assistant, S3-compatible object storage for attendance photos, and (where configured) payment gateways for customer-facing order payments. Using those features means the relevant data is processed by that provider as needed, subject to its own terms.</p>
       </LegalSection>
 
       <LegalSection heading="7. Availability and support">
-        <p>The Service is provided on an &quot;as available&quot; basis, with no uptime guarantee (SLA) made in this document. Backups exist as a tested, documented process, but run manually today, not on an automated schedule. The only support channel today is direct contact with RestroMitra — there is not yet a self-service ticketing system inside the product.</p>
+        <p>The Service is provided on an &quot;as available&quot; basis, with no uptime guarantee (SLA) made in this document. Backups exist as a tested, documented process, but run manually today, not on an automated schedule. The only support channel today is direct contact with RestroKendra — there is not yet a self-service ticketing system inside the product.</p>
       </LegalSection>
 
       <LegalSection heading="8. Disclaimer of warranties">
-        <p>The Service is provided &quot;as is&quot; and &quot;as available,&quot; without warranties of any kind. RestroMitra does not warrant the Service is uninterrupted, error-free, or fully compliant with every tax, labor, or data-protection law applicable to your specific restaurant and jurisdiction — you remain responsible for confirming your own legal and tax compliance obligations.</p>
+        <p>The Service is provided &quot;as is&quot; and &quot;as available,&quot; without warranties of any kind. RestroKendra does not warrant the Service is uninterrupted, error-free, or fully compliant with every tax, labor, or data-protection law applicable to your specific restaurant and jurisdiction — you remain responsible for confirming your own legal and tax compliance obligations.</p>
       </LegalSection>
 
       <LegalSection heading="9. Limitation of liability">
-        <p>To the maximum extent permitted by law, RestroMitra and its operator(s) will not be liable for indirect, incidental, special, consequential, or punitive damages, or loss of revenue, profits, or data, arising from your use of the Service.</p>
+        <p>To the maximum extent permitted by law, RestroKendra and its operator(s) will not be liable for indirect, incidental, special, consequential, or punitive damages, or loss of revenue, profits, or data, arising from your use of the Service.</p>
       </LegalSection>
 
       <LegalSection heading="10. Termination">
-        <p>A restaurant may stop using the Service at any time. RestroMitra may suspend or terminate access for a clear breach of these terms, non-payment beyond a reasonable grace period, or as required by law. Termination does not automatically delete a restaurant&apos;s data.</p>
+        <p>A restaurant may stop using the Service at any time. RestroKendra may suspend or terminate access for a clear breach of these terms, non-payment beyond a reasonable grace period, or as required by law. Termination does not automatically delete a restaurant&apos;s data.</p>
       </LegalSection>
 
       <LegalSection heading="11. Changes to these terms">

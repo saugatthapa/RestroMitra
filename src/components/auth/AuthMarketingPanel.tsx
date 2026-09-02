@@ -2,7 +2,7 @@ import { NavIcon } from "@/components/NavIcon";
 import { AuthIcon } from "./AuthIcons";
 
 // Real features only — no fabricated "30+ restaurants" / "4.9 rating"
-// social-proof numbers, since RestroMitra doesn't have that track record yet
+// social-proof numbers, since RestroKendra doesn't have that track record yet
 // and a made-up stat is worse than no stat once someone checks. Everything
 // here (the feature list, the 30-day/no-card/cancel-anytime trio, the
 // preview's chrome) matches what the product and the register API
@@ -74,7 +74,7 @@ export function AuthMarketingPanel() {
           <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
           <span className="h-2.5 w-2.5 rounded-full bg-green-300" />
           <span className="ml-2 text-[11px] font-medium text-neutral-400">
-            RestroMitra — Dashboard
+            RestroKendra — Dashboard
           </span>
         </div>
         <div className="flex gap-3">

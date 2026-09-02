@@ -162,7 +162,7 @@ export function BillingBoard({ slug }: { slug: string }) {
             )}
             {data.subscriptionStatus === "paused" && (
               <p className="mt-1 text-sm text-neutral-600">
-                Your subscription was paused by RestroMitra. Contact support to resume it.
+                Your subscription was paused by RestroKendra. Contact support to resume it.
               </p>
             )}
           </div>
@@ -176,7 +176,7 @@ export function BillingBoard({ slug }: { slug: string }) {
                 status applied even when it doesn't. */}
             Access to your dashboard is currently blocked.{" "}
             {data.subscriptionStatus === "paused"
-              ? "Contact RestroMitra support to resume."
+              ? "Contact RestroKendra support to resume."
               : data.canManageSubscription
                 ? "Choose a plan below to keep going."
                 : "Ask your restaurant owner to choose a plan below."}

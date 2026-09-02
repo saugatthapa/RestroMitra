@@ -1,6 +1,6 @@
 {
-  "name": "RestroMitra",
-  "short_name": "RestroMitra",
+  "name": "RestroKendra",
+  "short_name": "RestroKendra",
   "description": "The restaurant operating system for Nepal — POS, orders, kitchen display, and more, from one installable app.",
   "start_url": "/dashboard",
   "scope": "/",

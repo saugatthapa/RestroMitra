@@ -115,7 +115,7 @@ export async function sendFallbackAlertEmail(
   await postToResend(
     to,
     subject,
-    `${body}\n\n— RestroMitra couldn't reach any device via push notification for this alert, so it's emailing you instead. Turn on notifications on a staff device to stop relying on this fallback.`,
+    `${body}\n\n— RestroKendra couldn't reach any device via push notification for this alert, so it's emailing you instead. Turn on notifications on a staff device to stop relying on this fallback.`,
   );
 }
 
