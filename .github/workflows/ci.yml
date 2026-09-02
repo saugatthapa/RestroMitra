@@ -6,17 +6,30 @@ name: CI
 # container so the DB-backed integration tests in src/db/__tests__/ run
 # for real instead of skipping themselves.
 #
-# All secrets below are CI-only dummy values, not production credentials —
-# .env.local (the real values) is gitignored and never reaches this repo.
-# AUTH_SECRET/VAPID_* just need to be well-FORMED, not real: AUTH_SECRET
-# only needs to be a non-empty string for session-signing code paths to
-# run; the VAPID keypair below was generated fresh with
-# `webpush.generateVAPIDKeys()` specifically for this workflow (see
-# P1_PHASE_REPORT.md) so push.ts's ensureConfigured() succeeds and the
-# push-branch-filtering integration test can actually exercise the real
-# send path (mocked at the network layer, not by leaving VAPID unset).
-# Production's real VAPID/AUTH_SECRET/DATABASE_URL values live only in
-# Hostinger's own environment configuration — never here.
+# All values below are CI-only dummy values, not production credentials —
+# .env.local (the real values) is gitignored and never reaches this repo,
+# and production's real VAPID/AUTH_SECRET/DATABASE_URL values live only in
+# Hostinger's own environment configuration — never here. AUTH_SECRET just
+# needs to be a non-empty, well-formed string (not a real secret in any
+# meaningful sense) for session-signing code paths to run, so it stays a
+# plain literal below.
+#
+# The VAPID keypair is different: even though it's never used to sign a
+# push message that reaches a real subscriber (push.ts's ensureConfigured()
+# just needs it well-formed so the push-branch-filtering integration test
+# can exercise the real send path, mocked at the network layer — see
+# P1_PHASE_REPORT.md), it IS a real, structurally valid private key, and
+# committing one in plaintext — however inert — is exactly the kind of
+# thing secret scanners flag and audits rightly call out. It now lives in
+# this repo's Actions secrets (Settings -> Secrets and variables -> Actions
+# -> New repository secret) instead of here:
+#   CI_VAPID_PUBLIC_KEY / CI_VAPID_PRIVATE_KEY — any keypair works, CI never
+#   sends a real push notification with it. Generate a fresh one with
+#   `node -e "console.log(require('web-push').generateVAPIDKeys())"` and
+#   paste the two halves in. Until both secrets are set, `verify` will fail
+#   at the Test step (push.ts's ensureConfigured() throws when the keys are
+#   empty) — that's a deliberate fail-closed default, not a bug: this
+#   workflow no longer has anything push-key-shaped to leak by omission.
 
 on:
   push:
@@ -42,8 +55,8 @@ env:
   # Location header from APP_URL, and those tests assert the exact
   # resulting URL including port.
   APP_URL: http://localhost:3100
-  VAPID_PUBLIC_KEY: BCV11RDcFrQnN_j6XJIc-1OR-F85_Wzv2kVw5DU5ibuWiar4dzEoBVm9yt8kxHNh-0Crco-EwxW37VaHVwUTN9M
-  VAPID_PRIVATE_KEY: 4kpjHqmoBdhJFeOSJdV-DG-xfnrbUB_4IoYRvTK4MQk
+  VAPID_PUBLIC_KEY: ${{ secrets.CI_VAPID_PUBLIC_KEY }}
+  VAPID_PRIVATE_KEY: ${{ secrets.CI_VAPID_PRIVATE_KEY }}
   VAPID_SUBJECT: mailto:ci@example.com
 
 jobs:

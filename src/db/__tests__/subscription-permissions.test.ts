@@ -28,6 +28,7 @@ describe.skipIf(!hasDb)("Subscription access + platform admin (integration)", ()
   let ownerAId: string;
   let managerAId: string;
   let platformAdminId: string;
+  let platformAdminNoMfaId: string;
   let restaurantExpiredId: string;
   let restaurantActiveTrialId: string;
   let restaurantCancelledId: string;
@@ -50,11 +51,32 @@ describe.skipIf(!hasDb)("Subscription access + platform admin (integration)", ()
       .returning({ id: schema.users.id });
     const [platformAdmin] = await db
       .insert(schema.users)
-      .values({ fullName: "TEST Sub Platform Admin", phone: `9773${suffix.slice(0, 6)}`, passwordHash: "x" })
+      .values({
+        fullName: "TEST Sub Platform Admin",
+        phone: `9773${suffix.slice(0, 6)}`,
+        passwordHash: "x",
+        // MFA enabled — since the hardening fix in guard.ts's
+        // requireRestaurantAccess, the platform_admin bypass this test
+        // exercises below now requires it, same as every other
+        // platform-access entry point. See the dedicated no-MFA test
+        // further down for the denial case this seed is deliberately
+        // avoiding here.
+        mfaEnabled: true,
+      })
+      .returning({ id: schema.users.id });
+    const [platformAdminNoMfa] = await db
+      .insert(schema.users)
+      .values({
+        fullName: "TEST Sub Platform Admin No MFA",
+        phone: `9774${suffix.slice(0, 6)}`,
+        passwordHash: "x",
+        mfaEnabled: false,
+      })
       .returning({ id: schema.users.id });
     ownerAId = ownerA.id;
     managerAId = managerA.id;
     platformAdminId = platformAdmin.id;
+    platformAdminNoMfaId = platformAdminNoMfa.id;
 
     const pastTrial = new Date(Date.now() - 1000 * 60 * 60 * 24 * 5); // 5 days ago
     const futureTrial = new Date(Date.now() + 1000 * 60 * 60 * 24 * 20); // 20 days out
@@ -93,6 +115,7 @@ describe.skipIf(!hasDb)("Subscription access + platform admin (integration)", ()
       { userId: ownerAId, restaurantId: restaurantExpiredId, role: "owner" },
       { userId: managerAId, restaurantId: restaurantExpiredId, role: "manager" },
       { userId: platformAdminId, restaurantId: null, role: "platform_admin" },
+      { userId: platformAdminNoMfaId, restaurantId: null, role: "platform_admin" },
     ]);
   });
 
@@ -103,9 +126,11 @@ describe.skipIf(!hasDb)("Subscription access + platform admin (integration)", ()
       await db.delete(schema.restaurants).where(eq(schema.restaurants.id, restaurantId));
     }
     await db.delete(schema.userRoles).where(eq(schema.userRoles.userId, platformAdminId));
+    await db.delete(schema.userRoles).where(eq(schema.userRoles.userId, platformAdminNoMfaId));
     await db.delete(schema.users).where(eq(schema.users.id, ownerAId));
     await db.delete(schema.users).where(eq(schema.users.id, managerAId));
     await db.delete(schema.users).where(eq(schema.users.id, platformAdminId));
+    await db.delete(schema.users).where(eq(schema.users.id, platformAdminNoMfaId));
   });
 
   it("requireActiveSubscription allows a restaurant still inside its trial window", async () => {
@@ -170,8 +195,24 @@ describe.skipIf(!hasDb)("Subscription access + platform admin (integration)", ()
   it("requireRestaurantAccess's existing platform_admin bypass grants access to an EXPIRED restaurant regardless of its subscription state", async () => {
     // This is the bypass resolveRestaurantContext relies on: platform_admin
     // access must never depend on the target tenant's own billing status.
+    // (This admin has MFA enabled — see the dedicated no-MFA test below for
+    // the boundary that bypass now also enforces.)
     await expect(guard.requireRestaurantAccess(platformAdminId, restaurantExpiredId)).resolves.toMatchObject({
       role: "platform_admin",
+    });
+  });
+
+  // Security hardening — closes the "platform-admin MFA tenant-access
+  // boundary" gap: requireRestaurantAccess's platform_admin bypass used to
+  // grant tenant access with no MFA check at all, unlike every other
+  // platform-access entry point (requirePlatformAdmin/
+  // requirePlatformPermission). A platform_admin who never enabled MFA
+  // could reach money-moving tenant-scoped routes directly — no
+  // impersonation step, no impersonation audit trail. See guard.ts's
+  // requireRestaurantAccess for the full fix comment.
+  it("requireRestaurantAccess's platform_admin bypass now REJECTS a platform_admin who has not enabled MFA", async () => {
+    await expect(guard.requireRestaurantAccess(platformAdminNoMfaId, restaurantExpiredId)).rejects.toMatchObject({
+      status: 403,
     });
   });
 

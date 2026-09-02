@@ -64,13 +64,16 @@ export async function requireAuth(): Promise<SessionContext> {
  * True for either of the two full-access platform-role tiers
  * (platform_admin, super_admin — see platform-permissions.ts's own doc
  * comment on why there are two). Kept as a boolean, role-only check — no
- * MFA condition here — because this function is also the tenant-access
- * bypass inside requireRestaurantAccess() below, and mixing an MFA
- * requirement into that would silently change every tenant-scoped route's
- * behavior for platform admins, not just the platform console's own
- * routes. MFA enforcement for platform access lives specifically in
- * requirePlatformAdmin()/requirePlatformPermission() instead — the two
- * entry points that actually gate the platform console and its API.
+ * MFA condition here — because this function is also used as a pure role
+ * predicate in places that must stay MFA-agnostic (e.g. isPlatformAdmin()
+ * itself being asserted true/false in tests regardless of MFA state).
+ * MFA enforcement for platform access is layered on top by each of this
+ * function's three call sites that actually grant access from it:
+ * requirePlatformAdmin(), requirePlatformPermission() (the platform
+ * console's own gates), and requireRestaurantAccess()'s platform_admin
+ * bypass below (security hardening — see that call site's own comment;
+ * this used to be the one place platform access was granted with no MFA
+ * check at all).
  */
 export async function isPlatformAdmin(userId: string): Promise<boolean> {
   const rows = await db
@@ -378,6 +381,25 @@ export async function requireRestaurantAccess(
 
   const admin = await isPlatformAdmin(userId);
   if (admin) {
+    // Security hardening — this bypass used to grant blanket cross-tenant
+    // access with NO MFA check at all, unlike every other platform-access
+    // entry point (requirePlatformAdmin/requirePlatformPermission both
+    // call requirePlatformMfaEnabled before returning). That was a real
+    // boundary gap: a platform_admin who had never enabled MFA could
+    // reach money-moving tenant-scoped routes (refunds, payroll,
+    // subscription/billing changes, financial exports — anything gated
+    // via resolveRestaurantContext's `requireOwnerMfa` option, which is a
+    // no-op for this role specifically because it assumes "MFA was
+    // already enforced one layer up") directly, with no impersonation
+    // step and therefore no impersonation audit trail either. Was
+    // previously documented as "no MFA condition here" (see
+    // isPlatformAdmin's own comment) and deliberately deferred — see
+    // PLATFORM_CONTROL_CENTER_IMPLEMENTATION_REPORT.md's "hardening
+    // candidate" note — because isPlatformAdmin() itself is also used as
+    // a pure role predicate elsewhere and must stay MFA-agnostic; the fix
+    // belongs here, at the one call site that actually grants tenant
+    // access from it, not inside isPlatformAdmin() itself.
+    await requirePlatformMfaEnabled(userId);
     // Platform admins can act across tenants for support/ops purposes,
     // but every such action must still be written to audit_logs by the
     // caller — this function only establishes *access*, not exemption
