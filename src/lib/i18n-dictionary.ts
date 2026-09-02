@@ -41,6 +41,7 @@ const DICTIONARY = {
   "nav.auditLog": { en: "Activity Log", ne: "गतिविधि लग" },
   "nav.register": { en: "Cash Register", ne: "नगद रजिस्टर" },
   "nav.dailyClosing": { en: "Daily Closing", ne: "दैनिक बन्द" },
+  "nav.support": { en: "Support", ne: "सहयोग" },
   "nav.branches": { en: "Branches", ne: "शाखाहरू" },
   "nav.billing": { en: "Billing", ne: "बिलिङ" },
   "nav.settings": { en: "Settings", ne: "सेटिङहरू" },

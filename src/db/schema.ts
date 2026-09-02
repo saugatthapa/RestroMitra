@@ -4424,6 +4424,106 @@ export const restaurantSupportTagsRelations = relations(restaurantSupportTags, (
   addedBy: one(users, { fields: [restaurantSupportTags.addedByUserId], references: [users.id] }),
 }));
 
+// Gap audit P1 — restaurant-owner-facing support tickets. Unlike
+// restaurant_support_notes/tags above (admin-authored, admin-only, never
+// shown to the tenant), THIS is the tenant's own side channel: an owner
+// or staff member on a restaurant's own dashboard files an issue, a
+// platform admin (support_admin+, same MANAGE_SUPPORT trust tier as the
+// note/tag tooling) replies and works it, and the tenant sees the whole
+// thread and status on their own dashboard. Small, closed status set —
+// same "pgEnum, not free text" reasoning as everywhere else in this
+// schema — rather than a boolean isResolved: "in_progress" lets an admin
+// signal they've picked it up before it's actually resolved, and
+// "closed" is deliberately distinct from "resolved" (resolved = fixed;
+// closed = done being discussed, whether or not it needed a fix — e.g.
+// a duplicate or a question that was just answered).
+export const supportTicketStatusEnum = pgEnum("support_ticket_status", [
+  "open",
+  "in_progress",
+  "resolved",
+  "closed",
+]);
+
+// Kept intentionally small (no "urgent" tier) — this is a lightweight
+// triage hint for the admin queue, not an SLA mechanism (out of scope,
+// see the implementation plan).
+export const supportTicketPriorityEnum = pgEnum("support_ticket_priority", [
+  "low",
+  "normal",
+  "high",
+]);
+
+export const supportTickets = pgTable(
+  "support_tickets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    // `set null`, not cascade — same reasoning as restaurant_support_notes.
+    // author_user_id above: the ticket (and its thread) remains useful
+    // history even once the staff member who filed it is gone from the
+    // restaurant.
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    subject: varchar("subject", { length: 200 }).notNull(),
+    status: supportTicketStatusEnum("status").notNull().default("open"),
+    priority: supportTicketPriorityEnum("priority").notNull().default("normal"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("support_tickets_restaurant_id_idx").on(table.restaurantId),
+    // Powers the admin queue's "?status=open" filter across every tenant
+    // without a full-table scan.
+    index("support_tickets_status_idx").on(table.status),
+    index("support_tickets_created_at_idx").on(table.createdAt),
+  ],
+);
+
+export const supportTicketMessages = pgTable(
+  "support_ticket_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ticketId: uuid("ticket_id")
+      .notNull()
+      .references(() => supportTickets.id, { onDelete: "cascade" }),
+    // Always a real, authenticated user (owner/staff on the tenant side,
+    // or a platform admin on the platform side) — `set null` on delete so
+    // the thread survives that user later being removed, matching every
+    // other author_user_id column in this schema.
+    authorUserId: uuid("author_user_id").references(() => users.id, { onDelete: "set null" }),
+    // Distinguishes "the tenant wrote this" from "platform support wrote
+    // this" for rendering (chat-bubble alignment, "Support team" label)
+    // without joining out to user_roles on every read — the same
+    // denormalize-for-a-fixed-fact-at-write-time reasoning as
+    // audit_logs.metadata's isImpersonated flag above.
+    isFromPlatform: boolean("is_from_platform").notNull().default(false),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("support_ticket_messages_ticket_id_idx").on(table.ticketId),
+    index("support_ticket_messages_created_at_idx").on(table.createdAt),
+  ],
+);
+
+export const supportTicketsRelations = relations(supportTickets, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [supportTickets.restaurantId],
+    references: [restaurants.id],
+  }),
+  createdBy: one(users, { fields: [supportTickets.createdByUserId], references: [users.id] }),
+  messages: many(supportTicketMessages),
+}));
+
+export const supportTicketMessagesRelations = relations(supportTicketMessages, ({ one }) => ({
+  ticket: one(supportTickets, {
+    fields: [supportTicketMessages.ticketId],
+    references: [supportTickets.id],
+  }),
+  author: one(users, { fields: [supportTicketMessages.authorUserId], references: [users.id] }),
+}));
+
 // Platform Control Center (Phase 10) — a small, closed severity set so
 // the dashboard banner can pick a consistent color/icon per announcement
 // without inspecting free text (same "small enum, not free text"
@@ -4548,6 +4648,7 @@ export const restaurantsRelations = relations(restaurants, ({ many }) => ({
   impersonationSessions: many(platformImpersonationSessions),
   supportNotes: many(restaurantSupportNotes),
   supportTags: many(restaurantSupportTags),
+  supportTickets: many(supportTickets),
 }));
 
 export const subscriptionEventsRelations = relations(subscriptionEvents, ({ one }) => ({

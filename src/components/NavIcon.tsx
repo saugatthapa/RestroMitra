@@ -150,6 +150,12 @@ export const NavIcon = {
       <path d="M12 7v5l3 3" />
     </svg>
   ),
+  Support: () => (
+    <svg {...iconProps}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <path d="M8 10h.01M12 10h.01M16 10h.01" />
+    </svg>
+  ),
   CashRegister: () => (
     <svg {...iconProps}>
       <rect x="3" y="9" width="18" height="11" rx="2" />

@@ -665,6 +665,16 @@ function DashboardShellContent({
       title: t("nav.account"),
       items: [
         {
+          // Gap audit P1 — restaurant-owner-facing support tickets.
+          // Deliberately no `permission` here (visible to every staff
+          // member, same tier as Orders/KDS above) — filing an issue with
+          // the platform team shouldn't require owner/manager rank.
+          label: t("nav.support"),
+          href: "/dashboard/support",
+          enabled: true,
+          icon: <NavIcon.Support />,
+        },
+        {
           label: t("nav.branches"),
           href: "/dashboard/branches",
           enabled: true,

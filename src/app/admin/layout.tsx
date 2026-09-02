@@ -120,6 +120,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           >
             Audit log
           </Link>
+          <Link
+            href="/admin/support-tickets"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
+          >
+            Support tickets
+          </Link>
         </div>
       </nav>
       <main className="mx-auto w-full max-w-6xl p-4 md:p-8">{children}</main>
