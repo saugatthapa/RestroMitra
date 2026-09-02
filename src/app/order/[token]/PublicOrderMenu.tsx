@@ -70,7 +70,7 @@ function GuestLanguageToggle({ locale, onChange }: { locale: Locale; onChange: (
           onClick={() => onChange(option)}
           aria-pressed={locale === option}
           className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-all ${
-            locale === option ? "bg-surface-2 text-orange-400 shadow-sm" : "text-ink-muted hover:text-ink-secondary"
+            locale === option ? "bg-white text-orange-700 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
           }`}
         >
           {option === "en" ? "EN" : "ने"}
@@ -216,10 +216,10 @@ export function PublicOrderMenu({
 
   if (categories.length === 0) {
     return (
-      <div className={`flex min-h-screen items-center justify-center bg-surface-1 p-6 text-center`}>
+      <div className={`flex min-h-screen items-center justify-center bg-stone-50 p-6 text-center`}>
         <div>
-          <p className={`${display.className} text-xl font-semibold text-ink`}>{restaurantName}</p>
-          <p className="mt-2 text-sm text-ink-muted">{t("publicMenu.menuUnavailable")}</p>
+          <p className={`${display.className} text-xl font-semibold text-neutral-900`}>{restaurantName}</p>
+          <p className="mt-2 text-sm text-neutral-500">{t("publicMenu.menuUnavailable")}</p>
         </div>
       </div>
     );
@@ -228,31 +228,31 @@ export function PublicOrderMenu({
   if (view === "confirmation" && confirmation) {
     return (
       <div className={`flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-orange-50/70 via-stone-50 to-stone-50 p-6 text-center`}>
-        <div className="w-full max-w-sm animate-hero-in rounded-3xl border border-hairline bg-surface-2 p-7 shadow-xl shadow-orange-900/5">
+        <div className="w-full max-w-sm animate-hero-in rounded-3xl border border-stone-200/70 bg-white p-7 shadow-xl shadow-orange-900/5">
           <div className="relative mx-auto mb-4 flex h-16 w-16 items-center justify-center">
             <span className="absolute inset-0 animate-pulse-ring rounded-full bg-green-500/20" />
-            <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-green-500/15 text-3xl text-green-400 ring-1 ring-green-100">
+            <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-green-50 text-3xl text-green-600 ring-1 ring-green-100">
               ✓
             </span>
           </div>
-          <p className={`${display.className} text-xl font-semibold text-ink`}>
+          <p className={`${display.className} text-xl font-semibold text-neutral-900`}>
             {t("publicMenu.orderPlaced")}
           </p>
-          <p className="mt-1.5 text-sm text-ink-muted">{t("publicMenu.showScreenToStaff")}</p>
-          <div className="mt-5 space-y-2 rounded-2xl bg-surface-1 p-4 text-left text-sm">
+          <p className="mt-1.5 text-sm text-neutral-500">{t("publicMenu.showScreenToStaff")}</p>
+          <div className="mt-5 space-y-2 rounded-2xl bg-stone-50 p-4 text-left text-sm">
             <div className="flex items-baseline justify-between">
-              <span className="text-ink-muted">{t("publicMenu.orderNumberLabel")}</span>
-              <span className={`${display.className} text-base font-semibold text-ink`}>
+              <span className="text-neutral-500">{t("publicMenu.orderNumberLabel")}</span>
+              <span className={`${display.className} text-base font-semibold text-neutral-900`}>
                 {confirmation.orderNumber}
               </span>
             </div>
-            <div className="flex items-baseline justify-between border-t border-dashed border-hairline pt-2">
-              <span className="text-ink-muted">{t("publicMenu.tableLabel")}</span>
-              <span className="font-semibold text-ink">{tableName}</span>
+            <div className="flex items-baseline justify-between border-t border-dashed border-stone-200 pt-2">
+              <span className="text-neutral-500">{t("publicMenu.tableLabel")}</span>
+              <span className="font-semibold text-neutral-900">{tableName}</span>
             </div>
-            <div className="flex items-baseline justify-between border-t border-dashed border-hairline pt-2">
-              <span className="text-ink-muted">{t("publicMenu.totalLabel")}</span>
-              <span className={`${display.className} text-base font-semibold text-orange-400`}>
+            <div className="flex items-baseline justify-between border-t border-dashed border-stone-200 pt-2">
+              <span className="text-neutral-500">{t("publicMenu.totalLabel")}</span>
+              <span className={`${display.className} text-base font-semibold text-orange-700`}>
                 {formatNPR(confirmation.totalInPaisa)}
               </span>
             </div>
@@ -279,15 +279,15 @@ export function PublicOrderMenu({
     // everything. Letting the page be exactly as tall as its content is
     // means a customer never lands on a screen that looks broken/half-
     // loaded just because it doesn't happen to fill their phone.
-    <div className={`min-h-full bg-surface-1 pb-28`}>
-      <header className="sticky top-0 z-10 border-b border-hairline bg-surface-2/90 backdrop-blur-md">
+    <div className={`min-h-full bg-stone-50 pb-28`}>
+      <header className="sticky top-0 z-10 border-b border-stone-200/80 bg-white/90 backdrop-blur-md">
         <div className="flex items-center gap-3 px-4 pb-3 pt-4 sm:px-6">
           <BrandMark logoUrl={restaurantLogoUrl ?? null} name={restaurantName} />
           <div className="min-w-0 flex-1">
-            <p className={`${display.className} truncate text-lg font-semibold leading-tight text-ink`}>
+            <p className={`${display.className} truncate text-lg font-semibold leading-tight text-neutral-900`}>
               {restaurantName}
             </p>
-            <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-surface-1 px-2 py-0.5 text-[11px] font-medium text-ink-secondary">
+            <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
               {tableName}
             </p>
           </div>
@@ -299,8 +299,8 @@ export function PublicOrderMenu({
             <span
               className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${
                 call.status === "acknowledged"
-                  ? "bg-green-500/15 text-green-400"
-                  : "bg-orange-500/15 text-orange-400"
+                  ? "bg-green-50 text-green-700"
+                  : "bg-orange-50 text-orange-700"
               }`}
             >
               <span
@@ -314,27 +314,27 @@ export function PublicOrderMenu({
             <button
               onClick={callStaff}
               disabled={callRequesting}
-              className="flex shrink-0 items-center gap-1.5 rounded-full border border-hairline bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink-secondary shadow-sm transition active:scale-[0.97] active:bg-surface-1 disabled:opacity-50"
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-sm transition active:scale-[0.97] active:bg-stone-50 disabled:opacity-50"
             >
               🔔 {callRequesting ? t("publicMenu.calling") : t("publicMenu.callStaff")}
             </button>
           )}
-          {callError && <p className="text-[11px] text-red-400">{callError}</p>}
+          {callError && <p className="text-[11px] text-red-600">{callError}</p>}
         </div>
       </header>
 
       {view === "menu" && (
         <>
           {categories.length > 1 && (
-            <div className="sticky top-[92px] z-10 flex gap-2 overflow-x-auto border-b border-hairline bg-surface-1/95 px-4 py-2.5 backdrop-blur-md sm:px-6">
+            <div className="sticky top-[92px] z-10 flex gap-2 overflow-x-auto border-b border-stone-200/80 bg-stone-50/95 px-4 py-2.5 backdrop-blur-md sm:px-6">
               {categories.map((c) => (
                 <button
                   key={c.id}
                   onClick={() => setSelectedCategoryId(c.id)}
                   className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-all ${
                     selectedCategoryId === c.id
-                      ? "bg-surface-0 text-white shadow-sm"
-                      : "border border-hairline bg-surface-2 text-ink-secondary hover:border-hairline-strong"
+                      ? "bg-neutral-900 text-white shadow-sm"
+                      : "border border-stone-200 bg-white text-neutral-600 hover:border-stone-300"
                   }`}
                 >
                   {c.name}
@@ -350,37 +350,37 @@ export function PublicOrderMenu({
                 <button
                   key={item.id}
                   onClick={() => setCustomizingItem(item)}
-                  className="group flex w-full items-center gap-3.5 rounded-2xl border border-hairline bg-surface-2 p-3 text-left shadow-sm shadow-stone-900/[0.03] transition-all active:scale-[0.99] active:shadow-none"
+                  className="group flex w-full items-center gap-3.5 rounded-2xl border border-stone-200/80 bg-white p-3 text-left shadow-sm shadow-stone-900/[0.03] transition-all active:scale-[0.99] active:shadow-none"
                 >
                   <MenuItemThumb imageUrl={item.imageUrl} name={item.name} size="lg" rounded="rounded-xl" />
                   <div className="min-w-0 flex-1">
-                    <p className={`${display.className} truncate text-[15px] font-medium text-ink`}>
+                    <p className={`${display.className} truncate text-[15px] font-medium text-neutral-900`}>
                       {item.name}
                     </p>
                     {item.description && (
-                      <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-ink-muted">
+                      <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-neutral-500">
                         {item.description}
                       </p>
                     )}
-                    <p className={`${display.className} mt-1.5 text-sm font-semibold text-orange-400`}>
+                    <p className={`${display.className} mt-1.5 text-sm font-semibold text-orange-700`}>
                       {item.variants.length > 0
                         ? priceRange(item.variants)
                         : formatNPR(item.basePriceInPaisa)}
                     </p>
                   </div>
-                  <span className="flex shrink-0 h-8 w-8 items-center justify-center self-center rounded-full bg-surface-1 text-base font-semibold text-ink-secondary transition-colors group-hover:bg-orange-600 group-hover:text-white group-active:bg-orange-600 group-active:text-white">
+                  <span className="flex shrink-0 h-8 w-8 items-center justify-center self-center rounded-full bg-stone-100 text-base font-semibold text-neutral-700 transition-colors group-hover:bg-orange-600 group-hover:text-white group-active:bg-orange-600 group-active:text-white">
                     +
                   </span>
                 </button>
               ))}
           </div>
 
-          <p className="px-4 pb-2 pt-1 text-center text-[11px] text-ink-faint sm:px-6">
+          <p className="px-4 pb-2 pt-1 text-center text-[11px] text-neutral-400 sm:px-6">
             <a
               href="/"
               target="_blank"
               rel="noopener noreferrer"
-              className="transition hover:text-ink-secondary hover:underline"
+              className="transition hover:text-neutral-600 hover:underline"
             >
               {t("publicMenu.poweredBy")}
             </a>
@@ -428,7 +428,7 @@ export function PublicOrderMenu({
           className="fixed inset-x-4 bottom-4 z-20 flex animate-hero-in items-center justify-between rounded-2xl bg-gradient-to-r from-orange-600 to-orange-500 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-orange-900/25 transition active:scale-[0.98] sm:inset-x-auto sm:right-6 sm:w-96"
         >
           <span className="flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-surface-2/25 text-[11px]">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/25 text-[11px]">
               {cartCount > 9 ? "9+" : cartCount}
             </span>
             {t("publicMenu.viewCart")} · {cartItemCountText(cartCount, locale)}
@@ -493,16 +493,16 @@ function CustomizeModal({
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-surface-0/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="max-h-[88vh] w-full max-w-md animate-hero-in overflow-y-auto rounded-t-3xl bg-surface-2 shadow-2xl sm:rounded-3xl">
+    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="max-h-[88vh] w-full max-w-md animate-hero-in overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
         {item.imageUrl ? (
-          <div className="relative aspect-[16/9] w-full overflow-hidden bg-surface-1 sm:rounded-t-3xl">
+          <div className="relative aspect-[16/9] w-full overflow-hidden bg-stone-50 sm:rounded-t-3xl">
             <MenuItemThumb imageUrl={item.imageUrl} name={item.name} size="fill" rounded="rounded-none" />
             <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/25 to-transparent" />
             <button
               onClick={onClose}
               aria-label="Close"
-              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-surface-2/90 text-ink-secondary shadow-sm backdrop-blur-sm"
+              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-neutral-700 shadow-sm backdrop-blur-sm"
             >
               ✕
             </button>
@@ -512,7 +512,7 @@ function CustomizeModal({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-ink-faint hover:bg-surface-1 hover:text-ink-secondary"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 hover:bg-stone-100 hover:text-neutral-700"
             >
               ✕
             </button>
@@ -520,14 +520,14 @@ function CustomizeModal({
         )}
 
         <div className="p-5 pt-4">
-          <p className={`${display.className} text-lg font-semibold text-ink`}>{item.name}</p>
+          <p className={`${display.className} text-lg font-semibold text-neutral-900`}>{item.name}</p>
           {item.description && (
-            <p className="mt-1 text-sm leading-relaxed text-ink-muted">{item.description}</p>
+            <p className="mt-1 text-sm leading-relaxed text-neutral-500">{item.description}</p>
           )}
 
           {item.variants.length > 0 && (
             <div className="mt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
                 {t("publicMenu.chooseOption")}
               </p>
               <div className="space-y-1.5">
@@ -536,8 +536,8 @@ function CustomizeModal({
                     key={v.id}
                     className={`flex cursor-pointer items-center justify-between rounded-xl border px-3.5 py-2.5 text-sm transition-colors ${
                       variantId === v.id
-                        ? "border-orange-500/40 bg-orange-500/15"
-                        : "border-hairline hover:border-hairline-strong"
+                        ? "border-orange-300 bg-orange-50/70"
+                        : "border-stone-200 hover:border-stone-300"
                     }`}
                   >
                     <span className="flex items-center gap-2.5">
@@ -548,9 +548,9 @@ function CustomizeModal({
                         onChange={() => setVariantId(v.id)}
                         className="h-4 w-4 accent-orange-600"
                       />
-                      <span className="font-medium text-ink">{v.name}</span>
+                      <span className="font-medium text-neutral-800">{v.name}</span>
                     </span>
-                    <span className="text-ink-muted">{formatNPR(v.priceInPaisa)}</span>
+                    <span className="text-neutral-500">{formatNPR(v.priceInPaisa)}</span>
                   </label>
                 ))}
               </div>
@@ -559,7 +559,7 @@ function CustomizeModal({
 
           {item.addons.length > 0 && (
             <div className="mt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
                 {t("publicMenu.addons")}
               </p>
               <div className="space-y-1.5">
@@ -568,8 +568,8 @@ function CustomizeModal({
                     key={a.id}
                     className={`flex cursor-pointer items-center justify-between rounded-xl border px-3.5 py-2.5 text-sm transition-colors ${
                       addonIds.includes(a.id)
-                        ? "border-orange-500/40 bg-orange-500/15"
-                        : "border-hairline hover:border-hairline-strong"
+                        ? "border-orange-300 bg-orange-50/70"
+                        : "border-stone-200 hover:border-stone-300"
                     }`}
                   >
                     <span className="flex items-center gap-2.5">
@@ -579,9 +579,9 @@ function CustomizeModal({
                         onChange={() => toggleAddon(a.id)}
                         className="h-4 w-4 rounded accent-orange-600"
                       />
-                      <span className="font-medium text-ink">{a.name}</span>
+                      <span className="font-medium text-neutral-800">{a.name}</span>
                     </span>
-                    <span className="text-ink-muted">
+                    <span className="text-neutral-500">
                       {a.priceInPaisa > 0 ? `+${formatNPR(a.priceInPaisa)}` : t("publicMenu.free")}
                     </span>
                   </label>
@@ -599,19 +599,19 @@ function CustomizeModal({
           />
 
           <div className="mt-4 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
               {t("publicMenu.quantity")}
             </p>
-            <div className="flex items-center gap-3 rounded-full border border-hairline px-1 py-1">
+            <div className="flex items-center gap-3 rounded-full border border-stone-200 px-1 py-1">
               <button
-                className="flex h-7 w-7 items-center justify-center rounded-full text-ink-secondary transition hover:bg-surface-1 active:scale-90"
+                className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-600 transition hover:bg-stone-100 active:scale-90"
                 onClick={() => setQuantity((q) => Math.max(1, q - 1))}
               >
                 −
               </button>
               <span className="w-5 text-center text-sm font-semibold">{quantity}</span>
               <button
-                className="flex h-7 w-7 items-center justify-center rounded-full text-ink-secondary transition hover:bg-surface-1 active:scale-90"
+                className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-600 transition hover:bg-stone-100 active:scale-90"
                 onClick={() => setQuantity((q) => Math.min(50, q + 1))}
               >
                 +
@@ -652,70 +652,70 @@ function CartView({
 
   return (
     <div className="px-4 py-4 sm:px-6">
-      <button onClick={onBack} className="mb-4 text-sm font-medium text-ink-muted hover:text-ink">
+      <button onClick={onBack} className="mb-4 text-sm font-medium text-neutral-500 hover:text-neutral-800">
         {t("publicMenu.backToMenu")}
       </button>
-      <h1 className={`${display.className} mb-3 text-xl font-semibold text-ink`}>
+      <h1 className={`${display.className} mb-3 text-xl font-semibold text-neutral-900`}>
         {t("publicMenu.yourOrder")}
       </h1>
 
       {cart.length === 0 ? (
-        <p className="text-sm text-ink-muted">{t("publicMenu.cartEmpty")}</p>
+        <p className="text-sm text-neutral-500">{t("publicMenu.cartEmpty")}</p>
       ) : (
         <div className="space-y-3">
           {cart.map((line) => (
-            <div key={line.key} className="rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm shadow-stone-900/[0.03]">
+            <div key={line.key} className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm shadow-stone-900/[0.03]">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-ink">
+                  <p className="text-sm font-semibold text-neutral-900">
                     {line.itemName}
                     {line.variantName ? ` — ${line.variantName}` : ""}
                   </p>
                   {line.addonsSummary.length > 0 && (
-                    <p className="text-xs text-ink-muted">
+                    <p className="text-xs text-neutral-500">
                       {line.addonsSummary.map((a) => a.name).join(", ")}
                     </p>
                   )}
-                  {line.notes && <p className="text-xs italic text-ink-faint">{line.notes}</p>}
+                  {line.notes && <p className="text-xs italic text-neutral-400">{line.notes}</p>}
                 </div>
                 <button
                   onClick={() => onRemove(line.key)}
-                  className="text-xs font-medium text-ink-faint hover:text-red-400"
+                  className="text-xs font-medium text-neutral-400 hover:text-red-600"
                 >
                   {t("publicMenu.remove")}
                 </button>
               </div>
               <div className="mt-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-3 rounded-full border border-hairline px-1 py-1">
+                <div className="flex items-center gap-3 rounded-full border border-stone-200 px-1 py-1">
                   <button
-                    className="flex h-7 w-7 items-center justify-center rounded-full text-ink-secondary transition hover:bg-surface-1 active:scale-90"
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-600 transition hover:bg-stone-100 active:scale-90"
                     onClick={() => onChangeQuantity(line.key, -1)}
                   >
                     −
                   </button>
                   <span className="w-5 text-center text-sm font-medium">{line.quantity}</span>
                   <button
-                    className="flex h-7 w-7 items-center justify-center rounded-full text-ink-secondary transition hover:bg-surface-1 active:scale-90"
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-600 transition hover:bg-stone-100 active:scale-90"
                     onClick={() => onChangeQuantity(line.key, 1)}
                   >
                     +
                   </button>
                 </div>
-                <p className={`${display.className} text-sm font-semibold text-ink`}>
+                <p className={`${display.className} text-sm font-semibold text-neutral-900`}>
                   {formatNPR(cartLineTotal(line))}
                 </p>
               </div>
             </div>
           ))}
 
-          <div className="border-t border-dashed border-hairline-strong pt-3">
+          <div className="border-t border-dashed border-stone-300 pt-3">
             <div className="flex items-baseline justify-between gap-3">
-              <span className="text-sm font-semibold text-ink">{t("publicMenu.subtotal")}</span>
-              <span className={`${display.className} whitespace-nowrap text-base font-semibold text-ink`}>
+              <span className="text-sm font-semibold text-neutral-900">{t("publicMenu.subtotal")}</span>
+              <span className={`${display.className} whitespace-nowrap text-base font-semibold text-neutral-900`}>
                 {formatNPR(total)}
               </span>
             </div>
-            <p className="mt-0.5 text-xs text-ink-faint">{t("publicMenu.taxAtCheckout")}</p>
+            <p className="mt-0.5 text-xs text-neutral-400">{t("publicMenu.taxAtCheckout")}</p>
           </div>
 
           <button
@@ -794,12 +794,12 @@ function CheckoutView({
     <div className="px-4 py-4 sm:px-6">
       <button
         onClick={onBack}
-        className="mb-4 text-sm font-medium text-ink-muted hover:text-ink"
+        className="mb-4 text-sm font-medium text-neutral-500 hover:text-neutral-800"
         disabled={submitting}
       >
         {t("publicMenu.backToCart")}
       </button>
-      <h1 className={`${display.className} mb-3 text-xl font-semibold text-ink`}>
+      <h1 className={`${display.className} mb-3 text-xl font-semibold text-neutral-900`}>
         {t("publicMenu.checkout")}
       </h1>
 
@@ -824,17 +824,17 @@ function CheckoutView({
           onChange={(e) => setNotes(e.target.value)}
         />
 
-        <div className="rounded-2xl bg-surface-1/80 px-4 py-3.5">
+        <div className="rounded-2xl bg-stone-100/80 px-4 py-3.5">
           <div className="flex items-baseline justify-between gap-3 text-sm">
-            <span className="font-semibold text-ink">{t("publicMenu.estimatedSubtotal")}</span>
-            <span className={`${display.className} whitespace-nowrap text-base font-semibold text-ink`}>
+            <span className="font-semibold text-neutral-900">{t("publicMenu.estimatedSubtotal")}</span>
+            <span className={`${display.className} whitespace-nowrap text-base font-semibold text-neutral-900`}>
               {formatNPR(total)}
             </span>
           </div>
-          <p className="mt-0.5 text-xs text-ink-muted">{t("publicMenu.taxAddedOnSubmission")}</p>
+          <p className="mt-0.5 text-xs text-neutral-500">{t("publicMenu.taxAddedOnSubmission")}</p>
         </div>
 
-        {error && <p className="rounded-xl bg-red-500/15 px-3.5 py-2.5 text-sm text-red-400">{error}</p>}
+        {error && <p className="rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-700">{error}</p>}
 
         <button
           onClick={handleSubmit}

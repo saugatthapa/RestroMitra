@@ -20,10 +20,10 @@ type Ticket = {
 };
 
 const STATUS_BADGE: Record<TicketStatus, string> = {
-  open: "bg-sky-500/15 text-sky-400",
-  in_progress: "bg-amber-500/15 text-amber-400",
-  resolved: "bg-emerald-500/15 text-emerald-400",
-  closed: "bg-surface-1 text-ink-muted",
+  open: "bg-sky-50 text-sky-700",
+  in_progress: "bg-amber-50 text-amber-700",
+  resolved: "bg-emerald-50 text-emerald-700",
+  closed: "bg-neutral-100 text-neutral-500",
 };
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
@@ -34,9 +34,9 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
 };
 
 const PRIORITY_BADGE: Record<TicketPriority, string> = {
-  low: "bg-surface-1 text-ink-muted",
-  normal: "bg-surface-1 text-ink-secondary",
-  high: "bg-red-500/15 text-red-400",
+  low: "bg-neutral-100 text-neutral-500",
+  normal: "bg-neutral-100 text-neutral-600",
+  high: "bg-red-50 text-red-700",
 };
 
 function formatDateTime(iso: string) {
@@ -89,8 +89,8 @@ export function AdminSupportTicketsBoard() {
   }, [tickets, restaurantQuery]);
 
   return (
-    <div className="rounded-lg border border-hairline bg-surface-2">
-      <div className="flex flex-wrap items-center gap-3 border-b border-hairline p-5">
+    <div className="rounded-lg border border-neutral-200 bg-white">
+      <div className="flex flex-wrap items-center gap-3 border-b border-neutral-200 p-5">
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value as TicketStatus | "")}
@@ -110,21 +110,21 @@ export function AdminSupportTicketsBoard() {
         />
       </div>
 
-      {error && <p className="p-5 text-sm text-red-400">{error}</p>}
+      {error && <p className="p-5 text-sm text-red-600">{error}</p>}
 
-      <div className="divide-y divide-hairline/60">
+      <div className="divide-y divide-neutral-100">
         {!loading && visibleTickets.length === 0 && (
-          <p className="p-5 text-center text-sm text-ink-faint">No tickets match.</p>
+          <p className="p-5 text-center text-sm text-neutral-400">No tickets match.</p>
         )}
         {visibleTickets.map((t) => (
           <Link
             key={t.id}
             href={`/admin/support-tickets/${t.id}`}
-            className="flex items-center justify-between gap-4 p-5 hover:bg-surface-1"
+            className="flex items-center justify-between gap-4 p-5 hover:bg-neutral-50"
           >
             <div>
               <div className="mb-1 flex items-center gap-2">
-                <span className="text-sm font-medium text-ink">{t.subject}</span>
+                <span className="text-sm font-medium text-neutral-900">{t.subject}</span>
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[t.status]}`}>
                   {STATUS_LABEL[t.status]}
                 </span>
@@ -132,7 +132,7 @@ export function AdminSupportTicketsBoard() {
                   {t.priority}
                 </span>
               </div>
-              <p className="text-xs text-ink-faint">
+              <p className="text-xs text-neutral-400">
                 {t.restaurantName} · Filed by {t.createdByFullName ?? "Unknown"} · Last activity{" "}
                 {formatDateTime(t.updatedAt)}
               </p>

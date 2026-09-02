@@ -15,11 +15,11 @@ export function TablesView({ slug, restaurantName }: { slug: string; restaurantN
 
   return (
     <div className="space-y-4">
-      <div className="inline-flex rounded-full bg-surface-1 p-1 text-sm">
+      <div className="inline-flex rounded-full bg-neutral-100 p-1 text-sm">
         <button
           onClick={() => setView("floor")}
           className={`rounded-full px-4 py-1.5 font-medium ${
-            view === "floor" ? "bg-surface-2 text-ink shadow-sm" : "text-ink-muted"
+            view === "floor" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500"
           }`}
         >
           Floor plan
@@ -27,7 +27,7 @@ export function TablesView({ slug, restaurantName }: { slug: string; restaurantN
         <button
           onClick={() => setView("list")}
           className={`rounded-full px-4 py-1.5 font-medium ${
-            view === "list" ? "bg-surface-2 text-ink shadow-sm" : "text-ink-muted"
+            view === "list" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500"
           }`}
         >
           List &amp; QR codes

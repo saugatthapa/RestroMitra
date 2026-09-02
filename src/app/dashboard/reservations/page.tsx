@@ -24,8 +24,8 @@ export default async function ReservationsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-ink">Reservations</h1>
-        <p className="text-sm text-ink-muted">
+        <h1 className="text-xl font-semibold text-neutral-900">Reservations</h1>
+        <p className="text-sm text-neutral-500">
           Table bookings for {active.name}.
         </p>
       </div>

@@ -24,8 +24,8 @@ export default async function CustomersPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-ink">Customers</h1>
-        <p className="text-sm text-ink-muted">
+        <h1 className="text-xl font-semibold text-neutral-900">Customers</h1>
+        <p className="text-sm text-neutral-500">
           CRM and loyalty program for {active.name}.
         </p>
       </div>

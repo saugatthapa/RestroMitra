@@ -106,7 +106,7 @@ export function RevenueTrendChart({ series }: { series: DailySeriesPoint[] }) {
   const hovered = hoverIndex !== null ? series[hoverIndex] : null;
 
   if (series.length === 0) {
-    return <p className="text-sm text-ink-faint">No data for this range.</p>;
+    return <p className="text-sm text-neutral-400">No data for this range.</p>;
   }
 
   return (
@@ -124,16 +124,16 @@ export function RevenueTrendChart({ series }: { series: DailySeriesPoint[] }) {
         </div>
         <button
           onClick={() => setShowTable((v) => !v)}
-          className="text-xs font-medium text-orange-400 hover:underline"
+          className="text-xs font-medium text-orange-700 hover:underline"
         >
           {showTable ? "Show chart" : "Show as table"}
         </button>
       </div>
 
       {showTable ? (
-        <div className="max-h-64 overflow-y-auto rounded-lg border border-hairline">
+        <div className="max-h-64 overflow-y-auto rounded-lg border border-neutral-200">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+            <thead className="sticky top-0 bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
               <tr>
                 <th className="px-3 py-2">Date</th>
                 <th className="px-3 py-2">Revenue</th>
@@ -142,7 +142,7 @@ export function RevenueTrendChart({ series }: { series: DailySeriesPoint[] }) {
             </thead>
             <tbody>
               {series.map((p) => (
-                <tr key={p.date} className="border-t border-hairline/60">
+                <tr key={p.date} className="border-t border-neutral-100">
                   <td className="px-3 py-1.5">{formatDate(`${p.date}T00:00:00`, dateSystem)}</td>
                   <td className="px-3 py-1.5">{formatTooltipRupees(p.revenueInPaisa)}</td>
                   <td className="px-3 py-1.5">{formatTooltipRupees(p.expensesInPaisa)}</td>
@@ -244,7 +244,7 @@ export function RevenueTrendChart({ series }: { series: DailySeriesPoint[] }) {
 
           {hovered && (
             <div
-              className="pointer-events-none absolute top-2 rounded-lg border border-hairline bg-surface-2 px-3 py-2 text-xs shadow-md"
+              className="pointer-events-none absolute top-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs shadow-md"
               style={{
                 left: `${Math.min(85, Math.max(5, (xForIndex(hoverIndex!) / WIDTH) * 100))}%`,
               }}

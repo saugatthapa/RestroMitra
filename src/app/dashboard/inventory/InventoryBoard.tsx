@@ -201,7 +201,7 @@ export function InventoryBoard({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline pb-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 pb-0">
         <div className="flex flex-wrap gap-2">
           {TABS.map((t) => (
             <button
@@ -209,8 +209,8 @@ export function InventoryBoard({
               onClick={() => setTab(t)}
               className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${
                 tab === t
-                  ? "border-orange-600 text-orange-400"
-                  : "border-transparent text-ink-muted hover:text-ink"
+                  ? "border-orange-600 text-orange-700"
+                  : "border-transparent text-neutral-500 hover:text-neutral-800"
               }`}
             >
               {t}
@@ -271,11 +271,11 @@ function ItemsTab({ slug, canViewProfit }: { slug: string; canViewProfit: boolea
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
-  if (loading) return <p className="text-sm text-ink-muted">Loading items…</p>;
+  if (loading) return <p className="text-sm text-neutral-500">Loading items…</p>;
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="flex justify-end gap-2">
         <a href={`${base(slug)}/inventory-items/export`} download className="btn-secondary text-xs">
@@ -297,9 +297,9 @@ function ItemsTab({ slug, canViewProfit }: { slug: string; canViewProfit: boolea
         />
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
             <tr>
               <th className="px-3 py-2">Item</th>
               <th className="px-3 py-2">Stock</th>
@@ -313,23 +313,23 @@ function ItemsTab({ slug, canViewProfit }: { slug: string; canViewProfit: boolea
           <tbody>
             {items.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-ink-faint">
+                <td colSpan={7} className="px-3 py-6 text-center text-neutral-400">
                   No inventory items yet.
                 </td>
               </tr>
             )}
             {items.map((item) => (
-              <tr key={item.id} className="border-t border-hairline/60">
-                <td className="px-3 py-2 font-medium text-ink">
+              <tr key={item.id} className="border-t border-neutral-100">
+                <td className="px-3 py-2 font-medium text-neutral-900">
                   {item.name}
                   {item.isLowStock && (
-                    <span className="ml-2 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400">
+                    <span className="ml-2 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
                       Low stock
                     </span>
                   )}
                 </td>
                 <td className="px-3 py-2">{formatQuantity(item.currentStockMilliunits, item.unit)}</td>
-                <td className="px-3 py-2 text-ink-muted">
+                <td className="px-3 py-2 text-neutral-500">
                   {item.reorderLevelMilliunits === null
                     ? "—"
                     : formatQuantity(item.reorderLevelMilliunits, item.unit)}
@@ -337,26 +337,26 @@ function ItemsTab({ slug, canViewProfit }: { slug: string; canViewProfit: boolea
                 {canViewProfit && (
                   <td className="px-3 py-2">{formatNPR(item.costPerUnitInPaisa)}</td>
                 )}
-                <td className="px-3 py-2 text-ink-muted">
+                <td className="px-3 py-2 text-neutral-500">
                   {suppliers.find((s) => s.id === item.preferredSupplierId)?.name ?? "—"}
                 </td>
                 <td className="px-3 py-2">
                   {item.isActive ? (
-                    <span className="text-green-400">Active</span>
+                    <span className="text-green-700">Active</span>
                   ) : (
-                    <span className="text-ink-faint">Inactive</span>
+                    <span className="text-neutral-400">Inactive</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   <button
                     onClick={() => setAdjustingId(item.id)}
-                    className="text-xs font-medium text-orange-400 hover:underline"
+                    className="text-xs font-medium text-orange-700 hover:underline"
                   >
                     Adjust stock
                   </button>
                   <button
                     onClick={() => setWastingId(item.id)}
-                    className="ml-3 text-xs font-medium text-red-400 hover:underline"
+                    className="ml-3 text-xs font-medium text-red-700 hover:underline"
                   >
                     Record waste
                   </button>
@@ -431,11 +431,11 @@ function CreateItemForm({
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-hairline bg-surface-2 p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Name</span>
+          <span className="mb-1 block text-neutral-600">Name</span>
           <input
             required
             value={name}
@@ -445,7 +445,7 @@ function CreateItemForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Unit</span>
+          <span className="mb-1 block text-neutral-600">Unit</span>
           <select value={unit} onChange={(e) => setUnit(e.target.value as InventoryUnit)} className="input">
             {INVENTORY_UNITS.map((u) => (
               <option key={u} value={u}>
@@ -455,7 +455,7 @@ function CreateItemForm({
           </select>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Reorder level (optional)</span>
+          <span className="mb-1 block text-neutral-600">Reorder level (optional)</span>
           <input
             type="number"
             min="0"
@@ -467,7 +467,7 @@ function CreateItemForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Preferred supplier (optional)</span>
+          <span className="mb-1 block text-neutral-600">Preferred supplier (optional)</span>
           <select
             value={preferredSupplierId}
             onChange={(e) => setPreferredSupplierId(e.target.value)}
@@ -482,7 +482,7 @@ function CreateItemForm({
           </select>
         </label>
       </div>
-      <p className="mt-2 text-xs text-ink-faint">
+      <p className="mt-2 text-xs text-neutral-400">
         New items start at zero stock — record what&apos;s on hand with &quot;Adjust stock&quot;
         right after creating it.
       </p>
@@ -536,16 +536,16 @@ function AdjustStockModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-surface-2 p-4 shadow-xl">
-        <h2 className="mb-1 text-sm font-semibold text-ink">Adjust stock — {item.name}</h2>
-        <p className="mb-3 text-xs text-ink-muted">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Adjust stock — {item.name}</h2>
+        <p className="mb-3 text-xs text-neutral-500">
           Current: {formatQuantity(item.currentStockMilliunits, item.unit)}
         </p>
-        {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <form onSubmit={submit} className="space-y-3">
           {branches.length > 1 && (
             <label className="block text-sm">
-              <span className="mb-1 block text-ink-secondary">Branch</span>
+              <span className="mb-1 block text-neutral-600">Branch</span>
               <select
                 required
                 value={branchId}
@@ -566,8 +566,8 @@ function AdjustStockModal({
               onClick={() => setDirection("add")}
               className={`flex-1 rounded-lg border px-3 py-1.5 text-sm ${
                 direction === "add"
-                  ? "border-green-600 bg-green-500/15 font-medium text-green-400"
-                  : "border-hairline text-ink-secondary"
+                  ? "border-green-600 bg-green-50 font-medium text-green-700"
+                  : "border-neutral-200 text-neutral-600"
               }`}
             >
               Add
@@ -577,15 +577,15 @@ function AdjustStockModal({
               onClick={() => setDirection("remove")}
               className={`flex-1 rounded-lg border px-3 py-1.5 text-sm ${
                 direction === "remove"
-                  ? "border-red-600 bg-red-500/15 font-medium text-red-400"
-                  : "border-hairline text-ink-secondary"
+                  ? "border-red-600 bg-red-50 font-medium text-red-700"
+                  : "border-neutral-200 text-neutral-600"
               }`}
             >
               Remove
             </button>
           </div>
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Quantity ({item.unit})</span>
+            <span className="mb-1 block text-neutral-600">Quantity ({item.unit})</span>
             <input
               required
               type="number"
@@ -597,7 +597,7 @@ function AdjustStockModal({
             />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Reason</span>
+            <span className="mb-1 block text-neutral-600">Reason</span>
             <input
               required
               value={reason}
@@ -606,7 +606,7 @@ function AdjustStockModal({
               placeholder="e.g. Stock count correction"
             />
           </label>
-          <p className="text-xs text-ink-faint">
+          <p className="text-xs text-neutral-400">
             Spoiled, expired, or otherwise wasted stock has its own &quot;Record waste&quot; action
             instead — it tracks a reason and cost, and shows up in the Wastage report.
           </p>
@@ -687,16 +687,16 @@ function RecordWasteModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-surface-2 p-4 shadow-xl">
-        <h2 className="mb-1 text-sm font-semibold text-ink">Record waste — {item.name}</h2>
-        <p className="mb-3 text-xs text-ink-muted">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Record waste — {item.name}</h2>
+        <p className="mb-3 text-xs text-neutral-500">
           Current: {formatQuantity(item.currentStockMilliunits, item.unit)}
         </p>
-        {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <form onSubmit={submit} className="space-y-3">
           {branches.length > 1 && (
             <label className="block text-sm">
-              <span className="mb-1 block text-ink-secondary">Branch</span>
+              <span className="mb-1 block text-neutral-600">Branch</span>
               <select
                 required
                 value={branchId}
@@ -712,7 +712,7 @@ function RecordWasteModal({
             </label>
           )}
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Quantity wasted ({item.unit})</span>
+            <span className="mb-1 block text-neutral-600">Quantity wasted ({item.unit})</span>
             <input
               required
               type="number"
@@ -724,7 +724,7 @@ function RecordWasteModal({
             />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Reason</span>
+            <span className="mb-1 block text-neutral-600">Reason</span>
             <select
               required
               value={wasteReason}
@@ -742,7 +742,7 @@ function RecordWasteModal({
             </select>
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Notes (optional)</span>
+            <span className="mb-1 block text-neutral-600">Notes (optional)</span>
             <input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -751,8 +751,8 @@ function RecordWasteModal({
             />
           </label>
           {canViewProfit && quantityNum > 0 && (
-            <p className="text-xs text-ink-muted">
-              Estimated cost of this waste: <span className="font-medium text-ink">{formatNPR(estimatedCostInPaisa)}</span>
+            <p className="text-xs text-neutral-500">
+              Estimated cost of this waste: <span className="font-medium text-neutral-900">{formatNPR(estimatedCostInPaisa)}</span>
             </p>
           )}
           <div className="flex justify-end gap-2">
@@ -809,11 +809,11 @@ function SuppliersTab({ slug, canManageAccountBooks }: { slug: string; canManage
     }
   }
 
-  if (loading) return <p className="text-sm text-ink-muted">Loading suppliers…</p>;
+  if (loading) return <p className="text-sm text-neutral-500">Loading suppliers…</p>;
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="flex justify-end gap-2">
         <a href={`${base(slug)}/suppliers/export`} download className="btn-secondary text-xs">
@@ -834,9 +834,9 @@ function SuppliersTab({ slug, canManageAccountBooks }: { slug: string; canManage
         />
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
             <tr>
               <th className="px-3 py-2">Name</th>
               <th className="px-3 py-2">Phone</th>
@@ -848,33 +848,33 @@ function SuppliersTab({ slug, canManageAccountBooks }: { slug: string; canManage
           <tbody>
             {suppliers.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-ink-faint">
+                <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
                   No suppliers yet.
                 </td>
               </tr>
             )}
             {suppliers.map((s) => (
-              <tr key={s.id} className="border-t border-hairline/60">
-                <td className="px-3 py-2 font-medium text-ink">{s.name}</td>
-                <td className="px-3 py-2 text-ink-muted">{s.phone || "—"}</td>
-                <td className="px-3 py-2 text-ink-muted">{s.address || "—"}</td>
+              <tr key={s.id} className="border-t border-neutral-100">
+                <td className="px-3 py-2 font-medium text-neutral-900">{s.name}</td>
+                <td className="px-3 py-2 text-neutral-500">{s.phone || "—"}</td>
+                <td className="px-3 py-2 text-neutral-500">{s.address || "—"}</td>
                 <td className="px-3 py-2">
                   {s.isActive ? (
-                    <span className="text-green-400">Active</span>
+                    <span className="text-green-700">Active</span>
                   ) : (
-                    <span className="text-ink-faint">Inactive</span>
+                    <span className="text-neutral-400">Inactive</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right space-x-3 whitespace-nowrap">
                   <button
                     onClick={() => setStatementSupplier(s)}
-                    className="text-xs font-medium text-orange-400 hover:underline"
+                    className="text-xs font-medium text-orange-700 hover:underline"
                   >
                     Statement
                   </button>
                   <button
                     onClick={() => toggleActive(s)}
-                    className="text-xs font-medium text-orange-400 hover:underline"
+                    className="text-xs font-medium text-orange-700 hover:underline"
                   >
                     {s.isActive ? "Deactivate" : "Reactivate"}
                   </button>
@@ -919,19 +919,19 @@ function CreateSupplierForm({ slug, onCreated }: { slug: string; onCreated: () =
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-hairline bg-surface-2 p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Name</span>
+          <span className="mb-1 block text-neutral-600">Name</span>
           <input required value={name} onChange={(e) => setName(e.target.value)} className="input" />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Phone (optional)</span>
+          <span className="mb-1 block text-neutral-600">Phone (optional)</span>
           <input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Address (optional)</span>
+          <span className="mb-1 block text-neutral-600">Address (optional)</span>
           <input value={address} onChange={(e) => setAddress(e.target.value)} className="input" />
         </label>
       </div>
@@ -1002,26 +1002,26 @@ function SupplierStatementModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-surface-2 p-4 shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
         <div className="mb-3 flex items-start justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-ink">Statement — {supplier.name}</h2>
-            <p className="text-xs text-ink-muted">Running ledger of purchases, payments, and adjustments.</p>
+            <h2 className="text-sm font-semibold text-neutral-900">Statement — {supplier.name}</h2>
+            <p className="text-xs text-neutral-500">Running ledger of purchases, payments, and adjustments.</p>
           </div>
-          <button onClick={onClose} className="text-sm text-ink-muted hover:text-ink">
+          <button onClick={onClose} className="text-sm text-neutral-500 hover:text-neutral-800">
             Close
           </button>
         </div>
 
-        {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
         <div className="mb-3 flex flex-wrap items-end gap-3">
           <label className="text-sm">
-            <span className="mb-1 block text-ink-secondary">From (optional)</span>
+            <span className="mb-1 block text-neutral-600">From (optional)</span>
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input" />
           </label>
           <label className="text-sm">
-            <span className="mb-1 block text-ink-secondary">To (optional)</span>
+            <span className="mb-1 block text-neutral-600">To (optional)</span>
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input" />
           </label>
           {(from || to) && (
@@ -1030,7 +1030,7 @@ function SupplierStatementModal({
                 setFrom("");
                 setTo("");
               }}
-              className="text-xs font-medium text-ink-muted hover:underline"
+              className="text-xs font-medium text-neutral-500 hover:underline"
             >
               Clear range
             </button>
@@ -1047,36 +1047,36 @@ function SupplierStatementModal({
           )}
         </div>
 
-        {loading && <p className="text-sm text-ink-muted">Loading statement…</p>}
+        {loading && <p className="text-sm text-neutral-500">Loading statement…</p>}
 
         {!loading && statement && (
           <>
             <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
-              <div className="rounded-xl border border-hairline bg-surface-2 p-3">
-                <p className="text-xs text-ink-muted">Opening balance</p>
-                <p className="text-sm font-semibold text-ink">{formatNPR(statement.openingBalanceInPaisa)}</p>
+              <div className="rounded-xl border border-neutral-200 bg-white p-3">
+                <p className="text-xs text-neutral-500">Opening balance</p>
+                <p className="text-sm font-semibold text-neutral-900">{formatNPR(statement.openingBalanceInPaisa)}</p>
               </div>
-              <div className="rounded-xl border border-hairline bg-surface-2 p-3">
-                <p className="text-xs text-ink-muted">Purchases</p>
-                <p className="text-sm font-semibold text-ink">{formatNPR(statement.totalPurchasesInPaisa)}</p>
+              <div className="rounded-xl border border-neutral-200 bg-white p-3">
+                <p className="text-xs text-neutral-500">Purchases</p>
+                <p className="text-sm font-semibold text-neutral-900">{formatNPR(statement.totalPurchasesInPaisa)}</p>
               </div>
-              <div className="rounded-xl border border-hairline bg-surface-2 p-3">
-                <p className="text-xs text-ink-muted">Payments</p>
-                <p className="text-sm font-semibold text-green-400">{formatNPR(statement.totalPaymentsInPaisa)}</p>
+              <div className="rounded-xl border border-neutral-200 bg-white p-3">
+                <p className="text-xs text-neutral-500">Payments</p>
+                <p className="text-sm font-semibold text-green-700">{formatNPR(statement.totalPaymentsInPaisa)}</p>
               </div>
-              <div className="rounded-xl border border-hairline bg-surface-2 p-3">
-                <p className="text-xs text-ink-muted">Adjustments</p>
-                <p className="text-sm font-semibold text-ink">{formatNPR(statement.totalAdjustmentsInPaisa)}</p>
+              <div className="rounded-xl border border-neutral-200 bg-white p-3">
+                <p className="text-xs text-neutral-500">Adjustments</p>
+                <p className="text-sm font-semibold text-neutral-900">{formatNPR(statement.totalAdjustmentsInPaisa)}</p>
               </div>
-              <div className="rounded-xl border border-orange-500/30 bg-orange-500/15 p-3">
-                <p className="text-xs text-orange-400">Closing balance</p>
-                <p className="text-sm font-semibold text-orange-400">{formatNPR(statement.closingBalanceInPaisa)}</p>
+              <div className="rounded-xl border border-orange-200 bg-orange-50 p-3">
+                <p className="text-xs text-orange-600">Closing balance</p>
+                <p className="text-sm font-semibold text-orange-700">{formatNPR(statement.closingBalanceInPaisa)}</p>
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-hairline">
+            <div className="overflow-x-auto rounded-2xl border border-neutral-200">
               <table className="w-full text-sm">
-                <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+                <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
                   <tr>
                     <th className="px-3 py-2">Date</th>
                     <th className="px-3 py-2">Type</th>
@@ -1086,45 +1086,45 @@ function SupplierStatementModal({
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-t border-hairline/60 bg-surface-1">
-                    <td className="px-3 py-2 text-ink-muted" colSpan={4}>
+                  <tr className="border-t border-neutral-100 bg-neutral-50">
+                    <td className="px-3 py-2 text-neutral-500" colSpan={4}>
                       Opening balance{statement.from ? ` as of ${formatDate(statement.from, dateSystem)}` : ""}
                     </td>
-                    <td className="px-3 py-2 text-right font-medium text-ink">
+                    <td className="px-3 py-2 text-right font-medium text-neutral-900">
                       {formatNPR(statement.openingBalanceInPaisa)}
                     </td>
                   </tr>
                   {statement.lines.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-ink-faint">
+                      <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
                         No activity in this range.
                       </td>
                     </tr>
                   )}
                   {statement.lines.map((l) => (
-                    <tr key={l.id} className="border-t border-hairline/60">
-                      <td className="px-3 py-2 text-ink-muted">{formatDate(l.entryDate, dateSystem)}</td>
-                      <td className="px-3 py-2 text-ink-muted">{STATEMENT_LINE_LABELS[l.type]}</td>
-                      <td className="px-3 py-2 text-ink">
+                    <tr key={l.id} className="border-t border-neutral-100">
+                      <td className="px-3 py-2 text-neutral-500">{formatDate(l.entryDate, dateSystem)}</td>
+                      <td className="px-3 py-2 text-neutral-500">{STATEMENT_LINE_LABELS[l.type]}</td>
+                      <td className="px-3 py-2 text-neutral-900">
                         {l.description}
-                        {l.note && <span className="block text-xs text-ink-faint">{l.note}</span>}
+                        {l.note && <span className="block text-xs text-neutral-400">{l.note}</span>}
                       </td>
                       <td
-                        className={`px-3 py-2 text-right ${l.deltaInPaisa >= 0 ? "text-ink" : "text-green-400"}`}
+                        className={`px-3 py-2 text-right ${l.deltaInPaisa >= 0 ? "text-neutral-900" : "text-green-700"}`}
                       >
                         {l.deltaInPaisa >= 0 ? "+" : "-"}
                         {formatNPR(Math.abs(l.deltaInPaisa))}
                       </td>
-                      <td className="px-3 py-2 text-right font-medium text-ink">
+                      <td className="px-3 py-2 text-right font-medium text-neutral-900">
                         {formatNPR(l.runningBalanceInPaisa)}
                       </td>
                     </tr>
                   ))}
-                  <tr className="border-t-2 border-hairline bg-surface-1">
-                    <td className="px-3 py-2 font-medium text-ink" colSpan={4}>
+                  <tr className="border-t-2 border-neutral-200 bg-neutral-50">
+                    <td className="px-3 py-2 font-medium text-neutral-900" colSpan={4}>
                       Closing balance as of {formatDate(statement.to, dateSystem)}
                     </td>
-                    <td className="px-3 py-2 text-right font-semibold text-ink">
+                    <td className="px-3 py-2 text-right font-semibold text-neutral-900">
                       {formatNPR(statement.closingBalanceInPaisa)}
                     </td>
                   </tr>
@@ -1196,16 +1196,16 @@ function RecordSupplierPaymentModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-surface-2 p-4 shadow-xl">
-        <h2 className="mb-1 text-sm font-semibold text-ink">Record payment — {supplier.name}</h2>
-        <p className="mb-3 text-xs text-ink-muted">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Record payment — {supplier.name}</h2>
+        <p className="mb-3 text-xs text-neutral-500">
           Applied oldest-due-first across this supplier&apos;s outstanding purchases. Current balance owed:{" "}
           {formatNPR(outstandingInPaisa)}
         </p>
-        {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <form onSubmit={submit} className="space-y-3">
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Amount paid (Rs.)</span>
+            <span className="mb-1 block text-neutral-600">Amount paid (Rs.)</span>
             <input
               required
               type="number"
@@ -1217,7 +1217,7 @@ function RecordSupplierPaymentModal({
             />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Note (optional)</span>
+            <span className="mb-1 block text-neutral-600">Note (optional)</span>
             <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
           </label>
           <div className="flex justify-end gap-2">
@@ -1275,22 +1275,22 @@ function RecordSupplierAdjustmentModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-surface-2 p-4 shadow-xl">
-        <h2 className="mb-1 text-sm font-semibold text-ink">Add adjustment — {supplier.name}</h2>
-        <p className="mb-3 text-xs text-ink-muted">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Add adjustment — {supplier.name}</h2>
+        <p className="mb-3 text-xs text-neutral-500">
           A manual credit/debit note against this supplier&apos;s balance — not tied to any one purchase.
         </p>
-        {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <form onSubmit={submit} className="space-y-3">
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Type</span>
+            <span className="mb-1 block text-neutral-600">Type</span>
             <select value={direction} onChange={(e) => setDirection(e.target.value as "debit" | "credit")} className="input">
               <option value="debit">Debit note (we owe more)</option>
               <option value="credit">Credit note (we owe less)</option>
             </select>
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Amount (Rs.)</span>
+            <span className="mb-1 block text-neutral-600">Amount (Rs.)</span>
             <input
               required
               type="number"
@@ -1302,7 +1302,7 @@ function RecordSupplierAdjustmentModal({
             />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Description</span>
+            <span className="mb-1 block text-neutral-600">Description</span>
             <input
               required
               value={description}
@@ -1312,11 +1312,11 @@ function RecordSupplierAdjustmentModal({
             />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Date (optional, defaults to today)</span>
+            <span className="mb-1 block text-neutral-600">Date (optional, defaults to today)</span>
             <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="input" />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Note (optional)</span>
+            <span className="mb-1 block text-neutral-600">Note (optional)</span>
             <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
           </label>
           <div className="flex justify-end gap-2">
@@ -1381,11 +1381,11 @@ function PurchasesTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
-  if (loading) return <p className="text-sm text-ink-muted">Loading purchases…</p>;
+  if (loading) return <p className="text-sm text-neutral-500">Loading purchases…</p>;
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="flex justify-end gap-2">
         <a href={`${base(slug)}/purchases/export`} download className="btn-secondary text-xs">
@@ -1396,7 +1396,7 @@ function PurchasesTab({
         </button>
       </div>
       {items.length === 0 && (
-        <p className="text-xs text-ink-faint">Add an inventory item first before recording a purchase.</p>
+        <p className="text-xs text-neutral-400">Add an inventory item first before recording a purchase.</p>
       )}
 
       {showCreate && (
@@ -1412,7 +1412,7 @@ function PurchasesTab({
       )}
 
       <div className="space-y-2">
-        {purchases.length === 0 && <p className="text-sm text-ink-faint">No purchases recorded yet.</p>}
+        {purchases.length === 0 && <p className="text-sm text-neutral-400">No purchases recorded yet.</p>}
         {purchases.map((p) => {
           const outstandingInPaisa = p.ledgerEntry
             ? p.ledgerEntry.amountInPaisa - p.ledgerEntry.settledAmountInPaisa
@@ -1421,34 +1421,34 @@ function PurchasesTab({
           return (
             <div
               key={p.id}
-              className={`rounded-2xl border bg-surface-2 p-4 text-sm ${
-                p.isVoided ? "border-hairline opacity-60" : "border-hairline"
+              className={`rounded-2xl border bg-white p-4 text-sm ${
+                p.isVoided ? "border-neutral-200 opacity-60" : "border-neutral-200"
               }`}
             >
               <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                <p className="font-semibold text-ink">
+                <p className="font-semibold text-neutral-900">
                   {p.supplier?.name ?? "No supplier"}
                   {p.invoiceNumber ? ` · Invoice ${p.invoiceNumber}` : ""}
                 </p>
                 <div className="flex items-center gap-2">
                   {p.isVoided && (
-                    <span className="rounded-full bg-surface-1 px-2 py-0.5 text-[10px] font-semibold text-ink-secondary">
+                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-neutral-600">
                       Voided
                     </span>
                   )}
                   {!p.isVoided && p.isCredit && (
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                        isOutstanding ? "bg-amber-500/15 text-amber-400" : "bg-green-500/15 text-green-400"
+                        isOutstanding ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"
                       }`}
                     >
                       {isOutstanding ? "Outstanding" : "Paid"}
                     </span>
                   )}
-                  <p className="text-ink-muted">{formatDate(p.createdAt, dateSystem, { withTime: true })}</p>
+                  <p className="text-neutral-500">{formatDate(p.createdAt, dateSystem, { withTime: true })}</p>
                 </div>
               </div>
-              <ul className="text-ink-secondary">
+              <ul className="text-neutral-600">
                 {p.items.map((line) => (
                   <li key={line.id}>
                     {formatQuantity(line.quantityMilliunits, line.inventoryItem.unit)} {line.inventoryItem.name}
@@ -1458,10 +1458,10 @@ function PurchasesTab({
               </ul>
               <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
                 {canViewProfit && (
-                  <p className="font-medium text-ink">
+                  <p className="font-medium text-neutral-900">
                     Total: {formatNPR(p.totalInPaisa)}
                     {isOutstanding && canViewProfit && (
-                      <span className="ml-2 font-normal text-amber-400">
+                      <span className="ml-2 font-normal text-amber-700">
                         ({formatNPR(outstandingInPaisa)} due{p.dueDate ? ` by ${p.dueDate}` : ""})
                       </span>
                     )}
@@ -1471,7 +1471,7 @@ function PurchasesTab({
                   {isOutstanding && canManageAccountBooks && (
                     <button
                       onClick={() => setPayingId(p.id)}
-                      className="text-xs font-medium text-orange-400 hover:underline"
+                      className="text-xs font-medium text-orange-700 hover:underline"
                     >
                       Record payment
                     </button>
@@ -1479,7 +1479,7 @@ function PurchasesTab({
                   {!p.isVoided && (
                     <button
                       onClick={() => setVoidingId(p.id)}
-                      className="text-xs font-medium text-red-400 hover:underline"
+                      className="text-xs font-medium text-red-700 hover:underline"
                     >
                       Void
                     </button>
@@ -1557,15 +1557,15 @@ function RecordPaymentModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-surface-2 p-4 shadow-xl">
-        <h2 className="mb-1 text-sm font-semibold text-ink">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">
           Record payment — {purchase.supplier?.name ?? "Supplier"}
         </h2>
-        <p className="mb-3 text-xs text-ink-muted">Remaining due: {formatNPR(remainingInPaisa)}</p>
-        {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+        <p className="mb-3 text-xs text-neutral-500">Remaining due: {formatNPR(remainingInPaisa)}</p>
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <form onSubmit={submit} className="space-y-3">
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Amount paid (Rs.)</span>
+            <span className="mb-1 block text-neutral-600">Amount paid (Rs.)</span>
             <input
               required
               type="number"
@@ -1578,7 +1578,7 @@ function RecordPaymentModal({
             />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Note (optional)</span>
+            <span className="mb-1 block text-neutral-600">Note (optional)</span>
             <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
           </label>
           <div className="flex justify-end gap-2">
@@ -1626,19 +1626,19 @@ function VoidPurchaseModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-surface-2 p-4 shadow-xl">
-        <h2 className="mb-1 text-sm font-semibold text-ink">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">
           Void purchase — {purchase.supplier?.name ?? "Supplier"}
         </h2>
-        <p className="mb-3 text-xs text-ink-muted">
+        <p className="mb-3 text-xs text-neutral-500">
           Reverses the stock quantity this purchase brought in and cancels any amount still due. This does
           not change the item&apos;s current average cost per unit. Can&apos;t be undone, and can&apos;t be
           done once a payment has been recorded against it.
         </p>
-        {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <form onSubmit={submit} className="space-y-3">
           <label className="block text-sm">
-            <span className="mb-1 block text-ink-secondary">Reason</span>
+            <span className="mb-1 block text-neutral-600">Reason</span>
             <input
               required
               value={reason}
@@ -1690,29 +1690,29 @@ function SupplierDuesTab({ slug, canManageAccountBooks }: { slug: string; canMan
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, status]);
 
-  if (loading) return <p className="text-sm text-ink-muted">Loading supplier dues…</p>;
-  if (!report) return error ? <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p> : null;
+  if (loading) return <p className="text-sm text-neutral-500">Loading supplier dues…</p>;
+  if (!report) return error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null;
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-hairline bg-surface-2 p-3">
-          <p className="text-xs text-ink-muted">Total due</p>
-          <p className="text-lg font-semibold text-ink">{formatNPR(report.totalDueInPaisa)}</p>
+        <div className="rounded-xl border border-neutral-200 bg-white p-3">
+          <p className="text-xs text-neutral-500">Total due</p>
+          <p className="text-lg font-semibold text-neutral-900">{formatNPR(report.totalDueInPaisa)}</p>
         </div>
-        <div className="rounded-xl border border-red-500/30 bg-red-500/15 p-3">
-          <p className="text-xs text-red-400">Overdue</p>
-          <p className="text-lg font-semibold text-red-400">{formatNPR(report.overdueInPaisa)}</p>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+          <p className="text-xs text-red-600">Overdue</p>
+          <p className="text-lg font-semibold text-red-700">{formatNPR(report.overdueInPaisa)}</p>
         </div>
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/15 p-3">
-          <p className="text-xs text-amber-400">Due today</p>
-          <p className="text-lg font-semibold text-amber-400">{formatNPR(report.dueTodayInPaisa)}</p>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs text-amber-600">Due today</p>
+          <p className="text-lg font-semibold text-amber-700">{formatNPR(report.dueTodayInPaisa)}</p>
         </div>
-        <div className="rounded-xl border border-hairline bg-surface-2 p-3">
-          <p className="text-xs text-ink-muted">Due this week</p>
-          <p className="text-lg font-semibold text-ink">{formatNPR(report.dueThisWeekInPaisa)}</p>
+        <div className="rounded-xl border border-neutral-200 bg-white p-3">
+          <p className="text-xs text-neutral-500">Due this week</p>
+          <p className="text-lg font-semibold text-neutral-900">{formatNPR(report.dueThisWeekInPaisa)}</p>
         </div>
       </div>
 
@@ -1722,7 +1722,7 @@ function SupplierDuesTab({ slug, canManageAccountBooks }: { slug: string; canMan
             key={s}
             onClick={() => setStatus(s)}
             className={`rounded-full px-3 py-1 text-xs font-medium ${
-              status === s ? "bg-orange-600 text-white" : "bg-surface-1 text-ink-secondary"
+              status === s ? "bg-orange-600 text-white" : "bg-neutral-100 text-neutral-600"
             }`}
           >
             {s === "all" ? "All" : s === "overdue" ? "Overdue" : s === "due_today" ? "Due today" : "Due this week"}
@@ -1731,9 +1731,9 @@ function SupplierDuesTab({ slug, canManageAccountBooks }: { slug: string; canMan
       </div>
 
       {report.supplierWise.length > 0 && (
-        <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
           <table className="w-full text-sm">
-            <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+            <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
               <tr>
                 <th className="px-3 py-2">Supplier</th>
                 <th className="px-3 py-2">Outstanding</th>
@@ -1743,11 +1743,11 @@ function SupplierDuesTab({ slug, canManageAccountBooks }: { slug: string; canMan
             </thead>
             <tbody>
               {report.supplierWise.map((s) => (
-                <tr key={s.supplierId ?? "unknown"} className="border-t border-hairline/60">
-                  <td className="px-3 py-2 font-medium text-ink">{s.supplierName}</td>
+                <tr key={s.supplierId ?? "unknown"} className="border-t border-neutral-100">
+                  <td className="px-3 py-2 font-medium text-neutral-900">{s.supplierName}</td>
                   <td className="px-3 py-2">{formatNPR(s.outstandingInPaisa)}</td>
-                  <td className="px-3 py-2 text-red-400">{s.overdueInPaisa > 0 ? formatNPR(s.overdueInPaisa) : "—"}</td>
-                  <td className="px-3 py-2 text-ink-muted">{s.purchaseCount}</td>
+                  <td className="px-3 py-2 text-red-700">{s.overdueInPaisa > 0 ? formatNPR(s.overdueInPaisa) : "—"}</td>
+                  <td className="px-3 py-2 text-neutral-500">{s.purchaseCount}</td>
                 </tr>
               ))}
             </tbody>
@@ -1755,9 +1755,9 @@ function SupplierDuesTab({ slug, canManageAccountBooks }: { slug: string; canMan
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
             <tr>
               <th className="px-3 py-2">Supplier</th>
               <th className="px-3 py-2">Invoice</th>
@@ -1769,16 +1769,16 @@ function SupplierDuesTab({ slug, canManageAccountBooks }: { slug: string; canMan
           <tbody>
             {report.rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-ink-faint">
+                <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
                   No outstanding supplier dues in this view.
                 </td>
               </tr>
             )}
             {report.rows.map((r) => (
-              <tr key={r.purchaseId} className="border-t border-hairline/60">
-                <td className="px-3 py-2 font-medium text-ink">{r.supplierName ?? "Unknown"}</td>
-                <td className="px-3 py-2 text-ink-muted">{r.invoiceNumber || "—"}</td>
-                <td className={`px-3 py-2 ${r.isOverdue ? "font-medium text-red-400" : "text-ink-muted"}`}>
+              <tr key={r.purchaseId} className="border-t border-neutral-100">
+                <td className="px-3 py-2 font-medium text-neutral-900">{r.supplierName ?? "Unknown"}</td>
+                <td className="px-3 py-2 text-neutral-500">{r.invoiceNumber || "—"}</td>
+                <td className={`px-3 py-2 ${r.isOverdue ? "font-medium text-red-700" : "text-neutral-500"}`}>
                   {r.dueDate ? formatDate(r.dueDate, dateSystem) : "—"}
                   {r.isOverdue && " (overdue)"}
                 </td>
@@ -1787,7 +1787,7 @@ function SupplierDuesTab({ slug, canManageAccountBooks }: { slug: string; canMan
                   {canManageAccountBooks && (
                     <button
                       onClick={() => setPayingRow(r)}
-                      className="text-xs font-medium text-orange-400 hover:underline"
+                      className="text-xs font-medium text-orange-700 hover:underline"
                     >
                       Record payment
                     </button>
@@ -1898,12 +1898,12 @@ function CreatePurchaseForm({
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-hairline bg-surface-2 p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         {branches.length > 1 && (
           <label className="text-sm">
-            <span className="mb-1 block text-ink-secondary">Receiving branch</span>
+            <span className="mb-1 block text-neutral-600">Receiving branch</span>
             <select
               required
               value={branchId}
@@ -1919,7 +1919,7 @@ function CreatePurchaseForm({
           </label>
         )}
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Supplier (optional)</span>
+          <span className="mb-1 block text-neutral-600">Supplier (optional)</span>
           <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="input">
             <option value="">None</option>
             {suppliers.map((s) => (
@@ -1930,16 +1930,16 @@ function CreatePurchaseForm({
           </select>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Invoice number (optional)</span>
+          <span className="mb-1 block text-neutral-600">Invoice number (optional)</span>
           <input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} className="input" />
         </label>
-        <label className="flex items-center gap-2 text-sm text-ink-secondary">
+        <label className="flex items-center gap-2 text-sm text-neutral-700">
           <input type="checkbox" checked={isCredit} onChange={(e) => setIsCredit(e.target.checked)} />
           Bought on credit (supplier due)
         </label>
         {isCredit && (
           <label className="text-sm">
-            <span className="mb-1 block text-ink-secondary">Due date (optional)</span>
+            <span className="mb-1 block text-neutral-600">Due date (optional)</span>
             <input
               type="date"
               value={dueDate}
@@ -1954,7 +1954,7 @@ function CreatePurchaseForm({
         {lines.map((line, i) => (
           <div key={i} className="grid grid-cols-[1fr_100px_120px_auto] items-end gap-2">
             <label className="text-sm">
-              <span className="mb-1 block text-ink-secondary">Item</span>
+              <span className="mb-1 block text-neutral-600">Item</span>
               <select
                 value={line.inventoryItemId}
                 onChange={(e) => updateLine(i, { inventoryItemId: e.target.value })}
@@ -1968,7 +1968,7 @@ function CreatePurchaseForm({
               </select>
             </label>
             <label className="text-sm">
-              <span className="mb-1 block text-ink-secondary">Qty</span>
+              <span className="mb-1 block text-neutral-600">Qty</span>
               <input
                 required
                 type="number"
@@ -1980,7 +1980,7 @@ function CreatePurchaseForm({
               />
             </label>
             <label className="text-sm">
-              <span className="mb-1 block text-ink-secondary">Cost / unit (Rs.)</span>
+              <span className="mb-1 block text-neutral-600">Cost / unit (Rs.)</span>
               <input
                 required
                 type="number"
@@ -2002,7 +2002,7 @@ function CreatePurchaseForm({
           </div>
         ))}
       </div>
-      <button type="button" onClick={addLine} className="mt-2 text-xs font-medium text-orange-400 hover:underline">
+      <button type="button" onClick={addLine} className="mt-2 text-xs font-medium text-orange-700 hover:underline">
         + Add another line
       </button>
 
@@ -2117,17 +2117,17 @@ function RecipesTab({ slug, canViewProfit }: { slug: string; canViewProfit: bool
     }
   }
 
-  if (loading) return <p className="text-sm text-ink-muted">Loading…</p>;
+  if (loading) return <p className="text-sm text-neutral-500">Loading…</p>;
   if (menuItems.length === 0) {
-    return <p className="text-sm text-ink-faint">Add menu items first, then define their recipes here.</p>;
+    return <p className="text-sm text-neutral-400">Add menu items first, then define their recipes here.</p>;
   }
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <label className="block text-sm sm:max-w-xs">
-        <span className="mb-1 block text-ink-secondary">Menu item</span>
+        <span className="mb-1 block text-neutral-600">Menu item</span>
         <select
           value={selectedMenuItemId}
           onChange={(e) => setSelectedMenuItemId(e.target.value)}
@@ -2142,17 +2142,17 @@ function RecipesTab({ slug, canViewProfit }: { slug: string; canViewProfit: bool
       </label>
 
       {loadingRecipe ? (
-        <p className="text-sm text-ink-muted">Loading recipe…</p>
+        <p className="text-sm text-neutral-500">Loading recipe…</p>
       ) : (
-        <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
+        <div className="rounded-2xl border border-neutral-200 bg-white p-4">
           {lines.length === 0 && (
-            <p className="mb-3 text-sm text-ink-faint">No ingredients defined for this item yet.</p>
+            <p className="mb-3 text-sm text-neutral-400">No ingredients defined for this item yet.</p>
           )}
           <div className="space-y-2">
             {lines.map((line, i) => (
               <div key={line.id} className="grid grid-cols-[1fr_140px_auto] items-end gap-2">
                 <label className="text-sm">
-                  <span className="mb-1 block text-ink-secondary">Ingredient</span>
+                  <span className="mb-1 block text-neutral-600">Ingredient</span>
                   <select
                     value={line.inventoryItemId}
                     onChange={(e) => {
@@ -2172,7 +2172,7 @@ function RecipesTab({ slug, canViewProfit }: { slug: string; canViewProfit: bool
                   </select>
                 </label>
                 <label className="text-sm">
-                  <span className="mb-1 block text-ink-secondary">Qty / serving ({line.unit})</span>
+                  <span className="mb-1 block text-neutral-600">Qty / serving ({line.unit})</span>
                   <input
                     type="number"
                     min="0.001"
@@ -2192,12 +2192,12 @@ function RecipesTab({ slug, canViewProfit }: { slug: string; canViewProfit: bool
               </div>
             ))}
           </div>
-          <button type="button" onClick={addLine} className="mt-2 text-xs font-medium text-orange-400 hover:underline">
+          <button type="button" onClick={addLine} className="mt-2 text-xs font-medium text-orange-700 hover:underline">
             + Add ingredient
           </button>
 
           {canViewProfit && costPerServing !== null && (
-            <p className="mt-3 text-sm text-ink-secondary">
+            <p className="mt-3 text-sm text-neutral-600">
               Estimated ingredient cost per serving: <span className="font-medium">{formatNPR(costPerServing)}</span>
             </p>
           )}
@@ -2228,14 +2228,14 @@ const STOCK_TRANSFER_STATUS_LABELS: Record<StockTransferStatus, string> = {
 function StockTransferStatusBadge({ status }: { status: StockTransferStatus }) {
   const cls =
     status === "requested"
-      ? "bg-surface-1 text-ink-secondary"
+      ? "bg-neutral-100 text-neutral-700"
       : status === "approved"
-        ? "bg-blue-500/15 text-blue-400"
+        ? "bg-blue-50 text-blue-700"
         : status === "dispatched"
-          ? "bg-amber-500/15 text-amber-400"
+          ? "bg-amber-50 text-amber-700"
           : status === "received"
-            ? "bg-green-500/15 text-green-400"
-            : "bg-red-500/15 text-red-400";
+            ? "bg-green-50 text-green-700"
+            : "bg-red-50 text-red-700";
   return (
     <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
       {STOCK_TRANSFER_STATUS_LABELS[status]}
@@ -2275,11 +2275,11 @@ function StockTransfersTab({ slug }: { slug: string }) {
     return branches.find((b) => b.id === branchId)?.name ?? "—";
   }
 
-  if (loading) return <p className="text-sm text-ink-muted">Loading stock transfers…</p>;
+  if (loading) return <p className="text-sm text-neutral-500">Loading stock transfers…</p>;
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
@@ -2288,7 +2288,7 @@ function StockTransfersTab({ slug }: { slug: string }) {
               key={s}
               onClick={() => setStatusFilter(s)}
               className={`rounded-full px-3 py-1 text-xs font-medium ${
-                statusFilter === s ? "bg-orange-600 text-white" : "bg-surface-1 text-ink-secondary"
+                statusFilter === s ? "bg-orange-600 text-white" : "bg-neutral-100 text-neutral-600"
               }`}
             >
               {s === "all" ? "All" : STOCK_TRANSFER_STATUS_LABELS[s]}
@@ -2302,7 +2302,7 @@ function StockTransfersTab({ slug }: { slug: string }) {
         )}
       </div>
 
-      {branches.length <= 1 && <p className="text-sm text-ink-muted">Stock transfers need at least two branches.</p>}
+      {branches.length <= 1 && <p className="text-sm text-neutral-500">Stock transfers need at least two branches.</p>}
 
       {showCreate && (
         <CreateStockTransferForm
@@ -2315,9 +2315,9 @@ function StockTransfersTab({ slug }: { slug: string }) {
         />
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
             <tr>
               <th className="px-3 py-2">From</th>
               <th className="px-3 py-2">To</th>
@@ -2329,21 +2329,21 @@ function StockTransfersTab({ slug }: { slug: string }) {
           <tbody>
             {transfers.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-ink-faint">
+                <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
                   No stock transfers in this view.
                 </td>
               </tr>
             )}
             {transfers.map((t) => (
-              <tr key={t.id} className="border-t border-hairline/60">
-                <td className="px-3 py-2 font-medium text-ink">{branchName(t.fromBranchId)}</td>
-                <td className="px-3 py-2 font-medium text-ink">{branchName(t.toBranchId)}</td>
+              <tr key={t.id} className="border-t border-neutral-100">
+                <td className="px-3 py-2 font-medium text-neutral-900">{branchName(t.fromBranchId)}</td>
+                <td className="px-3 py-2 font-medium text-neutral-900">{branchName(t.toBranchId)}</td>
                 <td className="px-3 py-2">
                   <StockTransferStatusBadge status={t.status} />
                 </td>
-                <td className="px-3 py-2 text-ink-muted">{formatDate(t.createdAt, dateSystem, { withTime: true })}</td>
+                <td className="px-3 py-2 text-neutral-500">{formatDate(t.createdAt, dateSystem, { withTime: true })}</td>
                 <td className="px-3 py-2 text-right">
-                  <button onClick={() => setViewingId(t.id)} className="text-xs font-medium text-orange-400 hover:underline">
+                  <button onClick={() => setViewingId(t.id)} className="text-xs font-medium text-orange-700 hover:underline">
                     View
                   </button>
                 </td>
@@ -2429,11 +2429,11 @@ function CreateStockTransferForm({
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-hairline bg-surface-2 p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">From branch</span>
+          <span className="mb-1 block text-neutral-600">From branch</span>
           <select required value={fromBranchId} onChange={(e) => setFromBranchId(e.target.value)} className="input">
             <option value="" disabled>
               Select a branch
@@ -2446,7 +2446,7 @@ function CreateStockTransferForm({
           </select>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">To branch</span>
+          <span className="mb-1 block text-neutral-600">To branch</span>
           <select required value={toBranchId} onChange={(e) => setToBranchId(e.target.value)} className="input">
             <option value="" disabled>
               Select a branch
@@ -2459,7 +2459,7 @@ function CreateStockTransferForm({
           </select>
         </label>
         <label className="text-sm sm:col-span-2">
-          <span className="mb-1 block text-ink-secondary">Notes (optional)</span>
+          <span className="mb-1 block text-neutral-600">Notes (optional)</span>
           <input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -2473,7 +2473,7 @@ function CreateStockTransferForm({
         {lines.map((line, i) => (
           <div key={i} className="grid grid-cols-[1fr_100px_auto] items-end gap-2">
             <label className="text-sm">
-              <span className="mb-1 block text-ink-secondary">Item</span>
+              <span className="mb-1 block text-neutral-600">Item</span>
               <select
                 required
                 value={line.inventoryItemId}
@@ -2491,7 +2491,7 @@ function CreateStockTransferForm({
               </select>
             </label>
             <label className="text-sm">
-              <span className="mb-1 block text-ink-secondary">Qty</span>
+              <span className="mb-1 block text-neutral-600">Qty</span>
               <input
                 required
                 type="number"
@@ -2512,7 +2512,7 @@ function CreateStockTransferForm({
             </button>
           </div>
         ))}
-        <button type="button" onClick={addLine} className="text-xs font-medium text-orange-400 hover:underline">
+        <button type="button" onClick={addLine} className="text-xs font-medium text-orange-700 hover:underline">
           + Add another item
         </button>
       </div>
@@ -2646,17 +2646,17 @@ function StockTransferDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-surface-2 p-4 shadow-xl">
-        {loading && <p className="text-sm text-ink-muted">Loading…</p>}
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
+        {loading && <p className="text-sm text-neutral-500">Loading…</p>}
         {!loading && detail && (
           <>
             <div className="mb-3 flex items-start justify-between gap-2">
               <div>
-                <h2 className="text-sm font-semibold text-ink">
+                <h2 className="text-sm font-semibold text-neutral-900">
                   {branches.find((b) => b.id === detail.transfer.fromBranchId)?.name ?? "Branch"} →{" "}
                   {branches.find((b) => b.id === detail.transfer.toBranchId)?.name ?? "Branch"}
                 </h2>
-                <p className="mt-1 text-xs text-ink-muted">
+                <p className="mt-1 text-xs text-neutral-500">
                   Requested {formatDate(detail.transfer.createdAt, dateSystem, { withTime: true })}
                   {detail.transfer.notes ? ` — ${detail.transfer.notes}` : ""}
                 </p>
@@ -2664,15 +2664,15 @@ function StockTransferDetailModal({
               <StockTransferStatusBadge status={detail.transfer.status} />
             </div>
 
-            {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+            {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
             {detail.transfer.status === "cancelled" && (
-              <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">
+              <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
                 Cancelled — {detail.transfer.cancellationReason}.
               </p>
             )}
             {detail.transfer.status === "received" && (
-              <p className="mb-3 rounded-lg bg-green-500/15 px-3 py-2 text-xs text-green-300">
+              <p className="mb-3 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-800">
                 Received
                 {detail.transfer.receivedAt ? ` ${formatDate(detail.transfer.receivedAt, dateSystem, { withTime: true })}` : ""}
                 {" "}
@@ -2680,15 +2680,15 @@ function StockTransferDetailModal({
               </p>
             )}
             {detail.transfer.status === "dispatched" && (
-              <p className="mb-3 rounded-lg bg-amber-500/15 px-3 py-2 text-xs text-amber-300">
+              <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 Dispatched — stock has left the source branch and is in transit. Confirm what actually arrives
                 below.
               </p>
             )}
 
-            <div className="overflow-x-auto rounded-xl border border-hairline">
+            <div className="overflow-x-auto rounded-xl border border-neutral-200">
               <table className="w-full text-sm">
-                <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+                <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
                   <tr>
                     <th className="px-3 py-2">Item</th>
                     <th className="px-3 py-2">Requested</th>
@@ -2700,9 +2700,9 @@ function StockTransferDetailModal({
                     const info = itemInfo(row.inventoryItemId);
                     const unit = info?.unit ?? "piece";
                     return (
-                      <tr key={row.id} className="border-t border-hairline/60 align-top">
-                        <td className="px-3 py-2 font-medium text-ink">{info?.name ?? "Unknown item"}</td>
-                        <td className="px-3 py-2 text-ink-muted">{formatQuantity(row.quantityMilliunits, unit)}</td>
+                      <tr key={row.id} className="border-t border-neutral-100 align-top">
+                        <td className="px-3 py-2 font-medium text-neutral-900">{info?.name ?? "Unknown item"}</td>
+                        <td className="px-3 py-2 text-neutral-500">{formatQuantity(row.quantityMilliunits, unit)}</td>
                         <td className="px-3 py-2">
                           {detail.transfer.status === "dispatched" ? (
                             <div className="space-y-1">
@@ -2737,15 +2737,15 @@ function StockTransferDetailModal({
                             <span
                               className={
                                 row.receivedQuantityMilliunits < row.quantityMilliunits
-                                  ? "text-red-400"
-                                  : "text-ink-secondary"
+                                  ? "text-red-700"
+                                  : "text-neutral-700"
                               }
                             >
                               {formatQuantity(row.receivedQuantityMilliunits, unit)}
                             </span>
                           )}
                           {row.note && detail.transfer.status !== "dispatched" && (
-                            <p className="mt-0.5 text-xs text-ink-faint">{row.note}</p>
+                            <p className="mt-0.5 text-xs text-neutral-400">{row.note}</p>
                           )}
                         </td>
                       </tr>
@@ -2763,7 +2763,7 @@ function StockTransferDetailModal({
                 <button
                   type="button"
                   onClick={() => setShowCancel(true)}
-                  className="rounded-lg border border-red-500/40 px-3 py-1.5 text-sm font-medium text-red-400 hover:bg-red-500/15"
+                  className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
                 >
                   Cancel transfer
                 </button>
@@ -2786,9 +2786,9 @@ function StockTransferDetailModal({
             </div>
 
             {showCancel && (
-              <form onSubmit={doCancel} className="mt-3 space-y-2 rounded-xl border border-red-500/30 bg-red-500/15 p-3">
+              <form onSubmit={doCancel} className="mt-3 space-y-2 rounded-xl border border-red-200 bg-red-50 p-3">
                 <label className="block text-sm">
-                  <span className="mb-1 block text-ink-secondary">Reason for cancelling</span>
+                  <span className="mb-1 block text-neutral-700">Reason for cancelling</span>
                   <input
                     required
                     value={cancelReason}
@@ -2831,12 +2831,12 @@ const STOCK_COUNT_STATUS_LABELS: Record<StockCountStatus, string> = {
 function StockCountStatusBadge({ status }: { status: StockCountStatus }) {
   const cls =
     status === "open"
-      ? "bg-surface-1 text-ink-secondary"
+      ? "bg-neutral-100 text-neutral-700"
       : status === "pending_approval"
-        ? "bg-amber-500/15 text-amber-400"
+        ? "bg-amber-50 text-amber-700"
         : status === "applied"
-          ? "bg-green-500/15 text-green-400"
-          : "bg-red-500/15 text-red-400";
+          ? "bg-green-50 text-green-700"
+          : "bg-red-50 text-red-700";
   return (
     <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
       {STOCK_COUNT_STATUS_LABELS[status]}
@@ -2876,11 +2876,11 @@ function StockCountsTab({ slug, canApproveStockCount }: { slug: string; canAppro
     return branches.find((b) => b.id === branchId)?.name ?? "—";
   }
 
-  if (loading) return <p className="text-sm text-ink-muted">Loading stock counts…</p>;
+  if (loading) return <p className="text-sm text-neutral-500">Loading stock counts…</p>;
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
@@ -2889,7 +2889,7 @@ function StockCountsTab({ slug, canApproveStockCount }: { slug: string; canAppro
               key={s}
               onClick={() => setStatusFilter(s)}
               className={`rounded-full px-3 py-1 text-xs font-medium ${
-                statusFilter === s ? "bg-orange-600 text-white" : "bg-surface-1 text-ink-secondary"
+                statusFilter === s ? "bg-orange-600 text-white" : "bg-neutral-100 text-neutral-600"
               }`}
             >
               {s === "all" ? "All" : STOCK_COUNT_STATUS_LABELS[s]}
@@ -2912,9 +2912,9 @@ function StockCountsTab({ slug, canApproveStockCount }: { slug: string; canAppro
         />
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
             <tr>
               <th className="px-3 py-2">Branch</th>
               <th className="px-3 py-2">Status</th>
@@ -2926,28 +2926,28 @@ function StockCountsTab({ slug, canApproveStockCount }: { slug: string; canAppro
           <tbody>
             {counts.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-ink-faint">
+                <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
                   No stock counts in this view.
                 </td>
               </tr>
             )}
             {counts.map((c) => (
-              <tr key={c.id} className="border-t border-hairline/60">
-                <td className="px-3 py-2 font-medium text-ink">{branchName(c.branchId)}</td>
+              <tr key={c.id} className="border-t border-neutral-100">
+                <td className="px-3 py-2 font-medium text-neutral-900">{branchName(c.branchId)}</td>
                 <td className="px-3 py-2">
                   <StockCountStatusBadge status={c.status} />
                   {c.hasLargeVariance && c.status === "pending_approval" && (
-                    <span className="ml-2 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400">
+                    <span className="ml-2 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
                       Large variance
                     </span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-ink-muted">{formatDate(c.createdAt, dateSystem, { withTime: true })}</td>
-                <td className="px-3 py-2 text-ink-muted">
+                <td className="px-3 py-2 text-neutral-500">{formatDate(c.createdAt, dateSystem, { withTime: true })}</td>
+                <td className="px-3 py-2 text-neutral-500">
                   {c.submittedAt ? formatDate(c.submittedAt, dateSystem, { withTime: true }) : "—"}
                 </td>
                 <td className="px-3 py-2 text-right">
-                  <button onClick={() => setViewingId(c.id)} className="text-xs font-medium text-orange-400 hover:underline">
+                  <button onClick={() => setViewingId(c.id)} className="text-xs font-medium text-orange-700 hover:underline">
                     {c.status === "open" ? "Continue" : "View"}
                   </button>
                 </td>
@@ -3004,12 +3004,12 @@ function CreateStockCountForm({
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-hairline bg-surface-2 p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         {branches.length > 1 && (
           <label className="text-sm">
-            <span className="mb-1 block text-ink-secondary">Branch</span>
+            <span className="mb-1 block text-neutral-600">Branch</span>
             <select required value={branchId} onChange={(e) => setBranchId(e.target.value)} className="input">
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -3020,7 +3020,7 @@ function CreateStockCountForm({
           </label>
         )}
         <label className="text-sm sm:col-span-2">
-          <span className="mb-1 block text-ink-secondary">Notes (optional)</span>
+          <span className="mb-1 block text-neutral-600">Notes (optional)</span>
           <input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -3029,7 +3029,7 @@ function CreateStockCountForm({
           />
         </label>
       </div>
-      <p className="mt-2 text-xs text-ink-faint">
+      <p className="mt-2 text-xs text-neutral-400">
         Add items and record what you physically counted next. Submitting auto-applies the result unless a
         line&apos;s variance is large enough to need sign-off first.
       </p>
@@ -3194,16 +3194,16 @@ function StockCountDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-surface-2 p-4 shadow-xl">
-        {loading && <p className="text-sm text-ink-muted">Loading…</p>}
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
+        {loading && <p className="text-sm text-neutral-500">Loading…</p>}
         {!loading && detail && (
           <>
             <div className="mb-3 flex items-start justify-between gap-2">
               <div>
-                <h2 className="text-sm font-semibold text-ink">
+                <h2 className="text-sm font-semibold text-neutral-900">
                   Stock count — {branches.find((b) => b.id === detail.stockCount.branchId)?.name ?? "Branch"}
                 </h2>
-                <p className="mt-1 text-xs text-ink-muted">
+                <p className="mt-1 text-xs text-neutral-500">
                   Started {formatDate(detail.stockCount.createdAt, dateSystem, { withTime: true })}
                   {detail.stockCount.notes ? ` — ${detail.stockCount.notes}` : ""}
                 </p>
@@ -3211,22 +3211,22 @@ function StockCountDetailModal({
               <StockCountStatusBadge status={detail.stockCount.status} />
             </div>
 
-            {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+            {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
             {detail.stockCount.status === "pending_approval" && (
-              <p className="mb-3 rounded-lg bg-amber-500/15 px-3 py-2 text-xs text-amber-300">
+              <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 One or more lines vary from the system quantity by more than the auto-apply threshold, so this
                 count needs sign-off before it changes stock.
                 {!canApproveStockCount && " Ask a manager or accountant to review it."}
               </p>
             )}
             {detail.stockCount.status === "rejected" && (
-              <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">
+              <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
                 Rejected — {detail.stockCount.rejectionReason}. No stock was changed.
               </p>
             )}
             {detail.stockCount.status === "applied" && (
-              <p className="mb-3 rounded-lg bg-green-500/15 px-3 py-2 text-xs text-green-300">
+              <p className="mb-3 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-800">
                 Applied
                 {detail.stockCount.appliedAt ? ` ${formatDate(detail.stockCount.appliedAt, dateSystem, { withTime: true })}` : ""}
                 {" "}
@@ -3234,9 +3234,9 @@ function StockCountDetailModal({
               </p>
             )}
 
-            <div className="overflow-x-auto rounded-xl border border-hairline">
+            <div className="overflow-x-auto rounded-xl border border-neutral-200">
               <table className="w-full text-sm">
-                <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+                <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
                   <tr>
                     <th className="px-3 py-2">Item</th>
                     <th className="px-3 py-2">System</th>
@@ -3248,7 +3248,7 @@ function StockCountDetailModal({
                 <tbody>
                   {detail.items.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-ink-faint">
+                      <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
                         No items added yet.
                       </td>
                     </tr>
@@ -3258,17 +3258,17 @@ function StockCountDetailModal({
                     const unit = info?.unit ?? "piece";
                     const isEditing = editingItemId === row.id;
                     return (
-                      <tr key={row.id} className="border-t border-hairline/60 align-top">
-                        <td className="px-3 py-2 font-medium text-ink">
+                      <tr key={row.id} className="border-t border-neutral-100 align-top">
+                        <td className="px-3 py-2 font-medium text-neutral-900">
                           {info?.name ?? "Unknown item"}
                           {row.isLarge && (
-                            <span className="ml-2 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400">
+                            <span className="ml-2 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
                               Large
                             </span>
                           )}
-                          {row.note && !isEditing && <p className="mt-0.5 text-xs text-ink-faint">{row.note}</p>}
+                          {row.note && !isEditing && <p className="mt-0.5 text-xs text-neutral-400">{row.note}</p>}
                         </td>
-                        <td className="px-3 py-2 text-ink-muted">{formatQuantity(row.systemQuantityMilliunits, unit)}</td>
+                        <td className="px-3 py-2 text-neutral-500">{formatQuantity(row.systemQuantityMilliunits, unit)}</td>
                         <td className="px-3 py-2">
                           {isEditing ? (
                             <div className="space-y-1">
@@ -3289,7 +3289,7 @@ function StockCountDetailModal({
                               />
                             </div>
                           ) : row.physicalQuantityMilliunits === null ? (
-                            <span className="text-ink-faint">Not counted</span>
+                            <span className="text-neutral-400">Not counted</span>
                           ) : (
                             formatQuantity(row.physicalQuantityMilliunits, unit)
                           )}
@@ -3301,16 +3301,16 @@ function StockCountDetailModal({
                             <span
                               className={
                                 row.varianceMilliunits < 0
-                                  ? "text-red-400"
+                                  ? "text-red-700"
                                   : row.varianceMilliunits > 0
-                                    ? "text-green-400"
-                                    : "text-ink-muted"
+                                    ? "text-green-700"
+                                    : "text-neutral-500"
                               }
                             >
                               {row.varianceMilliunits > 0 ? "+" : ""}
                               {formatQuantity(row.varianceMilliunits, unit)}
                               {row.varianceValueInPaisa !== null && (
-                                <span className="ml-1 text-xs text-ink-faint">({formatNPR(row.varianceValueInPaisa)})</span>
+                                <span className="ml-1 text-xs text-neutral-400">({formatNPR(row.varianceValueInPaisa)})</span>
                               )}
                             </span>
                           )}
@@ -3322,7 +3322,7 @@ function StockCountDetailModal({
                                 <button
                                   type="button"
                                   onClick={() => setEditingItemId(null)}
-                                  className="text-xs text-ink-faint hover:underline"
+                                  className="text-xs text-neutral-400 hover:underline"
                                 >
                                   Cancel
                                 </button>
@@ -3330,7 +3330,7 @@ function StockCountDetailModal({
                                   type="button"
                                   disabled={savingEdit || editValue === ""}
                                   onClick={() => saveEdit(row.id)}
-                                  className="text-xs font-medium text-orange-400 hover:underline disabled:opacity-50"
+                                  className="text-xs font-medium text-orange-700 hover:underline disabled:opacity-50"
                                 >
                                   Save
                                 </button>
@@ -3339,7 +3339,7 @@ function StockCountDetailModal({
                               <button
                                 type="button"
                                 onClick={() => startEdit(row)}
-                                className="text-xs font-medium text-orange-400 hover:underline"
+                                className="text-xs font-medium text-orange-700 hover:underline"
                               >
                                 {row.physicalQuantityMilliunits === null ? "Count" : "Edit"}
                               </button>
@@ -3355,7 +3355,7 @@ function StockCountDetailModal({
             {detail.stockCount.status === "open" && (
               <form onSubmit={submitAddItem} className="mt-3 flex flex-wrap items-end gap-2">
                 <label className="text-sm">
-                  <span className="mb-1 block text-ink-secondary">Add item</span>
+                  <span className="mb-1 block text-neutral-600">Add item</span>
                   <select value={addItemId} onChange={(e) => setAddItemId(e.target.value)} className="input" required>
                     <option value="" disabled>
                       Select an item
@@ -3368,7 +3368,7 @@ function StockCountDetailModal({
                   </select>
                 </label>
                 <label className="text-sm">
-                  <span className="mb-1 block text-ink-secondary">Physical qty (optional now)</span>
+                  <span className="mb-1 block text-neutral-600">Physical qty (optional now)</span>
                   <input
                     type="number"
                     min="0"
@@ -3403,7 +3403,7 @@ function StockCountDetailModal({
                   <button
                     type="button"
                     onClick={() => setShowReject(true)}
-                    className="rounded-lg border border-red-500/40 px-3 py-1.5 text-sm font-medium text-red-400 hover:bg-red-500/15"
+                    className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
                   >
                     Reject
                   </button>
@@ -3415,9 +3415,9 @@ function StockCountDetailModal({
             </div>
 
             {showReject && (
-              <form onSubmit={doReject} className="mt-3 space-y-2 rounded-xl border border-red-500/30 bg-red-500/15 p-3">
+              <form onSubmit={doReject} className="mt-3 space-y-2 rounded-xl border border-red-200 bg-red-50 p-3">
                 <label className="block text-sm">
-                  <span className="mb-1 block text-ink-secondary">Reason for rejecting</span>
+                  <span className="mb-1 block text-neutral-700">Reason for rejecting</span>
                   <input
                     required
                     value={rejectReason}

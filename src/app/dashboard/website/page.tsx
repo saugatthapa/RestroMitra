@@ -17,8 +17,8 @@ export default async function WebsitePage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-ink">Website</h1>
-        <p className="text-sm text-ink-muted">
+        <h1 className="text-xl font-semibold text-neutral-900">Website</h1>
+        <p className="text-sm text-neutral-500">
           A free public page for {active.name} — hero, about, gallery, menu highlights, and contact
           info, with a QR code customers can scan to reach it.
         </p>
@@ -26,7 +26,7 @@ export default async function WebsitePage() {
       {canManage ? (
         <WebsiteBuilderBoard slug={active.slug} restaurantName={active.name} />
       ) : (
-        <p className="rounded-lg border border-hairline bg-surface-1 p-4 text-sm text-ink-muted">
+        <p className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-500">
           You don&apos;t have permission to manage this restaurant&apos;s website. Ask an owner for
           access.
         </p>

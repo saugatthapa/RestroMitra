@@ -69,7 +69,7 @@ export function StockEnforcementPanel({ slug }: { slug: string }) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="rounded-full border border-hairline px-3 py-1.5 text-xs font-medium text-ink-secondary hover:bg-surface-1"
+        className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
       >
         Stock settings
       </button>
@@ -77,18 +77,18 @@ export function StockEnforcementPanel({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="w-80 rounded-xl border border-hairline bg-surface-2 p-3 shadow-sm">
+    <div className="w-80 rounded-xl border border-neutral-200 bg-white p-3 shadow-sm">
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs font-semibold text-ink-secondary">Negative stock</p>
+        <p className="text-xs font-semibold text-neutral-700">Negative stock</p>
         <button
           onClick={() => setOpen(false)}
-          className="text-xs text-ink-faint hover:text-ink-secondary"
+          className="text-xs text-neutral-400 hover:text-neutral-700"
         >
           Close
         </button>
       </div>
       {loading ? (
-        <p className="text-xs text-ink-faint">Loading…</p>
+        <p className="text-xs text-neutral-400">Loading…</p>
       ) : (
         <>
           <label className="mb-2 flex items-start gap-2">
@@ -99,19 +99,19 @@ export function StockEnforcementPanel({ slug }: { slug: string }) {
               disabled={saving}
               onChange={(e) => toggle(!e.target.checked)}
             />
-            <span className="text-sm text-ink-secondary">
+            <span className="text-sm text-neutral-700">
               Block orders, adjustments, and transfers that would take a branch&apos;s stock negative
             </span>
           </label>
-          <p className="mb-2 text-[11px] text-ink-faint">
+          <p className="mb-2 text-[11px] text-neutral-400">
             Off by default: a sale, waste entry, stock-count correction, or transfer that runs out of an
             ingredient still goes through, and the item&apos;s stock shows negative (so you can see it ran
             out). Turn this on for hard enforcement instead — the specific operation is rejected with an
             error rather than allowed to go below zero. Existing negative stock isn&apos;t fixed
             retroactively; this only stops new deductions from going further negative.
           </p>
-          {error && <p className="mb-2 text-[11px] text-red-400">{error}</p>}
-          {saved && !error && !saving && <p className="mb-2 text-[11px] text-green-400">Saved.</p>}
+          {error && <p className="mb-2 text-[11px] text-red-700">{error}</p>}
+          {saved && !error && !saving && <p className="mb-2 text-[11px] text-green-700">Saved.</p>}
         </>
       )}
     </div>

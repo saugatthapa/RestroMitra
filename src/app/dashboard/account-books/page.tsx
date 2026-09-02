@@ -24,8 +24,8 @@ export default async function AccountBooksPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-ink">Account Books</h1>
-        <p className="text-sm text-ink-muted">
+        <h1 className="text-xl font-semibold text-neutral-900">Account Books</h1>
+        <p className="text-sm text-neutral-500">
           Day, month, and year cash books for {active.name} — money actually in and out, plus who
           still owes whom. Distinct from Reports&apos; sales/profit figures, which count completed
           order totals rather than cash movement.

@@ -54,9 +54,9 @@ export default function RegisterPage() {
     <div>
       <AuthTabs />
 
-      <div className="rounded-2xl border border-hairline bg-surface-2 p-6 shadow-sm">
-        <h1 className="text-lg font-semibold text-ink">Create your account</h1>
-        <p className="mt-1 text-sm text-ink-muted">
+      <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+        <h1 className="text-lg font-semibold text-neutral-900">Create your account</h1>
+        <p className="mt-1 text-sm text-neutral-500">
           Start your 30-day free trial. No card required.
         </p>
 
@@ -141,7 +141,7 @@ export default function RegisterPage() {
           </div>
 
           {error && (
-            <p className="flex items-start gap-2 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">
+            <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
               <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
                 <AuthIcon.ShieldCheck />
               </span>
@@ -154,9 +154,9 @@ export default function RegisterPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-ink-muted">
+        <p className="mt-6 text-center text-sm text-neutral-500">
           Already have an account?{" "}
-          <Link href="/login" className="font-medium text-orange-400 hover:text-orange-300">
+          <Link href="/login" className="font-medium text-orange-600 hover:text-orange-700">
             Log in
           </Link>
         </p>

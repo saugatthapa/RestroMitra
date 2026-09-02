@@ -66,8 +66,8 @@ export function GatewayPaymentButtons({ slug, orderId }: { slug: string; orderId
   }
 
   return (
-    <div className="rounded-2xl border border-hairline bg-surface-2 p-5">
-      <p className="mb-3 text-sm font-semibold text-ink">Pay with a wallet</p>
+    <div className="rounded-2xl border border-neutral-200 bg-white p-5">
+      <p className="mb-3 text-sm font-semibold text-neutral-900">Pay with a wallet</p>
       <div className="flex gap-2">
         <button
           onClick={() => start("esewa")}
@@ -84,7 +84,7 @@ export function GatewayPaymentButtons({ slug, orderId }: { slug: string; orderId
           {pending === "khalti" ? "Redirecting…" : "Pay via Khalti"}
         </button>
       </div>
-      {error && <p className="mt-2 rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">{error}</p>}
+      {error && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
     </div>
   );
 }

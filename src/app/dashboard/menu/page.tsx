@@ -27,8 +27,8 @@ export default async function MenuPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-ink">Menu</h1>
-        <p className="text-sm text-ink-muted">
+        <h1 className="text-xl font-semibold text-neutral-900">Menu</h1>
+        <p className="text-sm text-neutral-500">
           Categories, items, variants, and add-ons for {active.name}.
         </p>
       </div>

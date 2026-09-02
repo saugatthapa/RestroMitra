@@ -23,16 +23,16 @@ export function AuthField({
 }) {
   const toneClass =
     status?.tone === "error"
-      ? "text-red-400"
+      ? "text-red-600"
       : status?.tone === "success"
-        ? "text-green-400"
-        : "text-ink-faint";
+        ? "text-green-700"
+        : "text-neutral-400";
 
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-ink-secondary">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-neutral-700">{label}</span>
       <div className="relative">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
           {icon}
         </span>
         <div className={trailing ? "[&>input]:pl-9 [&>input]:pr-9" : "[&>input]:pl-9 [&>input]:pr-3"}>

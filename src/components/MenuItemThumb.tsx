@@ -51,7 +51,7 @@ export function MenuItemThumb({
     const initial = name.trim().charAt(0).toUpperCase() || "?";
     return (
       <div
-        className={`flex shrink-0 items-center justify-center bg-orange-500/15 font-semibold text-orange-300 ${rounded} ${sizeClasses} ${className}`}
+        className={`flex shrink-0 items-center justify-center bg-orange-50 font-semibold text-orange-300 ${rounded} ${sizeClasses} ${className}`}
         aria-hidden="true"
       >
         {initial}

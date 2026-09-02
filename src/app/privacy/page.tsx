@@ -53,7 +53,7 @@ export default function PrivacyPolicyPage() {
           <li>Who can see a photo: that restaurant&apos;s own owner/managers, and RestroKendra platform staff for support or legal purposes if genuinely needed.</li>
           <li>
             <strong>Retention: 90 days by default</strong> (configurable per deployment via
-            <code className="mx-1 rounded bg-surface-1 px-1.5 py-0.5 text-[13px]">ATTENDANCE_PHOTO_RETENTION_DAYS</code>
+            <code className="mx-1 rounded bg-neutral-100 px-1.5 py-0.5 text-[13px]">ATTENDANCE_PHOTO_RETENTION_DAYS</code>
             ), after which a purge routine deletes the file and clears the database record. <strong>That purge does not run on its own schedule</strong> — this product has no background job runner, so it only runs when a platform administrator (or an operator&apos;s external cron job) triggers it. In a deployment where nobody has wired that up, expired photos are not actually deleted on time — a real gap, stated here plainly.
           </li>
           <li>A staff member can decline consent and still clock in/out without a photo, unless their specific restaurant requires one.</li>
@@ -99,7 +99,7 @@ export default function PrivacyPolicyPage() {
 
       <LegalSection heading="Retention and deletion">
         <p>
-          See the <code className="rounded bg-surface-1 px-1.5 py-0.5 text-[13px]">DATA_RETENTION.md</code> document in the project repository for the full per-category breakdown. In short: attendance photos default to a 90-day retention window; everything else (accounts, orders, payroll, ledger, customer records) is kept for as long as a restaurant&apos;s account exists. <strong>There is currently no self-service &quot;delete my account and all data&quot; feature</strong> for owners, staff, or customers — removing data today requires a direct request handled manually by whoever operates the platform. Cancelling or letting a subscription lapse does <strong>not</strong> delete a restaurant&apos;s data.
+          See the <code className="rounded bg-neutral-100 px-1.5 py-0.5 text-[13px]">DATA_RETENTION.md</code> document in the project repository for the full per-category breakdown. In short: attendance photos default to a 90-day retention window; everything else (accounts, orders, payroll, ledger, customer records) is kept for as long as a restaurant&apos;s account exists. <strong>There is currently no self-service &quot;delete my account and all data&quot; feature</strong> for owners, staff, or customers — removing data today requires a direct request handled manually by whoever operates the platform. Cancelling or letting a subscription lapse does <strong>not</strong> delete a restaurant&apos;s data.
         </p>
       </LegalSection>
 
@@ -108,7 +108,7 @@ export default function PrivacyPolicyPage() {
           If you are a restaurant&apos;s customer or staff member, ask that restaurant&apos;s owner/manager
           first — they control your data and can action most requests directly. If you are a
           restaurant owner, or your manager can&apos;t resolve the request, contact{" "}
-          <a className="font-medium text-orange-400 underline underline-offset-2" href="mailto:privacy@restromitra.com">
+          <a className="font-medium text-orange-600 underline underline-offset-2" href="mailto:privacy@restromitra.com">
             privacy@restromitra.com
           </a>{" "}
           (a placeholder address — to be replaced with a real, monitored inbox before commercial
@@ -134,7 +134,7 @@ export default function PrivacyPolicyPage() {
 
       <LegalSection heading="Contact">
         <p>
-          <a className="font-medium text-orange-400 underline underline-offset-2" href="mailto:privacy@restromitra.com">
+          <a className="font-medium text-orange-600 underline underline-offset-2" href="mailto:privacy@restromitra.com">
             privacy@restromitra.com
           </a>{" "}
           (placeholder — set a real, monitored address before commercial launch).

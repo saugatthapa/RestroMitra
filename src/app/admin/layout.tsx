@@ -40,89 +40,89 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const mfaEnabled = userRow?.mfaEnabled ?? false;
 
   return (
-    <div className="min-h-screen bg-surface-1">
-      <header className="flex items-center justify-between border-b border-hairline bg-surface-2 px-4 py-3 md:px-6">
+    <div className="min-h-screen bg-neutral-50">
+      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3 md:px-6">
         <div className="flex items-center gap-3">
           <Link href="/admin" className="flex flex-col leading-tight">
-            <span className="text-lg font-semibold tracking-tight text-ink">
-              Restro<span className="text-orange-400">Kendra</span>
+            <span className="text-lg font-semibold tracking-tight text-neutral-900">
+              Restro<span className="text-orange-600">Mitra</span>
             </span>
-            <span className="text-[10px] font-medium text-ink-faint">by Saugat Thapa</span>
+            <span className="text-[10px] font-medium text-neutral-400">by Saugat Thapa</span>
           </Link>
-          <span className="rounded-full bg-surface-0 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase">
+          <span className="rounded-full bg-neutral-900 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase">
             Platform admin
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <Link href="/admin/account" className="text-sm text-ink-muted hover:text-ink-secondary">
+          <Link href="/admin/account" className="text-sm text-neutral-500 hover:text-neutral-700">
             {session.user.fullName}
           </Link>
           <LogoutButton />
         </div>
       </header>
       {!mfaEnabled && (
-        <div className="border-b border-amber-500/30 bg-amber-500/15 px-4 py-2 text-center text-xs font-medium text-amber-300 md:px-6">
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-800 md:px-6">
           Two-factor authentication is required for platform access and isn&apos;t enabled on
           your account yet.{" "}
-          <Link href="/admin/account" className="underline hover:text-amber-200">
+          <Link href="/admin/account" className="underline hover:text-amber-900">
             Enable it now
           </Link>{" "}
           — every action here will be rejected until you do.
         </div>
       )}
-      <nav className="border-b border-hairline bg-surface-2 px-4 md:px-6">
+      <nav className="border-b border-neutral-200 bg-white px-4 md:px-6">
         <div className="mx-auto flex w-full max-w-6xl gap-4 text-sm">
           <Link
             href="/admin"
-            className="border-b-2 border-transparent py-2.5 text-ink-secondary hover:border-orange-600 hover:text-ink"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
           >
             Restaurants
           </Link>
           <Link
             href="/admin/platform-roles"
-            className="border-b-2 border-transparent py-2.5 text-ink-secondary hover:border-orange-600 hover:text-ink"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
           >
             Platform admins
           </Link>
           <Link
             href="/admin/plans"
-            className="border-b-2 border-transparent py-2.5 text-ink-secondary hover:border-orange-600 hover:text-ink"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
           >
             Plans
           </Link>
           <Link
             href="/admin/feature-flags"
-            className="border-b-2 border-transparent py-2.5 text-ink-secondary hover:border-orange-600 hover:text-ink"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
           >
             Feature flags
           </Link>
           <Link
             href="/admin/ai-providers"
-            className="border-b-2 border-transparent py-2.5 text-ink-secondary hover:border-orange-600 hover:text-ink"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
           >
             AI providers
           </Link>
           <Link
             href="/admin/announcements"
-            className="border-b-2 border-transparent py-2.5 text-ink-secondary hover:border-orange-600 hover:text-ink"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
           >
             Announcements
           </Link>
           <Link
             href="/admin/system"
-            className="border-b-2 border-transparent py-2.5 text-ink-secondary hover:border-orange-600 hover:text-ink"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
           >
             System
           </Link>
           <Link
             href="/admin/audit-log"
-            className="border-b-2 border-transparent py-2.5 text-ink-secondary hover:border-orange-600 hover:text-ink"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
           >
             Audit log
           </Link>
           <Link
             href="/admin/support-tickets"
-            className="border-b-2 border-transparent py-2.5 text-ink-secondary hover:border-orange-600 hover:text-ink"
+            className="border-b-2 border-transparent py-2.5 text-neutral-600 hover:border-orange-600 hover:text-neutral-900"
           >
             Support tickets
           </Link>

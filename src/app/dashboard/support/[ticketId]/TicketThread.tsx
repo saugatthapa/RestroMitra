@@ -26,10 +26,10 @@ type Message = {
 };
 
 const STATUS_BADGE: Record<TicketStatus, string> = {
-  open: "bg-sky-500/15 text-sky-400",
-  in_progress: "bg-amber-500/15 text-amber-400",
-  resolved: "bg-emerald-500/15 text-emerald-400",
-  closed: "bg-surface-1 text-ink-muted",
+  open: "bg-sky-50 text-sky-700",
+  in_progress: "bg-amber-50 text-amber-700",
+  resolved: "bg-emerald-50 text-emerald-700",
+  closed: "bg-neutral-100 text-neutral-500",
 };
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
@@ -101,24 +101,24 @@ export function TicketThread({ slug, ticketId }: { slug: string; ticketId: strin
     <div>
       <Link
         href="/dashboard/support"
-        className="mb-4 inline-block text-sm text-ink-muted hover:text-ink-secondary"
+        className="mb-4 inline-block text-sm text-neutral-500 hover:text-neutral-700"
       >
         &larr; Back to tickets
       </Link>
 
-      {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
-      {loading && <p className="text-sm text-ink-faint">Loading…</p>}
+      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {loading && <p className="text-sm text-neutral-400">Loading…</p>}
 
       {ticket && (
-        <div className="rounded-lg border border-hairline bg-surface-2">
-          <div className="border-b border-hairline p-5">
+        <div className="rounded-lg border border-neutral-200 bg-white">
+          <div className="border-b border-neutral-200 p-5">
             <div className="mb-1 flex items-center gap-2">
-              <h1 className="text-lg font-semibold text-ink">{ticket.subject}</h1>
+              <h1 className="text-lg font-semibold text-neutral-900">{ticket.subject}</h1>
               <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[ticket.status]}`}>
                 {STATUS_LABEL[ticket.status]}
               </span>
             </div>
-            <p className="text-xs text-ink-faint">
+            <p className="text-xs text-neutral-400">
               Filed by {ticket.createdByFullName ?? "Unknown"} on {formatDateTime(ticket.createdAt)}
             </p>
           </div>
@@ -129,21 +129,21 @@ export function TicketThread({ slug, ticketId }: { slug: string; ticketId: strin
                 key={m.id}
                 className={`max-w-[85%] rounded-lg border p-3 text-sm ${
                   m.isFromPlatform
-                    ? "ml-0 border-orange-100 bg-orange-500/15"
-                    : "ml-auto border-hairline/60 bg-surface-1"
+                    ? "ml-0 border-orange-100 bg-orange-50"
+                    : "ml-auto border-neutral-100 bg-neutral-50"
                 }`}
               >
-                <div className="mb-1 text-xs font-medium text-ink-muted">
+                <div className="mb-1 text-xs font-medium text-neutral-500">
                   {m.isFromPlatform ? "RestroKendra support" : (m.authorFullName ?? "You")} ·{" "}
                   {formatDateTime(m.createdAt)}
                 </div>
-                <p className="whitespace-pre-wrap text-ink">{m.body}</p>
+                <p className="whitespace-pre-wrap text-neutral-800">{m.body}</p>
               </div>
             ))}
           </div>
 
-          <form onSubmit={sendReply} className="space-y-2 border-t border-hairline p-5">
-            {replyError && <p className="text-sm text-red-400">{replyError}</p>}
+          <form onSubmit={sendReply} className="space-y-2 border-t border-neutral-200 p-5">
+            {replyError && <p className="text-sm text-red-600">{replyError}</p>}
             <textarea
               value={reply}
               onChange={(e) => setReply(e.target.value)}

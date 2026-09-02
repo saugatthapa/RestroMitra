@@ -15,11 +15,11 @@ export function AuthTabs() {
   const isLogin = pathname === "/login";
 
   return (
-    <div className="mb-6 flex rounded-full border border-hairline bg-surface-1 p-1 text-sm font-medium">
+    <div className="mb-6 flex rounded-full border border-neutral-200 bg-neutral-100 p-1 text-sm font-medium">
       <Link
         href="/login"
         className={`flex-1 rounded-full px-4 py-2 text-center transition ${
-          isLogin ? "bg-surface-2 text-ink shadow-sm" : "text-ink-muted hover:text-ink-secondary"
+          isLogin ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
         }`}
       >
         Sign in
@@ -27,7 +27,7 @@ export function AuthTabs() {
       <Link
         href="/register"
         className={`flex-1 rounded-full px-4 py-2 text-center transition ${
-          !isLogin ? "bg-surface-2 text-ink shadow-sm" : "text-ink-muted hover:text-ink-secondary"
+          !isLogin ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
         }`}
       >
         Start free trial

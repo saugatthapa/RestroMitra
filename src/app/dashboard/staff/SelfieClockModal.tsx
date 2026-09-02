@@ -235,9 +235,9 @@ export function SelfieClockModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-surface-2 p-5">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-ink">
+          <h3 className="text-sm font-semibold text-neutral-900">
             {purpose === "workplace"
               ? kind === "clock_in"
                 ? "Workplace photo to clock in"
@@ -246,16 +246,16 @@ export function SelfieClockModal({
                 ? "Selfie to clock in"
                 : "Selfie to clock out"}
           </h3>
-          <button type="button" onClick={onClose} className="text-sm text-ink-faint hover:text-ink-secondary">
+          <button type="button" onClick={onClose} className="text-sm text-neutral-400 hover:text-neutral-600">
             Cancel
           </button>
         </div>
 
-        {step === "loading" && <p className="text-sm text-ink-muted">Loading…</p>}
+        {step === "loading" && <p className="text-sm text-neutral-500">Loading…</p>}
 
         {step === "error" && (
           <div>
-            <p className="mb-3 text-sm text-red-400">{error}</p>
+            <p className="mb-3 text-sm text-red-600">{error}</p>
             <button type="button" onClick={onClose} className="btn-secondary w-full">
               Close
             </button>
@@ -264,11 +264,11 @@ export function SelfieClockModal({
 
         {step === "consent" && consent && (
           <div>
-            <p className="mb-1 text-sm font-medium text-ink">{consent.noticeTitle}</p>
-            <div className="mb-4 max-h-64 overflow-y-auto whitespace-pre-line rounded-lg bg-surface-1 p-3 text-xs text-ink-secondary">
+            <p className="mb-1 text-sm font-medium text-neutral-900">{consent.noticeTitle}</p>
+            <div className="mb-4 max-h-64 overflow-y-auto whitespace-pre-line rounded-lg bg-neutral-50 p-3 text-xs text-neutral-600">
               {consent.noticeText}
             </div>
-            {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
+            {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
             <div className="flex gap-2">
               <button
                 type="button"
@@ -287,17 +287,17 @@ export function SelfieClockModal({
 
         {step === "camera" && (
           <div>
-            {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
+            {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
             <video
               ref={videoRef}
               autoPlay
               playsInline
               muted
-              className="mb-3 aspect-square w-full rounded-lg bg-surface-0 object-cover"
+              className="mb-3 aspect-square w-full rounded-lg bg-neutral-900 object-cover"
             />
             <canvas ref={canvasRef} className="hidden" />
             {purpose === "workplace" && (
-              <p className="mb-2 text-xs text-ink-muted">
+              <p className="mb-2 text-xs text-neutral-500">
                 Point the camera at your surroundings — this photo doesn&apos;t need to show your face.
               </p>
             )}
@@ -309,7 +309,7 @@ export function SelfieClockModal({
 
         {(step === "preview" || step === "uploading") && capturedPreviewUrl && (
           <div>
-            {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
+            {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
             {/* eslint-disable-next-line @next/next/no-img-element -- a transient in-memory object URL, not a servable asset next/image can optimize */}
             <img
               src={capturedPreviewUrl}

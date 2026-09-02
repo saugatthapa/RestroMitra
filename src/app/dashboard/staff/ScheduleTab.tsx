@@ -28,10 +28,10 @@ type ScheduledShift = {
 };
 
 const STATUS_BADGE_CLASS: Record<ScheduleStatus, string> = {
-  upcoming: "bg-surface-1 text-ink-secondary",
-  in_progress: "bg-blue-500/15 text-blue-400",
-  completed: "bg-green-500/15 text-green-400",
-  no_show: "bg-red-500/15 text-red-400",
+  upcoming: "bg-neutral-100 text-neutral-600",
+  in_progress: "bg-blue-50 text-blue-700",
+  completed: "bg-green-50 text-green-700",
+  no_show: "bg-red-50 text-red-700",
 };
 
 function formatTimeRange(startIso: string, endIso: string) {
@@ -50,7 +50,7 @@ function VarianceBadge({ variance }: { variance: ScheduleVariance }) {
       <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE_CLASS[variance.status]}`}>
         {SCHEDULE_STATUS_LABELS[variance.status]}
       </span>
-      {notes.length > 0 && <p className="mt-1 text-xs text-amber-400">{notes.join(", ")}</p>}
+      {notes.length > 0 && <p className="mt-1 text-xs text-amber-700">{notes.join(", ")}</p>}
     </div>
   );
 }
@@ -126,18 +126,18 @@ export function ScheduleTab({ slug, canManageStaff }: { slug: string; canManageS
     return [...byDate.entries()].sort(([a], [b]) => (a < b ? -1 : 1));
   }, [shifts]);
 
-  if (loading) return <p className="text-sm text-ink-muted">Loading schedule…</p>;
+  if (loading) return <p className="text-sm text-neutral-500">Loading schedule…</p>;
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm text-ink-secondary">
+        <div className="flex items-center gap-2 text-sm text-neutral-600">
           <button onClick={() => shiftWeek(-7)} className="btn-secondary text-xs">
             ← Previous week
           </button>
-          <span className="font-medium text-ink">
+          <span className="font-medium text-neutral-900">
             {from && formatDate(from, dateSystem)} – {to && formatDate(to, dateSystem)}
           </span>
           <button onClick={() => shiftWeek(7)} className="btn-secondary text-xs">
@@ -164,18 +164,18 @@ export function ScheduleTab({ slug, canManageStaff }: { slug: string; canManageS
       )}
 
       {grouped.length === 0 ? (
-        <p className="rounded-2xl border border-hairline bg-surface-2 p-4 text-sm text-ink-faint">
+        <p className="rounded-2xl border border-neutral-200 bg-white p-4 text-sm text-neutral-400">
           No shifts scheduled for this week.
         </p>
       ) : (
         <div className="space-y-3">
           {grouped.map(([date, dayShifts]) => (
-            <div key={date} className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
-              <p className="border-b border-hairline/60 px-3 py-2 text-sm font-semibold text-ink">
+            <div key={date} className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+              <p className="border-b border-neutral-100 px-3 py-2 text-sm font-semibold text-neutral-900">
                 {formatDate(date, dateSystem)}
               </p>
               <table className="w-full text-sm">
-                <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+                <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
                   <tr>
                     {canViewAll && <th className="px-3 py-2">Staff</th>}
                     <th className="px-3 py-2">Time</th>
@@ -238,17 +238,17 @@ function ShiftRow({
   }
 
   return (
-    <tr className="border-t border-hairline/60">
-      {canViewAll && <td className="px-3 py-2 font-medium text-ink">{s.fullName}</td>}
-      <td className="px-3 py-2 text-ink-secondary">{formatTimeRange(s.plannedStartAt, s.plannedEndAt)}</td>
-      {showBranchColumn && <td className="px-3 py-2 text-ink-muted">{s.branchName ?? "All branches"}</td>}
-      <td className="px-3 py-2 text-ink-muted">{s.note || "—"}</td>
+    <tr className="border-t border-neutral-100">
+      {canViewAll && <td className="px-3 py-2 font-medium text-neutral-900">{s.fullName}</td>}
+      <td className="px-3 py-2 text-neutral-600">{formatTimeRange(s.plannedStartAt, s.plannedEndAt)}</td>
+      {showBranchColumn && <td className="px-3 py-2 text-neutral-500">{s.branchName ?? "All branches"}</td>}
+      <td className="px-3 py-2 text-neutral-500">{s.note || "—"}</td>
       <td className="px-3 py-2">
         <VarianceBadge variance={s.variance} />
       </td>
       {canManageStaff && (
         <td className="px-3 py-2">
-          <button disabled={busy} onClick={remove} className="text-xs text-ink-faint underline hover:text-red-400">
+          <button disabled={busy} onClick={remove} className="text-xs text-neutral-400 underline hover:text-red-600">
             Remove
           </button>
         </td>
@@ -303,11 +303,11 @@ function AddShiftForm({
   }
 
   return (
-    <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
-      {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
+    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
         <div>
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">Staff</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600">Staff</label>
           <select value={userId} onChange={(e) => setUserId(e.target.value)} className="input">
             {staff.map((s) => (
               <option key={s.userId} value={s.userId}>
@@ -317,20 +317,20 @@ function AddShiftForm({
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">Date</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600">Date</label>
           <input type="date" value={shiftDate} onChange={(e) => setShiftDate(e.target.value)} className="input" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">Start</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600">Start</label>
           <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="input" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">End</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600">End</label>
           <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="input" />
         </div>
         {branches.length > 1 && (
           <div>
-            <label className="mb-1 block text-xs font-medium text-ink-secondary">Branch</label>
+            <label className="mb-1 block text-xs font-medium text-neutral-600">Branch</label>
             <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="input">
               <option value="">All branches</option>
               {branches.map((b) => (
@@ -342,7 +342,7 @@ function AddShiftForm({
           </div>
         )}
         <div className="flex-1 sm:min-w-[160px]">
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">Note (optional)</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600">Note (optional)</label>
           <input value={note} onChange={(e) => setNote(e.target.value)} className="input w-full" />
         </div>
         <button disabled={busy} onClick={submit} className="btn-primary">

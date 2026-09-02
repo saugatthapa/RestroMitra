@@ -120,27 +120,27 @@ export function OrderPaymentModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-surface-2 p-5 shadow-xl">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
         <div className="mb-3 flex items-start justify-between">
-          <p className="text-base font-semibold text-ink">Order #{orderNumber}</p>
-          <button onClick={onClose} disabled={submitting} className="text-ink-faint hover:text-ink-secondary">
+          <p className="text-base font-semibold text-neutral-900">Order #{orderNumber}</p>
+          <button onClick={onClose} disabled={submitting} className="text-neutral-400 hover:text-neutral-700">
             ✕
           </button>
         </div>
 
         {loading ? (
-          <p className="text-sm text-ink-muted">Loading…</p>
+          <p className="text-sm text-neutral-500">Loading…</p>
         ) : loadError ? (
-          <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{loadError}</p>
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{loadError}</p>
         ) : (
           <>
-            <p className="mb-4 rounded-lg bg-amber-500/15 px-3 py-2 text-sm font-semibold text-amber-300">
+            <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
               {formatNPR(remainingDueInPaisa)} due
             </p>
 
             <div className="mb-4">
               <GatewayPaymentButtons slug={slug} orderId={orderId} />
-              <p className="my-3 text-center text-xs text-ink-faint">or record it manually</p>
+              <p className="my-3 text-center text-xs text-neutral-400">or record it manually</p>
             </div>
 
             <div className="space-y-2">
@@ -186,7 +186,7 @@ export function OrderPaymentModal({
             </div>
 
             {error && (
-              <p className="mt-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>
+              <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
             )}
 
             <button
@@ -214,7 +214,7 @@ export function OrderPaymentModal({
             <button
               onClick={onClose}
               disabled={submitting}
-              className="mt-2 w-full text-center text-sm text-ink-muted hover:text-ink disabled:opacity-60"
+              className="mt-2 w-full text-center text-sm text-neutral-500 hover:text-neutral-800 disabled:opacity-60"
             >
               Cancel
             </button>

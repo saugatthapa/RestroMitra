@@ -77,9 +77,9 @@ export function FeatureFlagsBoard() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-hairline bg-surface-2">
-        <div className="flex items-center justify-between border-b border-hairline p-5">
-          <h2 className="text-sm font-semibold text-ink">Feature flags</h2>
+      <div className="rounded-lg border border-neutral-200 bg-white">
+        <div className="flex items-center justify-between border-b border-neutral-200 p-5">
+          <h2 className="text-sm font-semibold text-neutral-900">Feature flags</h2>
           {!creating && (
             <button
               type="button"
@@ -93,23 +93,23 @@ export function FeatureFlagsBoard() {
             </button>
           )}
         </div>
-        {error && <p className="p-5 text-sm text-red-400">{error}</p>}
+        {error && <p className="p-5 text-sm text-red-600">{error}</p>}
         {loading ? (
-          <p className="p-5 text-sm text-ink-muted">Loading…</p>
+          <p className="p-5 text-sm text-neutral-500">Loading…</p>
         ) : flags.length === 0 ? (
-          <p className="p-5 text-sm text-ink-muted">No feature flags yet.</p>
+          <p className="p-5 text-sm text-neutral-500">No feature flags yet.</p>
         ) : (
-          <ul className="divide-y divide-hairline/60">
+          <ul className="divide-y divide-neutral-100">
             {flags.map((flag) => (
               <li key={flag.key} className="flex items-center justify-between gap-4 p-4">
                 <div>
-                  <p className="flex items-center gap-2 text-sm font-medium text-ink">
+                  <p className="flex items-center gap-2 text-sm font-medium text-neutral-900">
                     {flag.name}
-                    <span className="rounded bg-surface-1 px-1.5 py-0.5 text-[10px] font-mono text-ink-muted">
+                    <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-mono text-neutral-500">
                       {flag.key}
                     </span>
                   </p>
-                  <p className="mt-0.5 text-xs text-ink-muted">{flag.description}</p>
+                  <p className="mt-0.5 text-xs text-neutral-500">{flag.description}</p>
                 </div>
                 <button
                   type="button"
@@ -117,8 +117,8 @@ export function FeatureFlagsBoard() {
                   onClick={() => toggle(flag)}
                   className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60 ${
                     flag.defaultEnabled
-                      ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-200"
-                      : "bg-surface-1 text-ink-secondary hover:bg-surface-3"
+                      ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                      : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                   }`}
                 >
                   {flag.defaultEnabled ? "Enabled by default" : "Disabled by default"}
@@ -130,43 +130,43 @@ export function FeatureFlagsBoard() {
       </div>
 
       {creating && (
-        <form onSubmit={handleCreate} className="rounded-lg border border-hairline bg-surface-2 p-5">
-          <h2 className="text-sm font-semibold text-ink">New feature flag</h2>
-          <p className="mt-1 text-xs text-ink-muted">
+        <form onSubmit={handleCreate} className="rounded-lg border border-neutral-200 bg-white p-5">
+          <h2 className="text-sm font-semibold text-neutral-900">New feature flag</h2>
+          <p className="mt-1 text-xs text-neutral-500">
             A global default for a capability not (or not only) governed by a restaurant&apos;s
             plan — e.g. an experimental rollout or a kill switch. A specific tenant can still be
             overridden individually from their own restaurant page.
           </p>
           <div className="mt-4 space-y-3">
             <label className="block text-sm">
-              <span className="mb-1 block text-ink-secondary">Key (permanent)</span>
+              <span className="mb-1 block text-neutral-700">Key (permanent)</span>
               <input
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
                 required
                 placeholder="e.g. ai_assistant_v2_beta"
-                className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
+                className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block text-ink-secondary">Name</span>
+              <span className="mb-1 block text-neutral-700">Name</span>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
+                className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block text-ink-secondary">Description</span>
+              <span className="mb-1 block text-neutral-700">Description</span>
               <input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 required
-                className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
+                className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
               />
             </label>
-            <label className="flex items-center gap-2 text-sm text-ink-secondary">
+            <label className="flex items-center gap-2 text-sm text-neutral-700">
               <input
                 type="checkbox"
                 checked={defaultEnabled}
@@ -175,13 +175,13 @@ export function FeatureFlagsBoard() {
               Enabled by default for every restaurant
             </label>
           </div>
-          {createError && <p className="mt-3 text-sm text-red-400">{createError}</p>}
+          {createError && <p className="mt-3 text-sm text-red-600">{createError}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setCreating(false)}
               disabled={createBusy}
-              className="rounded-md border border-hairline-strong px-4 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-1 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md border border-neutral-300 px-4 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Cancel
             </button>

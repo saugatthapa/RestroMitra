@@ -45,9 +45,9 @@ export function ImpersonationPanel({
   }
 
   return (
-    <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/15 p-4">
+    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
       <h2 className="mb-1 text-sm font-semibold text-amber-950">Impersonate</h2>
-      <p className="mb-3 text-xs text-amber-300">
+      <p className="mb-3 text-xs text-amber-800">
         Opens {restaurantName}&apos;s dashboard as this admin, in a separate, time-boxed session
         (30 minutes). Your own platform login is unaffected. Every action taken is logged against
         your identity, not the restaurant&apos;s.
@@ -61,7 +61,7 @@ export function ImpersonationPanel({
         className="input mb-3"
       />
 
-      <label className="mb-3 block text-xs text-amber-300">
+      <label className="mb-3 block text-xs text-amber-900">
         Access level
         <select
           value={mode}
@@ -73,7 +73,7 @@ export function ImpersonationPanel({
         </select>
       </label>
 
-      <label className="mb-3 flex items-start gap-2 text-xs text-amber-300">
+      <label className="mb-3 flex items-start gap-2 text-xs text-amber-900">
         <input
           type="checkbox"
           checked={acknowledged}
@@ -86,7 +86,7 @@ export function ImpersonationPanel({
         </span>
       </label>
 
-      {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
+      {error && <p className="mb-3 text-sm text-red-700">{error}</p>}
 
       <button
         disabled={!canStart}

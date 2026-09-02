@@ -33,7 +33,7 @@ export function AuthMarketingPanel() {
       {/* Decorative background glow — purely visual, no content */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-surface-2/10 blur-3xl"
+        className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/10 blur-3xl"
       />
       <div
         aria-hidden="true"
@@ -41,7 +41,7 @@ export function AuthMarketingPanel() {
       />
 
       <div className="relative">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2/15 px-3 py-1 text-xs font-medium backdrop-blur-sm">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-medium backdrop-blur-sm">
           <AuthIcon.Sparkle />
           Built for restaurants in Nepal
         </span>
@@ -58,7 +58,7 @@ export function AuthMarketingPanel() {
           {FEATURES.map((f) => (
             <span
               key={f.label}
-              className="inline-flex items-center gap-1.5 rounded-full bg-surface-2/10 px-3 py-1.5 text-xs font-medium backdrop-blur-sm"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium backdrop-blur-sm"
             >
               <span className="flex h-3.5 w-3.5 items-center justify-center opacity-90">{f.icon}</span>
               {f.label}
@@ -68,23 +68,23 @@ export function AuthMarketingPanel() {
       </div>
 
       {/* Product preview card — a miniature of the real dashboard chrome */}
-      <div className="relative mt-8 hidden rounded-2xl bg-surface-2 p-3 text-ink shadow-2xl ring-1 ring-black/5 xl:block">
+      <div className="relative mt-8 hidden rounded-2xl bg-white p-3 text-neutral-900 shadow-2xl ring-1 ring-black/5 xl:block">
         <div className="mb-3 flex items-center gap-1.5 px-1">
           <span className="h-2.5 w-2.5 rounded-full bg-red-300" />
           <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
           <span className="h-2.5 w-2.5 rounded-full bg-green-300" />
-          <span className="ml-2 text-[11px] font-medium text-ink-faint">
+          <span className="ml-2 text-[11px] font-medium text-neutral-400">
             RestroKendra — Dashboard
           </span>
         </div>
         <div className="flex gap-3">
-          <div className="flex w-9 flex-col items-center gap-2.5 rounded-xl bg-surface-1 py-3">
+          <div className="flex w-9 flex-col items-center gap-2.5 rounded-xl bg-neutral-50 py-3">
             {[NavIcon.Dashboard, NavIcon.Orders, NavIcon.Pos, NavIcon.Reports, NavIcon.Menu].map(
               (Icon, i) => (
                 <span
                   key={i}
                   className={`flex h-6 w-6 items-center justify-center rounded-md ${
-                    i === 0 ? "bg-orange-500/20 text-orange-400" : "text-ink-faint"
+                    i === 0 ? "bg-orange-100 text-orange-600" : "text-neutral-400"
                   }`}
                 >
                   <Icon />
@@ -93,8 +93,8 @@ export function AuthMarketingPanel() {
             )}
           </div>
           <div className="flex-1 space-y-2.5">
-            <div className="flex items-center justify-between rounded-lg border border-hairline/60 px-2.5 py-1.5">
-              <span className="text-[11px] font-semibold text-ink-secondary">Cafe Pink Floyd</span>
+            <div className="flex items-center justify-between rounded-lg border border-neutral-100 px-2.5 py-1.5">
+              <span className="text-[11px] font-semibold text-neutral-700">Cafe Pink Floyd</span>
               <span className="inline-flex items-center gap-1 rounded-full bg-orange-600 px-2 py-0.5 text-[10px] font-semibold text-white">
                 <span className="flex h-2.5 w-2.5 items-center justify-center">
                   <NavIcon.Pos />
@@ -108,11 +108,11 @@ export function AuthMarketingPanel() {
                 { icon: <NavIcon.Reports />, label: "Revenue" },
                 { icon: <NavIcon.Tables />, label: "Tables" },
               ].map((tile) => (
-                <div key={tile.label} className="rounded-lg bg-surface-1 px-2 py-1.5">
+                <div key={tile.label} className="rounded-lg bg-neutral-50 px-2 py-1.5">
                   <span className="flex h-4 w-4 items-center justify-center text-orange-500">
                     {tile.icon}
                   </span>
-                  <p className="mt-1 text-[9px] font-medium text-ink-faint">{tile.label}</p>
+                  <p className="mt-1 text-[9px] font-medium text-neutral-400">{tile.label}</p>
                 </div>
               ))}
             </div>

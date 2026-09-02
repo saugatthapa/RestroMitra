@@ -79,8 +79,8 @@ export function AuditLogBoard() {
   }, [offset, actionFilter, restaurantIdFilter]);
 
   return (
-    <div className="rounded-lg border border-hairline bg-surface-2">
-      <div className="flex flex-wrap items-center gap-3 border-b border-hairline p-4">
+    <div className="rounded-lg border border-neutral-200 bg-white">
+      <div className="flex flex-wrap items-center gap-3 border-b border-neutral-200 p-4">
         <input
           type="text"
           value={actionFilter}
@@ -89,7 +89,7 @@ export function AuditLogBoard() {
             setActionFilter(e.target.value);
           }}
           placeholder="Filter by action (e.g. plan, feature_flag, platform_role)"
-          className="w-full max-w-xs rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-hairline-strong focus:outline-none"
+          className="w-full max-w-xs rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none"
         />
         <select
           value={restaurantIdFilter}
@@ -97,26 +97,26 @@ export function AuditLogBoard() {
             setOffset(0);
             setRestaurantIdFilter(e.target.value);
           }}
-          className="rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
         >
           <option value="">Every tenant + platform</option>
           <option value="platform">Platform-only (no tenant)</option>
         </select>
       </div>
 
-      {error && <p className="p-4 text-sm text-red-400">{error}</p>}
+      {error && <p className="p-4 text-sm text-red-600">{error}</p>}
 
-      {!error && loading && logs.length === 0 && <p className="p-4 text-sm text-ink-muted">Loading…</p>}
+      {!error && loading && logs.length === 0 && <p className="p-4 text-sm text-neutral-500">Loading…</p>}
 
       {!error && !loading && logs.length === 0 && (
-        <p className="p-4 text-sm text-ink-muted">No activity recorded yet for this filter.</p>
+        <p className="p-4 text-sm text-neutral-500">No activity recorded yet for this filter.</p>
       )}
 
       {logs.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-hairline text-xs uppercase tracking-wide text-ink-muted">
+              <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
                 <th className="px-4 py-2 font-medium">When</th>
                 <th className="px-4 py-2 font-medium">Who</th>
                 <th className="px-4 py-2 font-medium">Tenant</th>
@@ -143,49 +143,49 @@ export function AuditLogBoard() {
                 return (
                   <tr
                     key={log.id}
-                    className="cursor-pointer border-b border-hairline/60 align-top hover:bg-surface-1"
+                    className="cursor-pointer border-b border-neutral-100 align-top hover:bg-neutral-50"
                     onClick={() => hasMetadata && setExpandedId(isExpanded ? null : log.id)}
                   >
-                    <td className="whitespace-nowrap px-4 py-2 text-ink-muted">{formatWhen(log.createdAt)}</td>
-                    <td className="px-4 py-2 text-ink-secondary">
+                    <td className="whitespace-nowrap px-4 py-2 text-neutral-500">{formatWhen(log.createdAt)}</td>
+                    <td className="px-4 py-2 text-neutral-700">
                       {log.userFullName ?? (log.userId ? "Deactivated user" : "System")}
                     </td>
-                    <td className="px-4 py-2 text-ink-muted">
+                    <td className="px-4 py-2 text-neutral-500">
                       {log.restaurantId ? (
                         <a
                           href={`/admin/restaurants/${log.restaurantId}`}
-                          className="text-orange-400 hover:underline"
+                          className="text-orange-700 hover:underline"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {log.restaurantName ?? log.restaurantId.slice(0, 8)}
                         </a>
                       ) : (
-                        <span className="text-ink-faint">Platform</span>
+                        <span className="text-neutral-400">Platform</span>
                       )}
                     </td>
-                    <td className="px-4 py-2 font-medium text-ink">
+                    <td className="px-4 py-2 font-medium text-neutral-900">
                       {formatAction(log.action)}
                       {modifiers && (
-                        <span className="ml-1.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-normal text-amber-400">
+                        <span className="ml-1.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[11px] font-normal text-amber-700">
                           {modifiers}
                         </span>
                       )}
                       {hasMetadata && !readableSentence && (
-                        <span className="ml-1.5 text-xs text-ink-faint">{isExpanded ? "▲" : "▼"}</span>
+                        <span className="ml-1.5 text-xs text-neutral-400">{isExpanded ? "▲" : "▼"}</span>
                       )}
                       {readableSentence && (
-                        <p className="mt-1 max-w-md whitespace-normal font-normal text-ink-secondary">{readableSentence}</p>
+                        <p className="mt-1 max-w-md whitespace-normal font-normal text-neutral-600">{readableSentence}</p>
                       )}
                       {isExpanded && hasMetadata && !readableSentence && (
-                        <pre className="mt-1 max-w-md overflow-x-auto rounded bg-surface-1 p-2 text-xs text-ink-secondary">
+                        <pre className="mt-1 max-w-md overflow-x-auto rounded bg-neutral-50 p-2 text-xs text-neutral-600">
                           {JSON.stringify(log.metadata, null, 2)}
                         </pre>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-ink-muted">
+                    <td className="px-4 py-2 text-neutral-500">
                       {log.resourceType ? `${log.resourceType}${log.resourceId ? ` · ${log.resourceId.slice(0, 8)}` : ""}` : "—"}
                     </td>
-                    <td className="px-4 py-2 text-ink-muted">{log.ipAddress ?? "—"}</td>
+                    <td className="px-4 py-2 text-neutral-500">{log.ipAddress ?? "—"}</td>
                   </tr>
                 );
               })}
@@ -195,12 +195,12 @@ export function AuditLogBoard() {
       )}
 
       {(offset > 0 || hasMore) && (
-        <div className="flex items-center justify-between border-t border-hairline p-4 text-sm">
+        <div className="flex items-center justify-between border-t border-neutral-200 p-4 text-sm">
           <button
             type="button"
             disabled={offset === 0 || loading}
             onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-            className="rounded-md border border-hairline-strong px-3 py-1.5 text-ink-secondary disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-neutral-300 px-3 py-1.5 text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Newer
           </button>
@@ -208,7 +208,7 @@ export function AuditLogBoard() {
             type="button"
             disabled={!hasMore || loading}
             onClick={() => setOffset(offset + PAGE_SIZE)}
-            className="rounded-md border border-hairline-strong px-3 py-1.5 text-ink-secondary disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-neutral-300 px-3 py-1.5 text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Older
           </button>

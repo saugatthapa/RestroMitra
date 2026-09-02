@@ -18,8 +18,8 @@ export default function AdminAccountPage() {
   return (
     <div className="mx-auto max-w-lg">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-ink">My Account</h1>
-        <p className="text-sm text-ink-muted">
+        <h1 className="text-xl font-semibold text-neutral-900">My Account</h1>
+        <p className="text-sm text-neutral-500">
           Two-factor authentication is required before you can use the platform admin console.
         </p>
       </div>

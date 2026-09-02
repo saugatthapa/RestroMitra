@@ -128,25 +128,25 @@ export function AttendanceReviewModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-surface-2 p-5">
+      <div className="w-full max-w-md rounded-2xl bg-white p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-ink">{record.fullName}&apos;s shift</h3>
-          <button type="button" onClick={onClose} className="text-sm text-ink-faint hover:text-ink-secondary">
+          <h3 className="text-sm font-semibold text-neutral-900">{record.fullName}&apos;s shift</h3>
+          <button type="button" onClick={onClose} className="text-sm text-neutral-400 hover:text-neutral-600">
             Close
           </button>
         </div>
 
-        <p className="mb-3 text-xs text-ink-muted">
+        <p className="mb-3 text-xs text-neutral-500">
           {formatDate(record.clockInAt, dateSystem, { withTime: true })} —{" "}
           {record.clockOutAt ? formatDate(record.clockOutAt, dateSystem, { withTime: true }) : "still clocked in"}
         </p>
 
-        <div className="mb-4 flex gap-2 border-b border-hairline">
+        <div className="mb-4 flex gap-2 border-b border-neutral-200">
           <button
             type="button"
             onClick={() => setMode("review")}
             className={`-mb-px border-b-2 px-2 py-1.5 text-sm font-medium ${
-              mode === "review" ? "border-orange-600 text-orange-400" : "border-transparent text-ink-muted"
+              mode === "review" ? "border-orange-600 text-orange-700" : "border-transparent text-neutral-500"
             }`}
           >
             Review
@@ -155,7 +155,7 @@ export function AttendanceReviewModal({
             type="button"
             onClick={() => setMode("correct")}
             className={`-mb-px border-b-2 px-2 py-1.5 text-sm font-medium ${
-              mode === "correct" ? "border-orange-600 text-orange-400" : "border-transparent text-ink-muted"
+              mode === "correct" ? "border-orange-600 text-orange-700" : "border-transparent text-neutral-500"
             }`}
           >
             Correct times
@@ -212,11 +212,11 @@ export function AttendanceReviewModal({
                 !record.hasClockOutPhoto &&
                 !record.hasClockInWorkplacePhoto &&
                 !record.hasClockOutWorkplacePhoto && (
-                  <p className="text-xs text-ink-faint">No photo was captured for this shift.</p>
+                  <p className="text-xs text-neutral-400">No photo was captured for this shift.</p>
                 )}
             </div>
 
-            <label className="mb-2 block text-xs font-medium text-ink-secondary">Status</label>
+            <label className="mb-2 block text-xs font-medium text-neutral-600">Status</label>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as AttendanceStatus)}
@@ -235,7 +235,7 @@ export function AttendanceReviewModal({
               rows={2}
               className="input mb-2"
             />
-            {reviewError && <p className="mb-2 text-sm text-red-400">{reviewError}</p>}
+            {reviewError && <p className="mb-2 text-sm text-red-600">{reviewError}</p>}
             <button type="button" disabled={reviewBusy} onClick={submitReview} className="btn-primary w-full">
               {reviewBusy ? "Saving…" : "Save review"}
             </button>
@@ -244,23 +244,23 @@ export function AttendanceReviewModal({
 
         {mode === "correct" && (
           <div>
-            <label className="mb-1 block text-xs font-medium text-ink-secondary">Clock in</label>
+            <label className="mb-1 block text-xs font-medium text-neutral-600">Clock in</label>
             <input
               type="datetime-local"
               value={clockInAt}
               onChange={(e) => setClockInAt(e.target.value)}
               className="input mb-2"
             />
-            <label className="mb-1 block text-xs font-medium text-ink-secondary">Clock out</label>
+            <label className="mb-1 block text-xs font-medium text-neutral-600">Clock out</label>
             <input
               type="datetime-local"
               value={clockOutAt}
               onChange={(e) => setClockOutAt(e.target.value)}
               className="input mb-2"
             />
-            <label className="mb-1 block text-xs font-medium text-ink-secondary">Note</label>
+            <label className="mb-1 block text-xs font-medium text-neutral-600">Note</label>
             <input value={note} onChange={(e) => setNote(e.target.value)} className="input mb-2" />
-            <label className="mb-1 block text-xs font-medium text-ink-secondary">
+            <label className="mb-1 block text-xs font-medium text-neutral-600">
               Reason for this correction (required)
             </label>
             <textarea
@@ -270,7 +270,7 @@ export function AttendanceReviewModal({
               rows={2}
               className="input mb-2"
             />
-            {correctError && <p className="mb-2 text-sm text-red-400">{correctError}</p>}
+            {correctError && <p className="mb-2 text-sm text-red-600">{correctError}</p>}
             <button type="button" disabled={correctBusy} onClick={submitCorrection} className="btn-primary w-full">
               {correctBusy ? "Saving…" : "Save correction"}
             </button>

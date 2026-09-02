@@ -200,7 +200,7 @@ export function NotificationPermissionGate({ slug }: { slug: string }) {
   if (iosNeedsInstall) {
     if (dismissedThisSession) return null;
     return (
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-orange-500/30 bg-orange-500/15 px-4 py-2.5 text-xs font-medium text-orange-300 md:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-orange-200 bg-orange-50 px-4 py-2.5 text-xs font-medium text-orange-900 md:px-6">
         <span className="flex items-center gap-1.5">
           <span className="text-sm" aria-hidden="true">
             📲
@@ -211,7 +211,7 @@ export function NotificationPermissionGate({ slug }: { slug: string }) {
         <button
           type="button"
           onClick={dismiss}
-          className="rounded-full px-2 py-1.5 text-xs font-medium text-orange-400 hover:bg-orange-500/20"
+          className="rounded-full px-2 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100"
         >
           Not now
         </button>
@@ -232,7 +232,7 @@ export function NotificationPermissionGate({ slug }: { slug: string }) {
   if (permission === "granted") {
     if (testDismissed) return null;
     return (
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline bg-surface-1 px-4 py-1.5 text-[11px] text-ink-muted md:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-50 px-4 py-1.5 text-[11px] text-neutral-500 md:px-6">
         <span className="flex items-center gap-1.5">
           <span className="h-1.5 w-1.5 rounded-full bg-green-500" aria-hidden="true" />
           Notifications are on for this device.
@@ -253,11 +253,11 @@ export function NotificationPermissionGate({ slug }: { slug: string }) {
             type="button"
             onClick={runTest}
             disabled={testing}
-            className="rounded-full border border-hairline-strong px-2.5 py-1 font-medium text-ink-secondary hover:bg-surface-1 disabled:opacity-50"
+            className="rounded-full border border-neutral-300 px-2.5 py-1 font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
           >
             {testing ? "Sending…" : "Send test notification"}
           </button>
-          <button type="button" onClick={dismissTest} className="px-1 py-1 text-ink-faint hover:text-ink-secondary">
+          <button type="button" onClick={dismissTest} className="px-1 py-1 text-neutral-400 hover:text-neutral-600">
             ✕
           </button>
         </span>
@@ -267,7 +267,7 @@ export function NotificationPermissionGate({ slug }: { slug: string }) {
 
   if (permission === "denied") {
     return (
-      <div className="border-b border-red-500/30 bg-red-500/15 px-4 py-2 text-xs font-medium text-red-300 md:px-6">
+      <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs font-medium text-red-800 md:px-6">
         <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-red-500" aria-hidden="true" />
         Notifications are blocked — you won&apos;t be alerted about new orders when this tab isn&apos;t open. Turn
         them back on from your browser&apos;s site settings (tap the lock/info icon next to the address bar).
@@ -278,7 +278,7 @@ export function NotificationPermissionGate({ slug }: { slug: string }) {
   if (dismissedThisSession) return null;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-orange-500/30 bg-orange-500/15 px-4 py-2.5 text-xs font-medium text-orange-300 md:px-6">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-orange-200 bg-orange-50 px-4 py-2.5 text-xs font-medium text-orange-900 md:px-6">
       <span className="flex items-center gap-1.5">
         <span className="text-sm" aria-hidden="true">
           🔔
@@ -298,7 +298,7 @@ export function NotificationPermissionGate({ slug }: { slug: string }) {
         <button
           type="button"
           onClick={dismiss}
-          className="rounded-full px-2 py-1.5 text-xs font-medium text-orange-400 hover:bg-orange-500/20"
+          className="rounded-full px-2 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100"
         >
           Not now
         </button>

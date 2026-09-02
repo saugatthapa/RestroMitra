@@ -21,8 +21,8 @@ export default async function ReportsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-ink">Reports</h1>
-        <p className="text-sm text-ink-muted">
+        <h1 className="text-xl font-semibold text-neutral-900">Reports</h1>
+        <p className="text-sm text-neutral-500">
           Sales, expenses, and profit for {active.name}.
         </p>
       </div>

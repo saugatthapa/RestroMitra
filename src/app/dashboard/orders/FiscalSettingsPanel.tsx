@@ -66,7 +66,7 @@ export function FiscalSettingsPanel({ slug }: { slug: string }) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="rounded-full border border-hairline px-3 py-1.5 text-xs font-medium text-ink-secondary hover:bg-surface-1"
+        className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
       >
         Tax settings
       </button>
@@ -74,18 +74,18 @@ export function FiscalSettingsPanel({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="w-72 rounded-xl border border-hairline bg-surface-2 p-3 shadow-sm">
+    <div className="w-72 rounded-xl border border-neutral-200 bg-white p-3 shadow-sm">
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs font-semibold text-ink-secondary">PAN / VAT</p>
+        <p className="text-xs font-semibold text-neutral-700">PAN / VAT</p>
         <button
           onClick={() => setOpen(false)}
-          className="text-xs text-ink-faint hover:text-ink-secondary"
+          className="text-xs text-neutral-400 hover:text-neutral-700"
         >
           Close
         </button>
       </div>
       {loading ? (
-        <p className="text-xs text-ink-faint">Loading…</p>
+        <p className="text-xs text-neutral-400">Loading…</p>
       ) : (
         <>
           <input
@@ -108,12 +108,12 @@ export function FiscalSettingsPanel({ slug }: { slug: string }) {
             }}
             maxLength={20}
           />
-          <p className="mb-2 text-[11px] text-ink-faint">
+          <p className="mb-2 text-[11px] text-neutral-400">
             Printed on customer bills once set. Leave blank to omit either line — most
             restaurants below the VAT-registration threshold set only PAN.
           </p>
-          {error && <p className="mb-2 text-[11px] text-red-400">{error}</p>}
-          {saved && !error && <p className="mb-2 text-[11px] text-green-400">Saved.</p>}
+          {error && <p className="mb-2 text-[11px] text-red-700">{error}</p>}
+          {saved && !error && <p className="mb-2 text-[11px] text-green-700">Saved.</p>}
           <button
             onClick={save}
             disabled={saving}

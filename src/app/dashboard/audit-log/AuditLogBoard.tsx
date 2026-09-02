@@ -100,7 +100,7 @@ function formatResourceType(resourceType: string) {
 }
 
 const inputClass =
-  "rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-hairline-strong focus:outline-none";
+  "rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none";
 
 export function AuditLogBoard({ slug }: { slug: string }) {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
@@ -204,10 +204,10 @@ export function AuditLogBoard({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="rounded-lg border border-hairline bg-surface-2">
-      <div className="flex flex-wrap items-end gap-3 border-b border-hairline p-4">
+    <div className="rounded-lg border border-neutral-200 bg-white">
+      <div className="flex flex-wrap items-end gap-3 border-b border-neutral-200 p-4">
         <div>
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">Action</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600">Action</label>
           <input
             type="text"
             value={actionFilter}
@@ -218,7 +218,7 @@ export function AuditLogBoard({ slug }: { slug: string }) {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">Resource</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600">Resource</label>
           <select
             value={resourceTypeFilter}
             onChange={(e) => setFilter(setResourceTypeFilter)(e.target.value)}
@@ -234,7 +234,7 @@ export function AuditLogBoard({ slug }: { slug: string }) {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">Staff member</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600">Staff member</label>
           <select
             value={userIdFilter}
             onChange={(e) => setFilter(setUserIdFilter)(e.target.value)}
@@ -251,7 +251,7 @@ export function AuditLogBoard({ slug }: { slug: string }) {
 
         {branches.length > 1 && (
           <div>
-            <label className="mb-1 block text-xs font-medium text-ink-secondary">Branch</label>
+            <label className="mb-1 block text-xs font-medium text-neutral-600">Branch</label>
             <select
               value={branchIdFilter}
               onChange={(e) => setFilter(setBranchIdFilter)(e.target.value)}
@@ -268,7 +268,7 @@ export function AuditLogBoard({ slug }: { slug: string }) {
         )}
 
         <div className="flex items-end gap-2">
-          <label className="flex flex-col gap-1 text-xs font-medium text-ink-secondary">
+          <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
             From
             <input
               type="date"
@@ -278,7 +278,7 @@ export function AuditLogBoard({ slug }: { slug: string }) {
               className={inputClass}
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-ink-secondary">
+          <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
             To
             <input
               type="date"
@@ -294,7 +294,7 @@ export function AuditLogBoard({ slug }: { slug: string }) {
           <button
             type="button"
             onClick={clearFilters}
-            className="rounded-md px-2 py-1.5 text-sm text-ink-muted underline decoration-dotted hover:text-ink-secondary"
+            className="rounded-md px-2 py-1.5 text-sm text-neutral-500 underline decoration-dotted hover:text-neutral-700"
           >
             Clear filters
           </button>
@@ -302,22 +302,22 @@ export function AuditLogBoard({ slug }: { slug: string }) {
       </div>
 
       {error && (
-        <p className="p-4 text-sm text-red-400">{error}</p>
+        <p className="p-4 text-sm text-red-600">{error}</p>
       )}
 
       {!error && loading && logs.length === 0 && (
-        <p className="p-4 text-sm text-ink-muted">Loading…</p>
+        <p className="p-4 text-sm text-neutral-500">Loading…</p>
       )}
 
       {!error && !loading && logs.length === 0 && (
-        <p className="p-4 text-sm text-ink-muted">No activity recorded yet for this filter.</p>
+        <p className="p-4 text-sm text-neutral-500">No activity recorded yet for this filter.</p>
       )}
 
       {logs.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-hairline text-xs uppercase tracking-wide text-ink-muted">
+              <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
                 <th className="px-4 py-2 font-medium">When</th>
                 <th className="px-4 py-2 font-medium">Who</th>
                 <th className="px-4 py-2 font-medium">Action</th>
@@ -343,43 +343,43 @@ export function AuditLogBoard({ slug }: { slug: string }) {
                 return (
                   <tr
                     key={log.id}
-                    className="cursor-pointer border-b border-hairline/60 align-top hover:bg-surface-1"
+                    className="cursor-pointer border-b border-neutral-100 align-top hover:bg-neutral-50"
                     onClick={() => hasMetadata && setExpandedId(isExpanded ? null : log.id)}
                   >
-                    <td className="whitespace-nowrap px-4 py-2 text-ink-muted">
+                    <td className="whitespace-nowrap px-4 py-2 text-neutral-500">
                       {formatWhen(log.createdAt)}
                     </td>
-                    <td className="px-4 py-2 text-ink-secondary">
+                    <td className="px-4 py-2 text-neutral-700">
                       {log.userFullName ?? (log.userId ? "Deactivated user" : "System")}
                     </td>
-                    <td className="px-4 py-2 font-medium text-ink">
+                    <td className="px-4 py-2 font-medium text-neutral-900">
                       {formatAction(log.action)}
                       {modifiers && (
-                        <span className="ml-1.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-normal text-amber-400">
+                        <span className="ml-1.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[11px] font-normal text-amber-700">
                           {modifiers}
                         </span>
                       )}
                       {hasMetadata && !readableSentence && (
-                        <span className="ml-1.5 text-xs text-ink-faint">
+                        <span className="ml-1.5 text-xs text-neutral-400">
                           {isExpanded ? "▲" : "▼"}
                         </span>
                       )}
                       {readableSentence && (
-                        <p className="mt-1 max-w-md whitespace-normal font-normal text-ink-secondary">
+                        <p className="mt-1 max-w-md whitespace-normal font-normal text-neutral-600">
                           {readableSentence}
                         </p>
                       )}
                       {isExpanded && hasMetadata && !readableSentence && (
-                        <pre className="mt-1 max-w-md overflow-x-auto rounded bg-surface-1 p-2 text-xs text-ink-secondary">
+                        <pre className="mt-1 max-w-md overflow-x-auto rounded bg-neutral-50 p-2 text-xs text-neutral-600">
                           {JSON.stringify(log.metadata, null, 2)}
                         </pre>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-ink-muted">
+                    <td className="px-4 py-2 text-neutral-500">
                       {log.resourceType ? `${log.resourceType}${log.resourceId ? ` · ${log.resourceId.slice(0, 8)}` : ""}` : "—"}
                     </td>
-                    <td className="px-4 py-2 text-ink-muted">{log.branchName ?? "—"}</td>
-                    <td className="px-4 py-2 text-ink-muted">{log.ipAddress ?? "—"}</td>
+                    <td className="px-4 py-2 text-neutral-500">{log.branchName ?? "—"}</td>
+                    <td className="px-4 py-2 text-neutral-500">{log.ipAddress ?? "—"}</td>
                   </tr>
                 );
               })}
@@ -389,12 +389,12 @@ export function AuditLogBoard({ slug }: { slug: string }) {
       )}
 
       {(offset > 0 || hasMore) && (
-        <div className="flex items-center justify-between border-t border-hairline p-4 text-sm">
+        <div className="flex items-center justify-between border-t border-neutral-200 p-4 text-sm">
           <button
             type="button"
             disabled={offset === 0 || loading}
             onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-            className="rounded-md border border-hairline-strong px-3 py-1.5 text-ink-secondary disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-neutral-300 px-3 py-1.5 text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Newer
           </button>
@@ -402,7 +402,7 @@ export function AuditLogBoard({ slug }: { slug: string }) {
             type="button"
             disabled={!hasMore || loading}
             onClick={() => setOffset(offset + PAGE_SIZE)}
-            className="rounded-md border border-hairline-strong px-3 py-1.5 text-ink-secondary disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-neutral-300 px-3 py-1.5 text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Older
           </button>

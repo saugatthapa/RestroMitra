@@ -422,7 +422,7 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
       {/* Filter row — sits above every section it scopes, per the dataviz
           skill's "one row, above the charts" / "filters scope everything
           below them" rules. */}
-      <div className="mb-6 flex flex-wrap items-center gap-2 rounded-2xl border border-hairline bg-surface-2 p-3 shadow-sm">
+      <div className="mb-6 flex flex-wrap items-center gap-2 rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm">
         <div className="flex flex-wrap gap-1.5">
           {PRESETS.map((preset) => (
             <button
@@ -431,7 +431,7 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
               className={`rounded-full px-3 py-1 text-xs font-medium transition ${
                 activePreset === preset.label
                   ? "bg-orange-600 text-white"
-                  : "bg-surface-1 text-ink-secondary hover:bg-surface-3"
+                  : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
               }`}
             >
               {preset.label}
@@ -439,14 +439,14 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
           ))}
         </div>
         {branches.length > 1 && (
-          <span className="rounded-full bg-surface-1 px-3 py-1 text-xs font-medium text-ink-secondary">
+          <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-600">
             {activeBranchId
               ? branches.find((b) => b.id === activeBranchId)?.name ?? "Branch"
               : "All branches"}
           </span>
         )}
         <div className="ml-auto flex items-center gap-2 text-sm">
-          <label className="flex items-center gap-1.5 text-ink-secondary">
+          <label className="flex items-center gap-1.5 text-neutral-600">
             From
             <input
               type="date"
@@ -456,13 +456,13 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
                 setFrom(e.target.value);
                 setActivePreset(null);
               }}
-              className="rounded-md border border-hairline-strong px-2 py-1 text-sm"
+              className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
             />
             {dateSystem === "BS" && (
-              <span className="text-xs text-ink-faint">{formatBsHint(from)}</span>
+              <span className="text-xs text-neutral-400">{formatBsHint(from)}</span>
             )}
           </label>
-          <label className="flex items-center gap-1.5 text-ink-secondary">
+          <label className="flex items-center gap-1.5 text-neutral-600">
             To
             <input
               type="date"
@@ -473,9 +473,9 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
                 setTo(e.target.value);
                 setActivePreset(null);
               }}
-              className="rounded-md border border-hairline-strong px-2 py-1 text-sm"
+              className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
             />
-            {dateSystem === "BS" && <span className="text-xs text-ink-faint">{formatBsHint(to)}</span>}
+            {dateSystem === "BS" && <span className="text-xs text-neutral-400">{formatBsHint(to)}</span>}
           </label>
           <button
             type="button"
@@ -493,7 +493,7 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/15 px-3 py-2 text-sm text-red-400">
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </div>
       )}
@@ -503,7 +503,7 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
       <div className={loading ? "opacity-60 transition-opacity" : "transition-opacity"}>
         {data && (
           <>
-            <p className="mb-3 text-xs text-ink-faint">
+            <p className="mb-3 text-xs text-neutral-400">
               Revenue, orders, avg. order value, and net profit are compared against the
               previous {formatShortDate(data.comparison.previousRange.from, dateSystem)} –{" "}
               {formatShortDate(data.comparison.previousRange.to, dateSystem)} (same length as the
@@ -592,7 +592,7 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
 
             {data.cogsCoverage.soldItemCount > 0 &&
               data.cogsCoverage.itemsWithRecipeCount < data.cogsCoverage.soldItemCount && (
-                <p className="-mt-4 mb-6 text-xs text-amber-400">
+                <p className="-mt-4 mb-6 text-xs text-amber-700">
                   Cost of goods sold and gross profit only reflect{" "}
                   {data.cogsCoverage.itemsWithRecipeCount} of {data.cogsCoverage.soldItemCount} menu
                   items sold in this range — the rest have no recipe defined yet (Inventory →
@@ -648,8 +648,8 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
             </div>
 
             {/* Revenue vs expenses trend */}
-            <div className="mb-6 rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm">
-              <h2 className="mb-3 text-sm font-semibold text-ink">
+            <div className="mb-6 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+              <h2 className="mb-3 text-sm font-semibold text-neutral-900">
                 Revenue vs. expenses
               </h2>
               <RevenueTrendChart series={data.dailySeries} />
@@ -658,8 +658,8 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
             {/* Hour-by-day-of-week heatmap — a finer-grained view than the
                 single Peak hour tiles above, e.g. spotting that Friday
                 dinners specifically outpace every other evening. */}
-            <div className="mb-6 rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm">
-              <h2 className="mb-3 text-sm font-semibold text-ink">
+            <div className="mb-6 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+              <h2 className="mb-3 text-sm font-semibold text-neutral-900">
                 Busiest hours by day of week
               </h2>
               <HourlyHeatmap cells={data.hourlyHeatmap} />
@@ -669,8 +669,8 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
                 order actually spends in each kitchen/service stage, built
                 from the order_status_history table (a more precise sibling
                 of the "Avg. completion time" tile above). */}
-            <div className="mb-6 rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm">
-              <h2 className="mb-3 text-sm font-semibold text-ink">Order stage timing</h2>
+            <div className="mb-6 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+              <h2 className="mb-3 text-sm font-semibold text-neutral-900">Order stage timing</h2>
               <OrderStageDurations stageDurations={data.orderPerformance.stageDurations} />
 
               <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -699,14 +699,14 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
 
               {data.orderPerformance.cancellationReasons.length > 0 && (
                 <div className="mt-4">
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-muted">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500">
                     Cancellation reasons
                   </p>
-                  <ul className="space-y-1 text-sm text-ink-secondary">
+                  <ul className="space-y-1 text-sm text-neutral-700">
                     {data.orderPerformance.cancellationReasons.map((r) => (
                       <li key={r.reason} className="flex items-center justify-between">
                         <span>{r.reason}</span>
-                        <span className="font-medium text-ink">{r.count}</span>
+                        <span className="font-medium text-neutral-900">{r.count}</span>
                       </li>
                     ))}
                   </ul>
@@ -715,14 +715,14 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
 
               {data.orderPerformance.staffThroughput.length > 0 && (
                 <div className="mt-4">
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-muted">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500">
                     Staff throughput (orders completed)
                   </p>
-                  <ul className="space-y-1 text-sm text-ink-secondary">
+                  <ul className="space-y-1 text-sm text-neutral-700">
                     {data.orderPerformance.staffThroughput.map((s) => (
                       <li key={s.userId} className="flex items-center justify-between">
                         <span>{s.staffName}</span>
-                        <span className="font-medium text-ink">
+                        <span className="font-medium text-neutral-900">
                           {s.completedOrders} orders · {paisaToRupeesLabel(s.revenueInPaisa)}
                         </span>
                       </li>
@@ -741,8 +741,8 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
                 branches" total row so the numbers reconcile with the KPI
                 tiles above. */}
             {data.branchComparison.length > 1 && (
-              <div className="mb-6 rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm">
-                <h2 className="mb-3 text-sm font-semibold text-ink">
+              <div className="mb-6 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+                <h2 className="mb-3 text-sm font-semibold text-neutral-900">
                   Branch comparison
                 </h2>
                 <div className="mb-4 space-y-2.5">
@@ -757,7 +757,7 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
                   ))}
                 </div>
                 <table className="w-full text-sm">
-                  <thead className="text-left text-xs uppercase tracking-wide text-ink-muted">
+                  <thead className="text-left text-xs uppercase tracking-wide text-neutral-500">
                     <tr>
                       <th className="pb-2">Branch</th>
                       <th className="pb-2 text-right">Orders</th>
@@ -767,25 +767,25 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
                   </thead>
                   <tbody>
                     {data.branchComparison.map((b) => (
-                      <tr key={b.branchId} className="border-t border-hairline/60">
-                        <td className="py-1.5 text-ink">
+                      <tr key={b.branchId} className="border-t border-neutral-100">
+                        <td className="py-1.5 text-neutral-800">
                           {b.branchName}
                           {b.isMain && (
-                            <span className="ml-1.5 rounded-full bg-surface-1 px-1.5 py-0.5 text-[10px] font-medium text-ink-muted">
+                            <span className="ml-1.5 rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500">
                               Main
                             </span>
                           )}
                         </td>
-                        <td className="py-1.5 text-right text-ink-secondary">{b.orderCount}</td>
-                        <td className="py-1.5 text-right text-ink-secondary">
+                        <td className="py-1.5 text-right text-neutral-600">{b.orderCount}</td>
+                        <td className="py-1.5 text-right text-neutral-600">
                           {formatRupees(b.averageOrderValueInPaisa)}
                         </td>
-                        <td className="py-1.5 text-right font-medium text-ink">
+                        <td className="py-1.5 text-right font-medium text-neutral-900">
                           {formatRupees(b.revenueInPaisa)}
                         </td>
                       </tr>
                     ))}
-                    <tr className="border-t border-hairline bg-surface-1/60 font-semibold text-ink">
+                    <tr className="border-t border-neutral-200 bg-neutral-50/60 font-semibold text-neutral-900">
                       <td className="py-1.5">All branches</td>
                       <td className="py-1.5 text-right">{data.sales.orderCount}</td>
                       <td className="py-1.5 text-right">
@@ -800,13 +800,13 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 xl:grid-cols-4">
               {/* Top-selling items */}
-              <div className="rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm lg:col-span-1">
-                <h2 className="mb-3 text-sm font-semibold text-ink">Top-selling items</h2>
+              <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm lg:col-span-1">
+                <h2 className="mb-3 text-sm font-semibold text-neutral-900">Top-selling items</h2>
                 {data.topItems.length === 0 ? (
-                  <p className="text-sm text-ink-faint">No completed orders in this range.</p>
+                  <p className="text-sm text-neutral-400">No completed orders in this range.</p>
                 ) : (
                   <table className="w-full text-sm">
-                    <thead className="text-left text-xs uppercase tracking-wide text-ink-muted">
+                    <thead className="text-left text-xs uppercase tracking-wide text-neutral-500">
                       <tr>
                         <th className="pb-2">Item</th>
                         <th className="pb-2 text-right">Qty</th>
@@ -815,10 +815,10 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
                     </thead>
                     <tbody>
                       {data.topItems.map((item) => (
-                        <tr key={item.name} className="border-t border-hairline/60">
-                          <td className="py-1.5 text-ink">{item.name}</td>
-                          <td className="py-1.5 text-right text-ink-secondary">{item.quantitySold}</td>
-                          <td className="py-1.5 text-right font-medium text-ink">
+                        <tr key={item.name} className="border-t border-neutral-100">
+                          <td className="py-1.5 text-neutral-800">{item.name}</td>
+                          <td className="py-1.5 text-right text-neutral-600">{item.quantitySold}</td>
+                          <td className="py-1.5 text-right font-medium text-neutral-900">
                             {formatRupees(item.revenueInPaisa)}
                           </td>
                         </tr>
@@ -829,12 +829,12 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
               </div>
 
               {/* Payment method breakdown */}
-              <div className="rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm lg:col-span-1">
-                <h2 className="mb-3 text-sm font-semibold text-ink">
+              <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm lg:col-span-1">
+                <h2 className="mb-3 text-sm font-semibold text-neutral-900">
                   Payment methods
                 </h2>
                 {data.paymentBreakdown.length === 0 ? (
-                  <p className="text-sm text-ink-faint">No payments in this range.</p>
+                  <p className="text-sm text-neutral-400">No payments in this range.</p>
                 ) : (
                   <div className="space-y-2.5">
                     {data.paymentBreakdown.map((row) => (
@@ -851,12 +851,12 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
               </div>
 
               {/* Expense category breakdown */}
-              <div className="rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm lg:col-span-1">
-                <h2 className="mb-3 text-sm font-semibold text-ink">
+              <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm lg:col-span-1">
+                <h2 className="mb-3 text-sm font-semibold text-neutral-900">
                   Expenses by category
                 </h2>
                 {data.expenseBreakdown.length === 0 ? (
-                  <p className="text-sm text-ink-faint">No expenses in this range.</p>
+                  <p className="text-sm text-neutral-400">No expenses in this range.</p>
                 ) : (
                   <div className="space-y-2.5">
                     {data.expenseBreakdown.map((row) => (
@@ -873,12 +873,12 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
               </div>
 
               {/* Wastage breakdown by reason — P2, see getWastageSummary */}
-              <div className="rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm lg:col-span-1">
-                <h2 className="mb-3 text-sm font-semibold text-ink">
+              <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm lg:col-span-1">
+                <h2 className="mb-3 text-sm font-semibold text-neutral-900">
                   Wastage by reason
                 </h2>
                 {data.wastageByReason.length === 0 ? (
-                  <p className="text-sm text-ink-faint">No wastage recorded in this range.</p>
+                  <p className="text-sm text-neutral-400">No wastage recorded in this range.</p>
                 ) : (
                   <div className="space-y-2.5">
                     {data.wastageByReason.map((row) => (
@@ -896,19 +896,19 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
             </div>
 
             {canViewProfit && (
-              <div className="rounded-2xl border border-hairline bg-surface-2 p-4 shadow-sm">
-                <h2 className="mb-3 text-sm font-semibold text-ink">Product-level profitability</h2>
+              <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+                <h2 className="mb-3 text-sm font-semibold text-neutral-900">Product-level profitability</h2>
                 {productsError && (
-                  <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{productsError}</p>
+                  <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{productsError}</p>
                 )}
                 {productsLoading ? (
-                  <p className="text-sm text-ink-faint">Loading…</p>
+                  <p className="text-sm text-neutral-400">Loading…</p>
                 ) : !products || products.length === 0 ? (
-                  <p className="text-sm text-ink-faint">No completed orders in this range.</p>
+                  <p className="text-sm text-neutral-400">No completed orders in this range.</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead className="text-left text-xs uppercase tracking-wide text-ink-muted">
+                      <thead className="text-left text-xs uppercase tracking-wide text-neutral-500">
                         <tr>
                           <th className="pb-2">Item</th>
                           <ProfitabilitySortHeader label="Qty" sortKeyName="quantity" {...{ sortKey, sortDesc, toggleSort }} />
@@ -920,29 +920,29 @@ export function ReportsBoard({ slug, canViewProfit }: { slug: string; canViewPro
                       </thead>
                       <tbody>
                         {sortedProducts.map((row) => (
-                          <tr key={row.name} className="border-t border-hairline/60">
-                            <td className="py-1.5 text-ink">
+                          <tr key={row.name} className="border-t border-neutral-100">
+                            <td className="py-1.5 text-neutral-800">
                               {row.name}
                               {!row.hasFullCostCoverage && (
                                 <span
-                                  className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-400"
+                                  className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700"
                                   title="At least one unit sold in this range had no recipe defined — COGS/margin here is a partial figure, not the full cost."
                                 >
                                   Partial cost
                                 </span>
                               )}
                             </td>
-                            <td className="py-1.5 text-right text-ink-secondary">{row.quantitySold}</td>
-                            <td className="py-1.5 text-right text-ink">{formatRupees(row.revenueInPaisa)}</td>
-                            <td className="py-1.5 text-right text-ink-secondary">{formatRupees(row.cogsInPaisa)}</td>
+                            <td className="py-1.5 text-right text-neutral-600">{row.quantitySold}</td>
+                            <td className="py-1.5 text-right text-neutral-900">{formatRupees(row.revenueInPaisa)}</td>
+                            <td className="py-1.5 text-right text-neutral-600">{formatRupees(row.cogsInPaisa)}</td>
                             <td
                               className={`py-1.5 text-right font-medium ${
-                                row.grossProfitInPaisa < 0 ? "text-red-400" : "text-ink"
+                                row.grossProfitInPaisa < 0 ? "text-red-700" : "text-neutral-900"
                               }`}
                             >
                               {formatRupees(row.grossProfitInPaisa)}
                             </td>
-                            <td className="py-1.5 text-right text-ink-secondary">
+                            <td className="py-1.5 text-right text-neutral-600">
                               {row.marginPercent === null ? "—" : `${row.marginPercent.toFixed(1)}%`}
                             </td>
                           </tr>
@@ -975,9 +975,9 @@ function BreakdownBar({
     <div>
       <div className="mb-1 flex items-center justify-between text-xs">
         <span style={{ color: SECONDARY_TEXT_COLOR }}>{label}</span>
-        <span className="font-medium text-ink">{valueLabel}</span>
+        <span className="font-medium text-neutral-900">{valueLabel}</span>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-1">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
         <div
           className="h-full rounded-full"
           style={{ width: `${Math.max(2, Math.min(100, fraction * 100))}%`, backgroundColor: color }}
@@ -1046,7 +1046,7 @@ function ProfitabilitySortHeader({
       <button
         type="button"
         onClick={() => toggleSort(sortKeyName)}
-        className={`inline-flex items-center gap-0.5 ${active ? "text-ink" : "text-ink-muted"} hover:text-ink`}
+        className={`inline-flex items-center gap-0.5 ${active ? "text-neutral-900" : "text-neutral-500"} hover:text-neutral-900`}
       >
         {label}
         {active && <span className="text-[10px]">{sortDesc ? "▼" : "▲"}</span>}

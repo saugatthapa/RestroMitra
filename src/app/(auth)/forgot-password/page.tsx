@@ -30,23 +30,23 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="rounded-2xl border border-hairline bg-surface-2 p-6 shadow-sm">
-      <h1 className="text-lg font-semibold text-ink">Reset your password</h1>
-      <p className="mt-1 text-sm text-ink-muted">
+    <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+      <h1 className="text-lg font-semibold text-neutral-900">Reset your password</h1>
+      <p className="mt-1 text-sm text-neutral-500">
         Enter the phone number on your account and we&apos;ll email you a link to reset your
         password, if you have an email on file.
       </p>
 
       {sent ? (
         <div className="mt-6 space-y-4">
-          <p className="flex items-start gap-2 rounded-lg bg-green-500/15 px-3 py-2.5 text-sm text-green-300">
+          <p className="flex items-start gap-2 rounded-lg bg-green-50 px-3 py-2.5 text-sm text-green-800">
             <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
               <AuthIcon.Check />
             </span>
             If that phone number has an account with an email on file, we&apos;ve sent a password
             reset link to it. The link works once and expires in 30 minutes.
           </p>
-          <p className="text-xs text-ink-faint">
+          <p className="text-xs text-neutral-400">
             No email on file, or nothing arrives? Ask your restaurant owner to reset it for you
             from the Staff page.
           </p>
@@ -68,7 +68,7 @@ export default function ForgotPasswordPage() {
           </AuthField>
 
           {error && (
-            <p className="flex items-start gap-2 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">
+            <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
               <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
                 <AuthIcon.ShieldCheck />
               </span>
@@ -82,8 +82,8 @@ export default function ForgotPasswordPage() {
         </form>
       )}
 
-      <p className="mt-6 text-center text-sm text-ink-muted">
-        <Link href="/login" className="font-medium text-orange-400 hover:text-orange-300">
+      <p className="mt-6 text-center text-sm text-neutral-500">
+        <Link href="/login" className="font-medium text-orange-600 hover:text-orange-700">
           ← Back to sign in
         </Link>
       </p>

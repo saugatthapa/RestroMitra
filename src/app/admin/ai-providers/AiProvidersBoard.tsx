@@ -185,9 +185,9 @@ export function AiProvidersBoard() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-hairline bg-surface-2">
-        <div className="flex items-center justify-between border-b border-hairline p-5">
-          <h2 className="text-sm font-semibold text-ink">Provider configs</h2>
+      <div className="rounded-lg border border-neutral-200 bg-white">
+        <div className="flex items-center justify-between border-b border-neutral-200 p-5">
+          <h2 className="text-sm font-semibold text-neutral-900">Provider configs</h2>
           {!creating && (
             <button
               type="button"
@@ -202,22 +202,22 @@ export function AiProvidersBoard() {
             </button>
           )}
         </div>
-        {error && <p className="p-5 text-sm text-red-400">{error}</p>}
+        {error && <p className="p-5 text-sm text-red-600">{error}</p>}
         {loading ? (
-          <p className="p-5 text-sm text-ink-muted">Loading…</p>
+          <p className="p-5 text-sm text-neutral-500">Loading…</p>
         ) : configs.length === 0 ? (
-          <p className="p-5 text-sm text-ink-muted">
+          <p className="p-5 text-sm text-neutral-500">
             No provider configs yet — the assistant is using the env-var-based configuration
             (AI_PROVIDER / GROQ_API_KEY / ANTHROPIC_API_KEY).
           </p>
         ) : (
-          <ul className="divide-y divide-hairline/60">
+          <ul className="divide-y divide-neutral-100">
             {configs.map((config) => (
               <li key={config.id} className="p-4">
                 {editId === config.id && editForm ? (
                   <form onSubmit={handleEditSave} className="space-y-3">
                     <ProviderFormFields form={editForm} onChange={setEditForm} lockProvider />
-                    {editError && <p className="text-sm text-red-400">{editError}</p>}
+                    {editError && <p className="text-sm text-red-600">{editError}</p>}
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
@@ -226,7 +226,7 @@ export function AiProvidersBoard() {
                           setEditForm(null);
                         }}
                         disabled={editBusy}
-                        className="rounded-md border border-hairline-strong px-3 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-1 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Cancel
                       </button>
@@ -242,27 +242,27 @@ export function AiProvidersBoard() {
                 ) : (
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="flex items-center gap-2 text-sm font-medium text-ink">
+                      <p className="flex items-center gap-2 text-sm font-medium text-neutral-900">
                         {config.provider}
-                        <span className="rounded bg-surface-1 px-1.5 py-0.5 text-[10px] font-mono text-ink-muted">
+                        <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-mono text-neutral-500">
                           {config.model}
                         </span>
                         {config.isEnabled ? (
-                          <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                          <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
                             Enabled
                           </span>
                         ) : (
-                          <span className="rounded-full bg-surface-3 px-1.5 py-0.5 text-[10px] font-semibold text-ink-secondary">
+                          <span className="rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600">
                             Disabled
                           </span>
                         )}
                         {!config.hasApiKey && (
-                          <span className="rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">
+                          <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
                             No key set
                           </span>
                         )}
                       </p>
-                      <p className="mt-0.5 text-xs text-ink-muted">
+                      <p className="mt-0.5 text-xs text-neutral-500">
                         priority {config.priority} (lower tried first) · {config.apiUrl}
                       </p>
                     </div>
@@ -281,7 +281,7 @@ export function AiProvidersBoard() {
                           });
                           setEditError(null);
                         }}
-                        className="rounded-md border border-hairline-strong px-3 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-1"
+                        className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
                       >
                         Edit
                       </button>
@@ -289,7 +289,7 @@ export function AiProvidersBoard() {
                         type="button"
                         disabled={deleteBusyId === config.id}
                         onClick={() => handleDelete(config)}
-                        className="rounded-md border border-red-500/30 px-3 py-1.5 text-sm font-medium text-red-400 hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {deleteBusyId === config.id ? "Removing…" : "Remove"}
                       </button>
@@ -303,22 +303,22 @@ export function AiProvidersBoard() {
       </div>
 
       {creating && (
-        <form onSubmit={handleCreate} className="rounded-lg border border-hairline bg-surface-2 p-5">
-          <h2 className="text-sm font-semibold text-ink">Add provider</h2>
-          <p className="mt-1 text-xs text-ink-muted">
+        <form onSubmit={handleCreate} className="rounded-lg border border-neutral-200 bg-white p-5">
+          <h2 className="text-sm font-semibold text-neutral-900">Add provider</h2>
+          <p className="mt-1 text-xs text-neutral-500">
             The API key is encrypted (AES-256-GCM) before it&apos;s stored and is never shown
             again after saving.
           </p>
           <div className="mt-4 space-y-3">
             <ProviderFormFields form={createForm} onChange={setCreateForm} requireApiKey />
           </div>
-          {createError && <p className="mt-3 text-sm text-red-400">{createError}</p>}
+          {createError && <p className="mt-3 text-sm text-red-600">{createError}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setCreating(false)}
               disabled={createBusy}
-              className="rounded-md border border-hairline-strong px-4 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-1 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md border border-neutral-300 px-4 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Cancel
             </button>
@@ -333,24 +333,24 @@ export function AiProvidersBoard() {
         </form>
       )}
 
-      <div className="rounded-lg border border-hairline bg-surface-2">
-        <div className="border-b border-hairline p-5">
-          <h2 className="text-sm font-semibold text-ink">Usage & cost this month</h2>
-          <p className="mt-1 text-xs text-ink-muted">
+      <div className="rounded-lg border border-neutral-200 bg-white">
+        <div className="border-b border-neutral-200 p-5">
+          <h2 className="text-sm font-semibold text-neutral-900">Usage & cost this month</h2>
+          <p className="mt-1 text-xs text-neutral-500">
             Cost is a rough estimate from token counts — not a billing-accurate figure. Resets on
             the 1st of the UTC calendar month.
           </p>
         </div>
         {usageLoading ? (
-          <p className="p-5 text-sm text-ink-muted">Loading…</p>
+          <p className="p-5 text-sm text-neutral-500">Loading…</p>
         ) : usageByRestaurant.length === 0 ? (
-          <p className="p-5 text-sm text-ink-muted">No AI assistant usage recorded this month yet.</p>
+          <p className="p-5 text-sm text-neutral-500">No AI assistant usage recorded this month yet.</p>
         ) : (
-          <ul className="divide-y divide-hairline/60">
+          <ul className="divide-y divide-neutral-100">
             {usageByRestaurant.map((row) => (
               <li key={row.restaurantId} className="flex items-center justify-between gap-4 p-4">
-                <p className="text-sm font-medium text-ink">{row.restaurantName}</p>
-                <p className="text-xs text-ink-muted">
+                <p className="text-sm font-medium text-neutral-900">{row.restaurantName}</p>
+                <p className="text-xs text-neutral-500">
                   {row.successfulAttempts}/{row.totalAttempts} succeeded ·{" "}
                   {formatPaisa(row.totalEstimatedCostInPaisa)} est.
                 </p>
@@ -360,39 +360,39 @@ export function AiProvidersBoard() {
         )}
       </div>
 
-      <div className="rounded-lg border border-hairline bg-surface-2">
-        <div className="border-b border-hairline p-5">
-          <h2 className="text-sm font-semibold text-ink">Recent activity</h2>
+      <div className="rounded-lg border border-neutral-200 bg-white">
+        <div className="border-b border-neutral-200 p-5">
+          <h2 className="text-sm font-semibold text-neutral-900">Recent activity</h2>
         </div>
         {usageLoading ? (
-          <p className="p-5 text-sm text-ink-muted">Loading…</p>
+          <p className="p-5 text-sm text-neutral-500">Loading…</p>
         ) : recentEvents.length === 0 ? (
-          <p className="p-5 text-sm text-ink-muted">No recent AI assistant activity.</p>
+          <p className="p-5 text-sm text-neutral-500">No recent AI assistant activity.</p>
         ) : (
-          <ul className="divide-y divide-hairline/60">
+          <ul className="divide-y divide-neutral-100">
             {recentEvents.map((event) => (
               <li key={event.id} className="flex items-center justify-between gap-4 p-4">
                 <div>
-                  <p className="flex items-center gap-2 text-sm text-ink">
+                  <p className="flex items-center gap-2 text-sm text-neutral-900">
                     {event.restaurantName}
-                    <span className="rounded bg-surface-1 px-1.5 py-0.5 text-[10px] font-mono text-ink-muted">
+                    <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-mono text-neutral-500">
                       {event.provider}/{event.model}
                     </span>
                     {event.success ? (
-                      <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                      <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
                         OK
                       </span>
                     ) : (
-                      <span className="rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">
+                      <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
                         Failed
                       </span>
                     )}
                   </p>
                   {event.errorMessage && (
-                    <p className="mt-0.5 text-xs text-red-400">{event.errorMessage}</p>
+                    <p className="mt-0.5 text-xs text-red-600">{event.errorMessage}</p>
                   )}
                 </div>
-                <p className="shrink-0 text-xs text-ink-muted">
+                <p className="shrink-0 text-xs text-neutral-500">
                   {new Date(event.createdAt).toLocaleString()}
                 </p>
               </li>
@@ -418,7 +418,7 @@ function ProviderFormFields({
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="block text-sm">
-        <span className="mb-1 block text-ink-secondary">Provider</span>
+        <span className="mb-1 block text-neutral-700">Provider</span>
         <select
           value={form.provider}
           disabled={lockProvider}
@@ -428,7 +428,7 @@ function ProviderFormFields({
             const provider = e.target.value as FormState["provider"];
             onChange({ ...form, provider, apiUrl: DEFAULT_API_URLS[provider] });
           }}
-          className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none disabled:bg-surface-1 disabled:text-ink-muted"
+          className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none disabled:bg-neutral-50 disabled:text-neutral-500"
         >
           {KNOWN_AI_PROVIDERS.map((p) => (
             <option key={p} value={p}>
@@ -438,7 +438,7 @@ function ProviderFormFields({
         </select>
       </label>
       <label className="block text-sm">
-        <span className="mb-1 block text-ink-secondary">
+        <span className="mb-1 block text-neutral-700">
           API key {requireApiKey ? "" : "(blank = keep existing)"}
         </span>
         <input
@@ -447,39 +447,39 @@ function ProviderFormFields({
           onChange={(e) => onChange({ ...form, apiKey: e.target.value })}
           required={requireApiKey}
           placeholder={requireApiKey ? "" : "••••••••"}
-          className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
+          className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
         />
       </label>
       <label className="block text-sm">
-        <span className="mb-1 block text-ink-secondary">Model</span>
+        <span className="mb-1 block text-neutral-700">Model</span>
         <input
           value={form.model}
           onChange={(e) => onChange({ ...form, model: e.target.value })}
           required
           placeholder="e.g. llama-3.3-70b-versatile"
-          className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
+          className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
         />
       </label>
       <label className="block text-sm">
-        <span className="mb-1 block text-ink-secondary">API URL (auto-set for the provider)</span>
+        <span className="mb-1 block text-neutral-700">API URL (auto-set for the provider)</span>
         <input
           value={form.apiUrl}
           readOnly
           disabled
-          className="w-full rounded-md border border-hairline-strong bg-surface-1 px-3 py-1.5 text-sm text-ink-muted focus:outline-none"
+          className="w-full rounded-md border border-neutral-300 bg-neutral-50 px-3 py-1.5 text-sm text-neutral-500 focus:outline-none"
         />
       </label>
       <label className="block text-sm">
-        <span className="mb-1 block text-ink-secondary">Priority (lower tried first)</span>
+        <span className="mb-1 block text-neutral-700">Priority (lower tried first)</span>
         <input
           type="number"
           min={0}
           value={form.priority}
           onChange={(e) => onChange({ ...form, priority: e.target.value })}
-          className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm text-ink focus:border-hairline-strong focus:outline-none"
+          className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none"
         />
       </label>
-      <label className="flex items-center gap-2 self-end text-sm text-ink-secondary">
+      <label className="flex items-center gap-2 self-end text-sm text-neutral-700">
         <input
           type="checkbox"
           checked={form.isEnabled}

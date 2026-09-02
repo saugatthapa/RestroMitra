@@ -21,8 +21,8 @@ export default async function RegisterPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-ink">Cash Register</h1>
-        <p className="text-sm text-ink-muted">Open/close shifts and track cash for {active.name}.</p>
+        <h1 className="text-xl font-semibold text-neutral-900">Cash Register</h1>
+        <p className="text-sm text-neutral-500">Open/close shifts and track cash for {active.name}.</p>
       </div>
       <RegisterBoard slug={active.slug} />
     </div>

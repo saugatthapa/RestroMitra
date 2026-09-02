@@ -38,10 +38,10 @@ export default async function PublicOrderPage({
 
   if (!resolved.tableIsActive || !resolved.restaurantIsActive) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface-1 p-6 text-center">
+      <div className="flex min-h-screen items-center justify-center bg-neutral-50 p-6 text-center">
         <div>
-          <p className="text-lg font-semibold text-ink">Table unavailable</p>
-          <p className="mt-2 text-sm text-ink-muted">
+          <p className="text-lg font-semibold text-neutral-900">Table unavailable</p>
+          <p className="mt-2 text-sm text-neutral-500">
             This table isn&apos;t currently accepting orders. Please ask staff for help.
           </p>
         </div>

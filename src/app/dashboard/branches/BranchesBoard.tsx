@@ -40,17 +40,17 @@ export function BranchesBoard({ slug }: { slug: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
-  if (loading) return <p className="text-sm text-ink-muted">Loading branches…</p>;
+  if (loading) return <p className="text-sm text-neutral-500">Loading branches…</p>;
 
   const activeBranches = branches.filter((b) => b.isActive);
   const inactiveBranches = branches.filter((b) => !b.isActive);
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-ink-muted">
+        <p className="text-sm text-neutral-500">
           {activeBranches.length} active branch{activeBranches.length === 1 ? "" : "es"}
         </p>
         <button onClick={() => setShowAdd((v) => !v)} className="btn-primary">
@@ -76,7 +76,7 @@ export function BranchesBoard({ slug }: { slug: string }) {
 
       {inactiveBranches.length > 0 && (
         <div className="pt-4">
-          <p className="mb-2 text-xs font-semibold tracking-wide text-ink-faint uppercase">
+          <p className="mb-2 text-xs font-semibold tracking-wide text-neutral-400 uppercase">
             Deactivated
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -137,29 +137,29 @@ function BranchCard({
   return (
     <div
       className={`rounded-2xl border p-4 shadow-sm ${
-        branch.isActive ? "border-hairline bg-surface-2" : "border-hairline/60 bg-surface-1"
+        branch.isActive ? "border-neutral-200 bg-white" : "border-neutral-100 bg-neutral-50"
       }`}
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold text-ink">
+          <p className="text-sm font-semibold text-neutral-900">
             {branch.name}
             {branch.isMain && (
-              <span className="ml-2 rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-semibold text-orange-400">
+              <span className="ml-2 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
                 Main
               </span>
             )}
           </p>
-          {branch.address && <p className="mt-1 text-xs text-ink-muted">{branch.address}</p>}
-          {branch.city && <p className="text-xs text-ink-muted">{branch.city}</p>}
-          {branch.phone && <p className="text-xs text-ink-muted">{branch.phone}</p>}
+          {branch.address && <p className="mt-1 text-xs text-neutral-500">{branch.address}</p>}
+          {branch.city && <p className="text-xs text-neutral-500">{branch.city}</p>}
+          {branch.phone && <p className="text-xs text-neutral-500">{branch.phone}</p>}
         </div>
       </div>
       <div className="mt-3 flex gap-3 text-xs">
         <button
           disabled={saving}
           onClick={handleRename}
-          className="font-medium text-ink-secondary hover:text-ink"
+          className="font-medium text-neutral-600 hover:text-neutral-900"
         >
           Rename
         </button>
@@ -168,7 +168,7 @@ function BranchCard({
             disabled={saving}
             onClick={toggleActive}
             className={`font-medium ${
-              branch.isActive ? "text-ink-faint hover:text-red-400" : "text-orange-400 hover:text-orange-300"
+              branch.isActive ? "text-neutral-400 hover:text-red-600" : "text-orange-600 hover:text-orange-700"
             }`}
           >
             {branch.isActive ? "Deactivate" : "Reactivate"}
@@ -202,11 +202,11 @@ function AddBranchForm({ slug, onAdded }: { slug: string; onAdded: () => void })
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-hairline bg-surface-2 p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Branch name</span>
+          <span className="mb-1 block text-neutral-600">Branch name</span>
           <input
             required
             value={name}
@@ -216,15 +216,15 @@ function AddBranchForm({ slug, onAdded }: { slug: string; onAdded: () => void })
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">City</span>
+          <span className="mb-1 block text-neutral-600">City</span>
           <input value={city} onChange={(e) => setCity(e.target.value)} className="input" />
         </label>
         <label className="text-sm sm:col-span-2">
-          <span className="mb-1 block text-ink-secondary">Address</span>
+          <span className="mb-1 block text-neutral-600">Address</span>
           <input value={address} onChange={(e) => setAddress(e.target.value)} className="input" />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Phone</span>
+          <span className="mb-1 block text-neutral-600">Phone</span>
           <input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" />
         </label>
       </div>

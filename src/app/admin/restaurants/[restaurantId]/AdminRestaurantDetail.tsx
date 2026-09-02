@@ -130,30 +130,30 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
     }
   }
 
-  if (error && !data) return <p className="text-sm text-red-400">{error}</p>;
-  if (!data) return <p className="text-sm text-ink-faint">Loading…</p>;
+  if (error && !data) return <p className="text-sm text-red-600">{error}</p>;
+  if (!data) return <p className="text-sm text-neutral-400">Loading…</p>;
 
   const { restaurant, owner } = data;
 
   return (
     <div>
-      <Link href="/admin" className="text-sm text-ink-muted hover:text-ink">
+      <Link href="/admin" className="text-sm text-neutral-500 hover:text-neutral-800">
         ← All restaurants
       </Link>
 
       <div className="mt-3 mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-ink">{restaurant.name}</h1>
-          <p className="text-sm text-ink-muted">
+          <h1 className="text-xl font-semibold text-neutral-900">{restaurant.name}</h1>
+          <p className="text-sm text-neutral-500">
             {restaurant.slug} · {[restaurant.city, restaurant.district].filter(Boolean).join(", ") || "—"}
           </p>
         </div>
         <div className="flex gap-2">
-          <span className="rounded-full bg-surface-1 px-3 py-1 text-xs font-medium text-ink-secondary">
+          <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">
             {SUBSCRIPTION_STATUS_LABELS[restaurant.subscriptionStatus]}
           </span>
           {!restaurant.isActive && (
-            <span className="rounded-full bg-red-500/20 px-3 py-1 text-xs font-medium text-red-300">
+            <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800">
               Suspended
             </span>
           )}
@@ -161,15 +161,15 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/15 px-3 py-2 text-sm text-red-400">
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-1">
-          <div className="rounded-xl border border-hairline bg-surface-2 p-4">
-            <h2 className="mb-3 text-sm font-semibold text-ink">Overview</h2>
+          <div className="rounded-xl border border-neutral-200 bg-white p-4">
+            <h2 className="mb-3 text-sm font-semibold text-neutral-900">Overview</h2>
             <dl className="space-y-2 text-sm">
               <Row label="Owner" value={owner ? `${owner.fullName} · ${owner.phone}` : "—"} />
               <Row label="Staff accounts" value={String(data.staffCount)} />
@@ -182,9 +182,9 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
             </dl>
           </div>
 
-          <div className="mt-4 rounded-xl border border-hairline bg-surface-2 p-4">
-            <h2 className="mb-1 text-sm font-semibold text-ink">Suspension</h2>
-            <p className="mb-3 text-xs text-ink-muted">
+          <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-4">
+            <h2 className="mb-1 text-sm font-semibold text-neutral-900">Suspension</h2>
+            <p className="mb-3 text-xs text-neutral-500">
               Reversible and data-preserving — blocks staff dashboard access and the public
               menu/QR pages without deleting anything. Independent of subscription/billing state.
             </p>
@@ -195,12 +195,12 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
               rows={2}
               className="input mb-3"
             />
-            {suspendError && <p className="mb-3 text-sm text-red-400">{suspendError}</p>}
+            {suspendError && <p className="mb-3 text-sm text-red-600">{suspendError}</p>}
             {restaurant.isActive ? (
               <button
                 disabled={suspendBusy}
                 onClick={() => runSuspensionAction("suspend")}
-                className="inline-flex items-center justify-center rounded-lg border border-red-500/30 bg-surface-2 px-4 py-2.5 text-sm font-semibold text-red-400 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Suspend restaurant
               </button>
@@ -217,8 +217,8 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
 
           <ImpersonationPanel restaurantId={restaurantId} restaurantName={restaurant.name} />
 
-          <div className="mt-4 rounded-xl border border-hairline bg-surface-2 p-4">
-            <h2 className="mb-3 text-sm font-semibold text-ink">Actions</h2>
+          <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-4">
+            <h2 className="mb-3 text-sm font-semibold text-neutral-900">Actions</h2>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -228,7 +228,7 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
             />
 
             <div className="mb-4 flex items-end gap-2">
-              <label className="flex-1 text-xs text-ink-muted">
+              <label className="flex-1 text-xs text-neutral-500">
                 Extend trial by (days)
                 <input
                   type="number"
@@ -256,7 +256,7 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
             </div>
 
             <div className="mb-4 flex items-end gap-2">
-              <label className="flex-1 text-xs text-ink-muted">
+              <label className="flex-1 text-xs text-neutral-500">
                 {restaurant.subscriptionStatus === "trialing" ? "Convert trial to plan" : "Assign plan"}
                 <select
                   value={assignPlanKey}
@@ -285,7 +285,7 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
                 {restaurant.subscriptionStatus === "trialing" && activateOnAssign ? "Convert" : "Assign"}
               </button>
             </div>
-            <label className="mb-4 flex items-center gap-2 text-xs text-ink-secondary">
+            <label className="mb-4 flex items-center gap-2 text-xs text-neutral-600">
               <input
                 type="checkbox"
                 checked={activateOnAssign}
@@ -294,7 +294,7 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
               Activate immediately (marks subscription as active)
             </label>
 
-            <div className="flex flex-wrap gap-2 border-t border-hairline/60 pt-3">
+            <div className="flex flex-wrap gap-2 border-t border-neutral-100 pt-3">
               <button
                 disabled={busy}
                 onClick={() => runAction({ action: "mark_past_due", note: note || undefined })}
@@ -319,7 +319,7 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
               <button
                 disabled={busy}
                 onClick={() => runAction({ action: "cancel", note: note || undefined })}
-                className="inline-flex items-center justify-center rounded-lg border border-red-500/30 bg-surface-2 px-4 py-2.5 text-sm font-semibold text-red-400 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel subscription
               </button>
@@ -328,25 +328,25 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
         </div>
 
         <div className="lg:col-span-2">
-          <h2 className="mb-3 text-sm font-semibold text-ink">Subscription timeline</h2>
-          <div className="divide-y divide-hairline rounded-xl border border-hairline bg-surface-2">
+          <h2 className="mb-3 text-sm font-semibold text-neutral-900">Subscription timeline</h2>
+          <div className="divide-y divide-neutral-200 rounded-xl border border-neutral-200 bg-white">
             {data.events.length === 0 && (
-              <p className="px-4 py-6 text-center text-sm text-ink-faint">No events yet.</p>
+              <p className="px-4 py-6 text-center text-sm text-neutral-400">No events yet.</p>
             )}
             {data.events.map((event) => (
               <div key={event.id} className="px-4 py-3 text-sm">
                 <div className="flex items-center justify-between">
-                  <p className="font-medium text-ink">{formatEventType(event.eventType)}</p>
-                  <span className="text-xs text-ink-faint">{formatDate(event.createdAt)}</span>
+                  <p className="font-medium text-neutral-800">{formatEventType(event.eventType)}</p>
+                  <span className="text-xs text-neutral-400">{formatDate(event.createdAt)}</span>
                 </div>
-                <p className="text-xs text-ink-muted">
+                <p className="text-xs text-neutral-500">
                   {event.fromStatus && event.toStatus && event.fromStatus !== event.toStatus
                     ? `${event.fromStatus} → ${event.toStatus}`
                     : null}
                   {event.planKey ? ` · plan: ${event.planKey}` : ""}
                   {event.performedBy ? ` · by ${event.performedBy}` : " · automatic"}
                 </p>
-                {event.note && <p className="mt-1 text-xs text-ink-secondary">{event.note}</p>}
+                {event.note && <p className="mt-1 text-xs text-neutral-600">{event.note}</p>}
               </div>
             ))}
           </div>
@@ -386,8 +386,8 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between">
-      <dt className="text-ink-muted">{label}</dt>
-      <dd className="font-medium text-ink">{value}</dd>
+      <dt className="text-neutral-500">{label}</dt>
+      <dd className="font-medium text-neutral-800">{value}</dd>
     </div>
   );
 }

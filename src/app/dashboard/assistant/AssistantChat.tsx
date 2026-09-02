@@ -49,10 +49,10 @@ export function AssistantChat({ slug }: { slug: string }) {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="min-h-[240px] rounded-2xl border border-hairline bg-surface-2 p-5">
+      <div className="min-h-[240px] rounded-2xl border border-neutral-200 bg-white p-5">
         {turns.length === 0 ? (
           <div>
-            <p className="mb-3 text-sm text-ink-muted">
+            <p className="mb-3 text-sm text-neutral-500">
               Try one of these, or ask your own question below:
             </p>
             <div className="flex flex-wrap gap-2">
@@ -61,7 +61,7 @@ export function AssistantChat({ slug }: { slug: string }) {
                   key={prompt}
                   onClick={() => ask(prompt)}
                   disabled={asking}
-                  className="rounded-full border border-hairline-strong px-3 py-1.5 text-xs text-ink-secondary hover:border-orange-500/40 hover:text-orange-300 disabled:opacity-50"
+                  className="rounded-full border border-neutral-300 px-3 py-1.5 text-xs text-neutral-600 hover:border-orange-300 hover:text-orange-700 disabled:opacity-50"
                 >
                   {prompt}
                 </button>
@@ -72,13 +72,13 @@ export function AssistantChat({ slug }: { slug: string }) {
           <div className="space-y-5">
             {turns.map((turn, i) => (
               <div key={i}>
-                <p className="mb-1.5 text-sm font-semibold text-ink">{turn.question}</p>
+                <p className="mb-1.5 text-sm font-semibold text-neutral-900">{turn.question}</p>
                 {turn.error ? (
-                  <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{turn.error}</p>
+                  <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{turn.error}</p>
                 ) : turn.answer ? (
-                  <p className="whitespace-pre-wrap text-sm text-ink-secondary">{turn.answer}</p>
+                  <p className="whitespace-pre-wrap text-sm text-neutral-700">{turn.answer}</p>
                 ) : (
-                  <p className="text-sm text-ink-faint">Thinking…</p>
+                  <p className="text-sm text-neutral-400">Thinking…</p>
                 )}
               </div>
             ))}
@@ -105,7 +105,7 @@ export function AssistantChat({ slug }: { slug: string }) {
           {asking ? "Asking…" : "Ask"}
         </button>
       </form>
-      <p className="mt-2 text-xs text-ink-faint">
+      <p className="mt-2 text-xs text-neutral-400">
         Answers are based only on this restaurant&rsquo;s data from the last 30 days — the same
         numbers shown on the Reports page.
       </p>

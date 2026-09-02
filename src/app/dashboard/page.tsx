@@ -58,18 +58,18 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-ink">
+        <h1 className="text-xl font-semibold text-neutral-900">
           Welcome back, {session.user.fullName.split(" ")[0]}
         </h1>
-        <p className="text-sm text-ink-muted">
+        <p className="text-sm text-neutral-500">
           Orders placed by customers show up on the{" "}
-          <span className="font-medium text-ink-secondary">Orders</span> board in real time
+          <span className="font-medium text-neutral-700">Orders</span> board in real time
           (polling every few seconds) — move them through confirmed → preparing → ready →
           served → completed from there.
           {canViewReports && (
             <>
               {" "}
-              Head to <span className="font-medium text-ink-secondary">Reports</span> for revenue
+              Head to <span className="font-medium text-neutral-700">Reports</span> for revenue
               trends, top items, and peak-hour analytics.
             </>
           )}

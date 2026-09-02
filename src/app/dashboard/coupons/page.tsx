@@ -26,8 +26,8 @@ export default async function CouponsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-ink">Coupons</h1>
-        <p className="text-sm text-ink-muted">
+        <h1 className="text-xl font-semibold text-neutral-900">Coupons</h1>
+        <p className="text-sm text-neutral-500">
           Reusable promo codes staff can apply at checkout for {active.name}.
         </p>
       </div>

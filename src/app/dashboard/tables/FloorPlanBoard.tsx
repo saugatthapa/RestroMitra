@@ -355,12 +355,12 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
   };
 
   if (loading) {
-    return <p className="text-sm text-ink-muted">Loading floor plan…</p>;
+    return <p className="text-sm text-neutral-500">Loading floor plan…</p>;
   }
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -370,8 +370,8 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
               onClick={() => setActiveFloor(floor)}
               className={`rounded-full px-3 py-1.5 text-xs font-medium ${
                 floor === activeFloor
-                  ? "bg-surface-0 text-white"
-                  : "bg-surface-1 text-ink-secondary hover:bg-surface-3"
+                  ? "bg-neutral-900 text-white"
+                  : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
               }`}
             >
               {floor}
@@ -379,7 +379,7 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
           ))}
           <button
             onClick={handleAddFloor}
-            className="rounded-full border border-dashed border-hairline-strong px-3 py-1.5 text-xs font-medium text-ink-muted hover:border-hairline-strong hover:text-ink-secondary"
+            className="rounded-full border border-dashed border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-500 hover:border-neutral-400 hover:text-neutral-700"
           >
             + Floor
           </button>
@@ -390,7 +390,7 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-3 text-xs text-ink-muted">
+      <div className="flex flex-wrap gap-3 text-xs text-neutral-500">
         {(Object.keys(TABLE_STATUS_LABELS) as TableStatus[]).map((status) => (
           <span key={status} className="inline-flex items-center gap-1.5">
             <span className={`h-2.5 w-2.5 rounded-full ${TABLE_STATUS_COLORS[status].dot}`} />
@@ -400,12 +400,12 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
       </div>
 
       {visibleTables.length === 0 ? (
-        <p className="text-sm text-ink-muted">
+        <p className="text-sm text-neutral-500">
           No tables on this floor yet. Add one, then drag it into place.
         </p>
       ) : (
         <div
-          className="relative h-[560px] w-full touch-none overflow-auto rounded-2xl border border-hairline bg-surface-1"
+          className="relative h-[560px] w-full touch-none overflow-auto rounded-2xl border border-neutral-200 bg-neutral-50"
           style={{ backgroundImage: "radial-gradient(circle, #e5e5e5 1px, transparent 1px)", backgroundSize: "24px 24px" }}
         >
           {visibleTables.map((table) => {
@@ -442,17 +442,17 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
       {selectedTableId && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={closeDetail}>
           <div
-            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-surface-2 p-5 shadow-xl sm:rounded-2xl"
+            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {detailLoading || !detail ? (
-              <p className="text-sm text-ink-muted">Loading…</p>
+              <p className="text-sm text-neutral-500">Loading…</p>
             ) : (
               <>
                 <div className="mb-3 flex items-start justify-between">
                   <div>
-                    <h3 className="text-base font-semibold text-ink">{detail.table.name}</h3>
-                    <p className="text-xs text-ink-muted">
+                    <h3 className="text-base font-semibold text-neutral-900">{detail.table.name}</h3>
+                    <p className="text-xs text-neutral-500">
                       {detail.table.capacity != null ? `Seats ${detail.table.capacity} · ` : ""}
                       <span
                         className={`inline-flex items-center gap-1 font-medium ${TABLE_STATUS_COLORS[detail.table.status].text}`}
@@ -462,25 +462,25 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
                       </span>
                     </p>
                   </div>
-                  <button onClick={closeDetail} className="text-sm text-ink-faint hover:text-ink-secondary">
+                  <button onClick={closeDetail} className="text-sm text-neutral-400 hover:text-neutral-700">
                     Close
                   </button>
                 </div>
 
                 {detail.activeOrders.length > 0 && (
                   <div className="mb-4">
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                       Active orders
                     </p>
                     <ul className="space-y-1.5">
                       {detail.activeOrders.map((o) => (
-                        <li key={o.id} className="rounded-lg bg-surface-1 px-3 py-2 text-xs">
+                        <li key={o.id} className="rounded-lg bg-neutral-50 px-3 py-2 text-xs">
                           <div className="flex flex-wrap items-center justify-between gap-1">
                             <span>
                               <span className="font-medium">{o.orderNumber}</span> — {o.status}
                               {o.customerName ? ` · ${o.customerName}` : ""}
                               {o.isOnHold && (
-                                <span className="ml-1.5 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
+                                <span className="ml-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
                                   On hold
                                 </span>
                               )}
@@ -490,7 +490,7 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
                                 <button
                                   onClick={() => resumeOrder(o.id)}
                                   disabled={tableOpBusy}
-                                  className="rounded-full border border-hairline-strong px-2 py-0.5 text-[10px] font-medium text-ink-secondary hover:border-hairline-strong"
+                                  className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] font-medium text-neutral-700 hover:border-neutral-400"
                                 >
                                   Resume
                                 </button>
@@ -498,7 +498,7 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
                                 <button
                                   onClick={() => holdOrder(o.id)}
                                   disabled={tableOpBusy}
-                                  className="rounded-full border border-hairline-strong px-2 py-0.5 text-[10px] font-medium text-ink-secondary hover:border-hairline-strong"
+                                  className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] font-medium text-neutral-700 hover:border-neutral-400"
                                 >
                                   Hold
                                 </button>
@@ -508,14 +508,14 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
                                   setTransferringOrderId((cur) => (cur === o.id ? null : o.id))
                                 }
                                 disabled={tableOpBusy}
-                                className="rounded-full border border-hairline-strong px-2 py-0.5 text-[10px] font-medium text-ink-secondary hover:border-hairline-strong"
+                                className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] font-medium text-neutral-700 hover:border-neutral-400"
                               >
                                 Transfer
                               </button>
                             </span>
                           </div>
                           {o.isOnHold && o.holdReason && (
-                            <p className="mt-1 text-[10px] text-amber-400">Reason: {o.holdReason}</p>
+                            <p className="mt-1 text-[10px] text-amber-700">Reason: {o.holdReason}</p>
                           )}
                           {transferringOrderId === o.id && (
                             <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -560,7 +560,7 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
 
                 <div className="mb-4">
                   {merging ? (
-                    <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-surface-1 px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-neutral-50 px-3 py-2">
                       <select
                         value={mergeSourceTableId}
                         onChange={(e) => setMergeSourceTableId(e.target.value)}
@@ -596,7 +596,7 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
                   ) : (
                     <button
                       onClick={() => setMerging(true)}
-                      className="text-xs font-medium text-ink-muted underline decoration-dotted hover:text-ink-secondary"
+                      className="text-xs font-medium text-neutral-500 underline decoration-dotted hover:text-neutral-700"
                     >
                       Merge another table into this one
                     </button>
@@ -605,12 +605,12 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
 
                 {detail.upcomingReservations.length > 0 && (
                   <div className="mb-4">
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                       Upcoming reservations today
                     </p>
                     <ul className="space-y-1">
                       {detail.upcomingReservations.map((r) => (
-                        <li key={r.id} className="rounded-lg bg-purple-500/15 px-3 py-2 text-xs text-purple-300">
+                        <li key={r.id} className="rounded-lg bg-purple-50 px-3 py-2 text-xs text-purple-800">
                           {new Date(r.reservationTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} —{" "}
                           {r.customerName} (party of {r.partySize})
                         </li>
@@ -624,7 +624,7 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
                     <button
                       key={next}
                       onClick={() => changeStatus(detail.table.id, next)}
-                      className="rounded-full border border-hairline-strong px-3 py-1.5 text-xs font-medium text-ink-secondary hover:border-hairline-strong"
+                      className="rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:border-neutral-400"
                     >
                       Mark {TABLE_STATUS_LABELS[next]}
                     </button>

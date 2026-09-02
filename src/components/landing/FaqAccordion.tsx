@@ -8,7 +8,7 @@ export function FaqAccordion({ items }: { items: FaqItem[] }) {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   return (
-    <div className="divide-y divide-hairline rounded-2xl border border-hairline bg-surface-2">
+    <div className="divide-y divide-neutral-200 rounded-2xl border border-neutral-200 bg-white">
       {items.map((item, i) => {
         const open = openIndex === i;
         return (
@@ -17,14 +17,14 @@ export function FaqAccordion({ items }: { items: FaqItem[] }) {
               type="button"
               onClick={() => setOpenIndex(open ? null : i)}
               aria-expanded={open}
-              className="group flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-surface-1"
+              className="group flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-neutral-50"
             >
-              <span className="text-sm font-medium text-ink transition-colors group-hover:text-orange-300 sm:text-base">
+              <span className="text-sm font-medium text-neutral-900 transition-colors group-hover:text-orange-700 sm:text-base">
                 {item.question}
               </span>
               <span
-                className={`flex h-6 w-6 flex-none items-center justify-center rounded-full border border-hairline-strong text-ink-muted transition-all duration-300 group-hover:border-orange-500/40 group-hover:text-orange-400 ${
-                  open ? "rotate-45 border-orange-500/40 text-orange-400" : "group-hover:scale-110"
+                className={`flex h-6 w-6 flex-none items-center justify-center rounded-full border border-neutral-300 text-neutral-500 transition-all duration-300 group-hover:border-orange-300 group-hover:text-orange-600 ${
+                  open ? "rotate-45 border-orange-300 text-orange-600" : "group-hover:scale-110"
                 }`}
                 aria-hidden="true"
               >
@@ -38,7 +38,7 @@ export function FaqAccordion({ items }: { items: FaqItem[] }) {
               style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
             >
               <div className="min-h-0">
-                <p className="px-5 pb-4 text-sm leading-relaxed text-ink-secondary">{item.answer}</p>
+                <p className="px-5 pb-4 text-sm leading-relaxed text-neutral-600">{item.answer}</p>
               </div>
             </div>
           </div>

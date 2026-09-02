@@ -38,10 +38,10 @@ type Holiday = {
 type Branch = { id: string; name: string; isActive: boolean };
 
 const LEAVE_STATUS_BADGE_CLASS: Record<LeaveStatus, string> = {
-  pending: "bg-amber-500/15 text-amber-400",
-  approved: "bg-green-500/15 text-green-400",
-  rejected: "bg-red-500/15 text-red-400",
-  cancelled: "bg-surface-1 text-ink-muted",
+  pending: "bg-amber-50 text-amber-700",
+  approved: "bg-green-50 text-green-700",
+  rejected: "bg-red-50 text-red-700",
+  cancelled: "bg-neutral-100 text-neutral-500",
 };
 
 function LeaveStatusBadge({ status }: { status: LeaveStatus }) {
@@ -97,11 +97,11 @@ export function LeaveTab({ slug, canManageStaff }: { slug: string; canManageStaf
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
-  if (loading) return <p className="text-sm text-ink-muted">Loading leave…</p>;
+  if (loading) return <p className="text-sm text-neutral-500">Loading leave…</p>;
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <RequestLeaveForm slug={slug} onCreated={load} />
 
@@ -152,12 +152,12 @@ function RequestLeaveForm({ slug, onCreated }: { slug: string; onCreated: () => 
   }
 
   return (
-    <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
-      <p className="mb-2 text-sm font-semibold text-ink">Request leave</p>
-      {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
+    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+      <p className="mb-2 text-sm font-semibold text-neutral-900">Request leave</p>
+      {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
         <div>
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">Type</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600">Type</label>
           <select value={leaveType} onChange={(e) => setLeaveType(e.target.value as LeaveType)} className="input">
             {(Object.keys(LEAVE_TYPE_LABELS) as LeaveType[]).map((t) => (
               <option key={t} value={t}>
@@ -167,15 +167,15 @@ function RequestLeaveForm({ slug, onCreated }: { slug: string; onCreated: () => 
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">From</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600">From</label>
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="input" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">To</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600">To</label>
           <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="input" />
         </div>
         <div className="flex-1 sm:min-w-[200px]">
-          <label className="mb-1 block text-xs font-medium text-ink-secondary">Reason (optional)</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600">Reason (optional)</label>
           <input value={reason} onChange={(e) => setReason(e.target.value)} className="input w-full" />
         </div>
         <button disabled={busy} onClick={submit} className="btn-primary">
@@ -204,9 +204,9 @@ function LeaveRequestsTable({
   dateSystem: ReturnType<typeof useDateSystem>;
 }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
+    <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
       <table className="w-full text-sm">
-        <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+        <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
           <tr>
             {canViewAll && <th className="px-3 py-2">Staff</th>}
             <th className="px-3 py-2">Type</th>
@@ -220,7 +220,7 @@ function LeaveRequestsTable({
         <tbody>
           {requests.length === 0 && (
             <tr>
-              <td colSpan={canViewAll ? 7 : 6} className="px-3 py-6 text-center text-ink-faint">
+              <td colSpan={canViewAll ? 7 : 6} className="px-3 py-6 text-center text-neutral-400">
                 No leave requests yet.
               </td>
             </tr>
@@ -298,33 +298,33 @@ function LeaveRequestRow({
   }
 
   return (
-    <tr className="border-t border-hairline/60">
-      {canViewAll && <td className="px-3 py-2 font-medium text-ink">{r.fullName}</td>}
+    <tr className="border-t border-neutral-100">
+      {canViewAll && <td className="px-3 py-2 font-medium text-neutral-900">{r.fullName}</td>}
       <td className="px-3 py-2">{LEAVE_TYPE_LABELS[r.leaveType]}</td>
-      <td className="px-3 py-2 text-ink-muted">
+      <td className="px-3 py-2 text-neutral-500">
         {formatDate(r.startDate, dateSystem)}
         {r.startDate !== r.endDate && <> — {formatDate(r.endDate, dateSystem)}</>}
       </td>
-      <td className="px-3 py-2 text-ink-muted">{leaveDayCount(r.startDate, r.endDate)}</td>
-      <td className="px-3 py-2 text-ink-muted">{r.reason || "—"}</td>
+      <td className="px-3 py-2 text-neutral-500">{leaveDayCount(r.startDate, r.endDate)}</td>
+      <td className="px-3 py-2 text-neutral-500">{r.reason || "—"}</td>
       <td className="px-3 py-2">
         <LeaveStatusBadge status={r.status} />
         {r.status !== "pending" && r.reviewNote && (
-          <p className="mt-1 text-xs text-ink-faint">{r.reviewNote}</p>
+          <p className="mt-1 text-xs text-neutral-400">{r.reviewNote}</p>
         )}
       </td>
       <td className="px-3 py-2">
         {r.status === "pending" && !canViewAll && (
-          <button disabled={busy} onClick={cancel} className="text-xs text-ink-muted underline hover:text-ink">
+          <button disabled={busy} onClick={cancel} className="text-xs text-neutral-500 underline hover:text-neutral-800">
             Cancel
           </button>
         )}
         {r.status === "pending" && canViewAll && !rejecting && (
           <div className="flex gap-2 text-xs">
-            <button disabled={busy} onClick={approve} className="text-green-400 underline hover:text-green-200">
+            <button disabled={busy} onClick={approve} className="text-green-700 underline hover:text-green-800">
               Approve
             </button>
-            <button disabled={busy} onClick={() => setRejecting(true)} className="text-red-400 underline hover:text-red-200">
+            <button disabled={busy} onClick={() => setRejecting(true)} className="text-red-700 underline hover:text-red-800">
               Reject
             </button>
           </div>
@@ -338,7 +338,7 @@ function LeaveRequestRow({
               className="input text-xs"
             />
             <div className="flex gap-2 text-xs">
-              <button disabled={busy || !rejectNote.trim()} onClick={reject} className="text-red-400 underline hover:text-red-200">
+              <button disabled={busy || !rejectNote.trim()} onClick={reject} className="text-red-700 underline hover:text-red-800">
                 Confirm reject
               </button>
               <button
@@ -347,7 +347,7 @@ function LeaveRequestRow({
                   setRejecting(false);
                   setRejectNote("");
                 }}
-                className="text-ink-muted underline hover:text-ink"
+                className="text-neutral-500 underline hover:text-neutral-800"
               >
                 Cancel
               </button>
@@ -418,9 +418,9 @@ function HolidaysCard({
   }
 
   return (
-    <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
+    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm font-semibold text-ink">Holidays</p>
+        <p className="text-sm font-semibold text-neutral-900">Holidays</p>
         {canManage && (
           <button onClick={() => setShowAdd((v) => !v)} className="btn-secondary text-xs">
             {showAdd ? "Cancel" : "+ Add holiday"}
@@ -429,19 +429,19 @@ function HolidaysCard({
       </div>
 
       {showAdd && (
-        <div className="mb-3 flex flex-col gap-2 rounded-xl bg-surface-1 p-3 sm:flex-row sm:flex-wrap sm:items-end">
-          {error && <p className="w-full text-sm text-red-400">{error}</p>}
+        <div className="mb-3 flex flex-col gap-2 rounded-xl bg-neutral-50 p-3 sm:flex-row sm:flex-wrap sm:items-end">
+          {error && <p className="w-full text-sm text-red-600">{error}</p>}
           <div>
-            <label className="mb-1 block text-xs font-medium text-ink-secondary">Date</label>
+            <label className="mb-1 block text-xs font-medium text-neutral-600">Date</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
           </div>
           <div className="flex-1 sm:min-w-[160px]">
-            <label className="mb-1 block text-xs font-medium text-ink-secondary">Name</label>
+            <label className="mb-1 block text-xs font-medium text-neutral-600">Name</label>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Dashain" className="input w-full" />
           </div>
           {branches.length > 1 && (
             <div>
-              <label className="mb-1 block text-xs font-medium text-ink-secondary">Branch</label>
+              <label className="mb-1 block text-xs font-medium text-neutral-600">Branch</label>
               <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="input">
                 <option value="">All branches</option>
                 {branches.map((b) => (
@@ -459,21 +459,21 @@ function HolidaysCard({
       )}
 
       {holidays.length === 0 ? (
-        <p className="text-xs text-ink-faint">No holidays recorded yet.</p>
+        <p className="text-xs text-neutral-400">No holidays recorded yet.</p>
       ) : (
-        <ul className="divide-y divide-hairline/60">
+        <ul className="divide-y divide-neutral-100">
           {holidays.map((h) => (
             <li key={h.id} className="flex items-center justify-between py-2 text-sm">
               <div>
-                <span className="font-medium text-ink">{formatDate(h.date, dateSystem)}</span>
-                <span className="ml-2 text-ink-secondary">{h.name}</span>
-                {h.branchName && <span className="ml-2 text-xs text-ink-faint">({h.branchName})</span>}
+                <span className="font-medium text-neutral-900">{formatDate(h.date, dateSystem)}</span>
+                <span className="ml-2 text-neutral-600">{h.name}</span>
+                {h.branchName && <span className="ml-2 text-xs text-neutral-400">({h.branchName})</span>}
               </div>
               {canManage && (
                 <button
                   disabled={deletingId === h.id}
                   onClick={() => remove(h.id)}
-                  className="text-xs text-ink-faint underline hover:text-red-400"
+                  className="text-xs text-neutral-400 underline hover:text-red-600"
                 >
                   Remove
                 </button>

@@ -19,8 +19,8 @@ export default async function InventoryPage() {
   if (!canManage) {
     return (
       <div>
-        <h1 className="mb-2 text-xl font-semibold text-ink">Inventory</h1>
-        <p className="text-sm text-ink-muted">
+        <h1 className="mb-2 text-xl font-semibold text-neutral-900">Inventory</h1>
+        <p className="text-sm text-neutral-500">
           Your role ({active.role.replace("_", " ")}) doesn&apos;t have access to inventory
           management at {active.name}.
         </p>
@@ -31,8 +31,8 @@ export default async function InventoryPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-ink">Inventory</h1>
-        <p className="text-sm text-ink-muted">
+        <h1 className="text-xl font-semibold text-neutral-900">Inventory</h1>
+        <p className="text-sm text-neutral-500">
           Stock items, suppliers, purchases, and recipes for {active.name}.
         </p>
       </div>

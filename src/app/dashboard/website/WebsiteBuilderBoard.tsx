@@ -237,26 +237,26 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
   }
 
   if (loading) {
-    return <div className="animate-pulse text-sm text-ink-faint">Loading your website…</div>;
+    return <div className="animate-pulse text-sm text-neutral-400">Loading your website…</div>;
   }
   if (!form) {
-    return <p className="text-sm text-red-400">{error ?? "Could not load your website."}</p>;
+    return <p className="text-sm text-red-600">{error ?? "Could not load your website."}</p>;
   }
 
   const themeClasses = WEBSITE_THEME_CLASSES[form.theme];
 
   return (
     <div className="space-y-6">
-      {error && <p className="rounded-lg bg-red-500/15 p-3 text-sm text-red-400">{error}</p>}
-      {imageError && <p className="rounded-lg bg-red-500/15 p-3 text-sm text-red-400">{imageError}</p>}
+      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>}
+      {imageError && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{imageError}</p>}
 
       {/* Publish bar */}
-      <div className="flex flex-col gap-3 rounded-xl border border-hairline bg-surface-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-ink">
+          <p className="text-sm font-semibold text-neutral-900">
             {form.isPublished ? "Your website is live" : "Your website isn't published yet"}
           </p>
-          <p className="mt-0.5 truncate text-xs text-ink-muted">{siteUrl}</p>
+          <p className="mt-0.5 truncate text-xs text-neutral-500">{siteUrl}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {form.isPublished && (
@@ -300,9 +300,9 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
       </div>
 
       {/* Theme */}
-      <section className="rounded-xl border border-hairline bg-surface-2 p-4">
-        <h2 className="mb-1 text-sm font-semibold text-ink">Theme</h2>
-        <p className="mb-3 text-xs text-ink-muted">Pick a look for your public page.</p>
+      <section className="rounded-xl border border-neutral-200 bg-white p-4">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Theme</h2>
+        <p className="mb-3 text-xs text-neutral-500">Pick a look for your public page.</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {WEBSITE_THEMES.map((theme) => {
             const isSelected = form.theme === theme;
@@ -313,12 +313,12 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
                 type="button"
                 onClick={() => setForm({ ...form, theme })}
                 className={`rounded-lg border p-3 text-left transition ${
-                  isSelected ? "border-hairline-strong ring-1 ring-ink" : "border-hairline"
+                  isSelected ? "border-neutral-900 ring-1 ring-neutral-900" : "border-neutral-200"
                 }`}
               >
                 <div className={`mb-2 h-6 w-6 rounded-full ${swatch.accentBg}`} />
-                <p className="text-xs font-semibold text-ink">{WEBSITE_THEME_LABELS[theme]}</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-ink-muted">
+                <p className="text-xs font-semibold text-neutral-900">{WEBSITE_THEME_LABELS[theme]}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-neutral-500">
                   {WEBSITE_THEME_DESCRIPTIONS[theme]}
                 </p>
               </button>
@@ -328,11 +328,11 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
       </section>
 
       {/* Hero & about */}
-      <section className="rounded-xl border border-hairline bg-surface-2 p-4">
-        <h2 className="mb-3 text-sm font-semibold text-ink">Hero & about</h2>
+      <section className="rounded-xl border border-neutral-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold text-neutral-900">Hero & about</h2>
         <div className="space-y-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-ink-muted">Tagline</label>
+            <label className="mb-1 block text-xs font-medium text-neutral-500">Tagline</label>
             <input
               className="input"
               placeholder="e.g. Authentic Newari cuisine since 2010"
@@ -343,7 +343,7 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
           </div>
 
           <div>
-            <span className="mb-1 block text-xs font-medium text-ink-muted">Hero photo</span>
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Hero photo</span>
             <div className="flex items-center gap-3">
               {form.heroImageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -353,7 +353,7 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
                   className="h-14 w-24 rounded-md object-cover"
                 />
               ) : (
-                <div className="flex h-14 w-24 items-center justify-center rounded-md bg-surface-1 text-[10px] text-ink-faint">
+                <div className="flex h-14 w-24 items-center justify-center rounded-md bg-neutral-100 text-[10px] text-neutral-400">
                   No photo
                 </div>
               )}
@@ -378,7 +378,7 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
                     <button
                       type="button"
                       onClick={() => setForm({ ...form, heroImageUrl: "" })}
-                      className="text-xs font-medium text-ink-faint hover:text-red-400"
+                      className="text-xs font-medium text-neutral-400 hover:text-red-600"
                     >
                       Remove
                     </button>
@@ -389,7 +389,7 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-ink-muted">About</label>
+            <label className="mb-1 block text-xs font-medium text-neutral-500">About</label>
             <textarea
               className="input"
               rows={4}
@@ -403,10 +403,10 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
       </section>
 
       {/* Gallery */}
-      <section className="rounded-xl border border-hairline bg-surface-2 p-4">
+      <section className="rounded-xl border border-neutral-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-ink">Gallery</h2>
-          <span className="text-xs text-ink-faint">
+          <h2 className="text-sm font-semibold text-neutral-900">Gallery</h2>
+          <span className="text-xs text-neutral-400">
             {form.galleryImageUrls.length}/{MAX_GALLERY_IMAGES}
           </span>
         </div>
@@ -418,7 +418,7 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
               <button
                 type="button"
                 onClick={() => removeGalleryImage(i)}
-                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-surface-2 text-xs text-ink-muted shadow ring-1 ring-hairline hover:text-red-400"
+                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs text-neutral-500 shadow ring-1 ring-neutral-200 hover:text-red-600"
                 aria-label="Remove photo"
               >
                 ✕
@@ -430,7 +430,7 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
               type="button"
               onClick={() => galleryInputRef.current?.click()}
               disabled={galleryProcessing}
-              className="flex h-20 w-20 items-center justify-center rounded-md border border-dashed border-hairline-strong text-xs text-ink-faint hover:border-hairline-strong disabled:opacity-50"
+              className="flex h-20 w-20 items-center justify-center rounded-md border border-dashed border-neutral-300 text-xs text-neutral-400 hover:border-neutral-400 disabled:opacity-50"
             >
               {galleryProcessing ? "…" : "+ Add"}
             </button>
@@ -446,16 +446,16 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
       </section>
 
       {/* Menu highlights */}
-      <section className="rounded-xl border border-hairline bg-surface-2 p-4">
+      <section className="rounded-xl border border-neutral-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-ink">Menu highlights</h2>
-            <p className="mt-0.5 text-xs text-ink-muted">
+            <h2 className="text-sm font-semibold text-neutral-900">Menu highlights</h2>
+            <p className="mt-0.5 text-xs text-neutral-500">
               Choose up to {MAX_FEATURED_MENU_ITEMS} items to feature — leave none checked to
               auto-show your first available items.
             </p>
           </div>
-          <label className="flex shrink-0 items-center gap-2 text-xs text-ink-secondary">
+          <label className="flex shrink-0 items-center gap-2 text-xs text-neutral-600">
             <input
               type="checkbox"
               checked={form.showMenuSection}
@@ -467,20 +467,20 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
         {form.showMenuSection && (
           <div className="grid max-h-72 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2">
             {menuItems.length === 0 && (
-              <p className="text-xs text-ink-faint">Add some menu items first — see the Menu page.</p>
+              <p className="text-xs text-neutral-400">Add some menu items first — see the Menu page.</p>
             )}
             {menuItems.map((item) => (
               <label
                 key={item.id}
-                className="flex items-center gap-2 rounded-md border border-hairline/60 px-2 py-1.5 text-xs hover:bg-surface-1"
+                className="flex items-center gap-2 rounded-md border border-neutral-100 px-2 py-1.5 text-xs hover:bg-neutral-50"
               >
                 <input
                   type="checkbox"
                   checked={form.featuredMenuItemIds.includes(item.id)}
                   onChange={() => toggleFeaturedItem(item.id)}
                 />
-                <span className="flex-1 truncate text-ink">{item.name}</span>
-                <span className="text-ink-faint">{formatNPR(item.basePriceInPaisa)}</span>
+                <span className="flex-1 truncate text-neutral-800">{item.name}</span>
+                <span className="text-neutral-400">{formatNPR(item.basePriceInPaisa)}</span>
               </label>
             ))}
           </div>
@@ -488,9 +488,9 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
       </section>
 
       {/* Contact & social */}
-      <section className="rounded-xl border border-hairline bg-surface-2 p-4">
-        <h2 className="mb-1 text-sm font-semibold text-ink">Contact & social</h2>
-        <p className="mb-3 text-xs text-ink-muted">
+      <section className="rounded-xl border border-neutral-200 bg-white p-4">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Contact & social</h2>
+        <p className="mb-3 text-xs text-neutral-500">
           Leave phone/address blank to use your restaurant profile automatically.
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -550,9 +550,9 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
       </section>
 
       {/* SEO */}
-      <section className="rounded-xl border border-hairline bg-surface-2 p-4">
-        <h2 className="mb-1 text-sm font-semibold text-ink">Search & sharing</h2>
-        <p className="mb-3 text-xs text-ink-muted">
+      <section className="rounded-xl border border-neutral-200 bg-white p-4">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Search & sharing</h2>
+        <p className="mb-3 text-xs text-neutral-500">
           Shown in Google results and when your link is shared. Leave blank for sensible defaults.
         </p>
         <div className="space-y-3">
@@ -583,7 +583,7 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
         >
           {saving ? "Saving…" : "Save changes"}
         </button>
-        {savedAt && !saving && <span className="text-xs text-ink-faint">Saved</span>}
+        {savedAt && !saving && <span className="text-xs text-neutral-400">Saved</span>}
       </div>
 
       {/* Live preview — shows the actual name/tagline/hero photo you've
@@ -592,8 +592,8 @@ export function WebsiteBuilderBoard({ slug, restaurantName }: { slug: string; re
           tab. Not a pixel-perfect match for the full public page (no
           gallery/menu/contact sections here) — just enough to judge the
           theme, hero photo, and copy together. */}
-      <section className="rounded-xl border border-hairline bg-surface-2 p-4">
-        <h2 className="mb-3 text-sm font-semibold text-ink">Preview</h2>
+      <section className="rounded-xl border border-neutral-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold text-neutral-900">Preview</h2>
         <div className={`relative overflow-hidden rounded-lg border ${themeClasses.border}`}>
           {form.heroImageUrl && (
             <>

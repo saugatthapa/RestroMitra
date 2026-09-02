@@ -776,7 +776,7 @@ function DashboardShellContent({
         {NAV_GROUPS.map((group) => (
           <div key={group.title}>
             {!isCollapsed && (
-              <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+              <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
                 {group.title}
               </p>
             )}
@@ -787,10 +787,10 @@ function DashboardShellContent({
                   isCollapsed ? "justify-center px-2" : "justify-between"
                 } ${
                   isActive
-                    ? "bg-orange-500/15 font-medium text-orange-400"
+                    ? "bg-orange-50 font-medium text-orange-700"
                     : item.enabled
-                      ? "font-medium text-ink-secondary hover:bg-surface-1 hover:text-ink"
-                      : "cursor-default text-ink-faint"
+                      ? "font-medium text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900"
+                      : "cursor-default text-neutral-400"
                 }`;
 
                 const content = (
@@ -800,7 +800,7 @@ function DashboardShellContent({
                       {!isCollapsed && <span className="truncate">{item.label}</span>}
                     </span>
                     {!isCollapsed && item.badge && (
-                      <span className="shrink-0 rounded-full bg-surface-1 px-1.5 py-0.5 text-[10px] font-medium text-ink-faint">
+                      <span className="shrink-0 rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-400">
                         {item.badge}
                       </span>
                     )}
@@ -850,7 +850,7 @@ function DashboardShellContent({
       <img
         src={logoUrl}
         alt=""
-        className="h-9 w-9 shrink-0 rounded-full border border-hairline/60 object-cover"
+        className="h-9 w-9 shrink-0 rounded-full border border-neutral-100 object-cover"
       />
     ) : (
       <span
@@ -868,9 +868,9 @@ function DashboardShellContent({
       <div className="flex min-w-0 items-center gap-2.5">
         {logo}
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-ink">{restaurantName}</p>
-          <p className="truncate text-[11px] text-ink-faint">{t("nav.poweredBy")}</p>
-          <p className="truncate text-[9px] text-ink-faint">by Saugat Thapa</p>
+          <p className="truncate text-sm font-semibold text-neutral-900">{restaurantName}</p>
+          <p className="truncate text-[11px] text-neutral-400">{t("nav.poweredBy")}</p>
+          <p className="truncate text-[9px] text-neutral-300">by Saugat Thapa</p>
         </div>
       </div>
     );
@@ -888,7 +888,7 @@ function DashboardShellContent({
 
     return (
       <div
-        className={`mt-4 rounded-xl border border-hairline/60 bg-surface-1 p-2.5 ${
+        className={`mt-4 rounded-xl border border-neutral-100 bg-neutral-50 p-2.5 ${
           isCollapsed ? "flex flex-col items-center gap-2" : "flex items-center gap-2.5"
         }`}
       >
@@ -901,10 +901,10 @@ function DashboardShellContent({
           // Settings section yet (see the still-"coming soon" nav item
           // below) to hang it off instead.
           <Link href="/dashboard/account" className="min-w-0 flex-1 group">
-            <p className="truncate text-sm font-medium text-ink group-hover:underline">
+            <p className="truncate text-sm font-medium text-neutral-900 group-hover:underline">
               {ownerName}
             </p>
-            <p className="truncate text-xs capitalize text-ink-muted">{role.replace("_", " ")}</p>
+            <p className="truncate text-xs capitalize text-neutral-500">{role.replace("_", " ")}</p>
           </Link>
         )}
         <button
@@ -913,7 +913,7 @@ function DashboardShellContent({
           title={t("nav.logOut")}
           onClick={handleLogout}
           disabled={loggingOut}
-          className="shrink-0 rounded-md p-1.5 text-ink-faint hover:bg-surface-1 hover:text-ink-secondary disabled:opacity-50"
+          className="shrink-0 rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-50"
         >
           <NavIcon.Logout />
         </button>
@@ -922,9 +922,9 @@ function DashboardShellContent({
   }
 
   return (
-    <div className="flex min-h-screen bg-surface-1">
+    <div className="flex min-h-screen bg-neutral-50">
       <aside
-        className={`hidden shrink-0 flex-col border-r border-hairline bg-surface-2 p-4 transition-[width] duration-200 md:flex ${
+        className={`hidden shrink-0 flex-col border-r border-neutral-200 bg-white p-4 transition-[width] duration-200 md:flex ${
           collapsed ? "w-[76px]" : "w-60"
         }`}
       >
@@ -935,7 +935,7 @@ function DashboardShellContent({
             aria-label={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
             title={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
             onClick={() => setCollapsed((c) => !c)}
-            className="rounded-lg p-1.5 text-ink-faint hover:bg-surface-1 hover:text-ink-secondary"
+            className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
           >
             {collapsed ? <NavIcon.ChevronRight /> : <NavIcon.ChevronLeft />}
           </button>
@@ -954,13 +954,13 @@ function DashboardShellContent({
             className="absolute inset-0 bg-black/30"
             onClick={() => setMobileNavOpen(false)}
           />
-          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-surface-2 p-4 shadow-xl">
+          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white p-4 shadow-xl">
             <div className="mb-6 flex items-center justify-between px-2">
               {brandBlock(false)}
               <button
                 aria-label="Close menu"
                 onClick={() => setMobileNavOpen(false)}
-                className="rounded-lg p-1.5 text-ink-muted hover:bg-surface-1"
+                className="rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100"
               >
                 ✕
               </button>
@@ -972,20 +972,20 @@ function DashboardShellContent({
       )}
 
       <div className="flex min-h-screen flex-1 flex-col">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline bg-surface-2 px-4 py-3 md:px-6">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 py-3 md:px-6">
           <div className="flex items-center gap-3">
             <button
               aria-label="Open menu"
               onClick={() => setMobileNavOpen(true)}
-              className="-ml-1 rounded-lg p-1.5 text-ink-secondary hover:bg-surface-1 md:hidden"
+              className="-ml-1 rounded-lg p-1.5 text-neutral-600 hover:bg-neutral-100 md:hidden"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
               </svg>
             </button>
             <div>
-              <p className="text-base font-semibold text-ink">{pageTitle}</p>
-              <p className="text-xs text-ink-muted">{restaurantName}</p>
+              <p className="text-base font-semibold text-neutral-900">{pageTitle}</p>
+              <p className="text-xs text-neutral-500">{restaurantName}</p>
             </div>
           </div>
 
@@ -997,7 +997,7 @@ function DashboardShellContent({
           <div className="flex flex-wrap items-center gap-2">
             {headerStatus && (
               <div className="hidden items-center gap-2 sm:flex">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface-2 px-3 py-1 text-xs font-medium text-ink-secondary">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs font-medium text-neutral-600">
                   <span className="flex h-3.5 w-3.5 items-center justify-center">
                     <NavIcon.Orders />
                   </span>
@@ -1006,8 +1006,8 @@ function DashboardShellContent({
                 <span
                   className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${
                     headerStatus.kitchenBusy
-                      ? "border-amber-500/30 bg-amber-500/15 text-amber-400"
-                      : "border-green-500/30 bg-green-500/15 text-green-400"
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-green-200 bg-green-50 text-green-700"
                   }`}
                 >
                   <span className="flex h-3.5 w-3.5 items-center justify-center">
@@ -1024,7 +1024,7 @@ function DashboardShellContent({
                   value={activeRestaurantId}
                   onChange={handleSwitchRestaurant}
                   disabled={switchingRestaurant}
-                  className="appearance-none rounded-full border border-hairline bg-surface-2 py-1.5 pl-3 pr-7 text-xs font-medium text-ink-secondary hover:bg-surface-1 disabled:opacity-50"
+                  className="appearance-none rounded-full border border-neutral-200 bg-white py-1.5 pl-3 pr-7 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
                 >
                   {restaurants.map((r) => (
                     <option key={r.id} value={r.id}>
@@ -1032,14 +1032,14 @@ function DashboardShellContent({
                     </option>
                   ))}
                 </select>
-                <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 rotate-90 items-center text-ink-faint">
+                <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 rotate-90 items-center text-neutral-400">
                   <NavIcon.ChevronRight />
                 </span>
               </div>
             )}
             <BranchSwitcher />
             {subscriptionStatus === "trialing" && days !== null && (
-              <span className="hidden rounded-full bg-orange-500/15 px-3 py-1 text-xs font-medium text-orange-400 sm:inline-block">
+              <span className="hidden rounded-full bg-orange-50 px-3 py-1 text-xs font-medium text-orange-700 sm:inline-block">
                 {trialDaysLeftText(days, locale)}
               </span>
             )}
@@ -1048,7 +1048,7 @@ function DashboardShellContent({
             <LanguageToggle locale={locale} onChange={setLocale} label={t("nav.language")} />
             <InstallAppPrompt />
 
-            <div className="mx-1 hidden h-6 w-px bg-surface-3 sm:block" aria-hidden="true" />
+            <div className="mx-1 hidden h-6 w-px bg-neutral-200 sm:block" aria-hidden="true" />
 
             <NotificationBell
               status={headerStatus}
@@ -1079,7 +1079,7 @@ function DashboardShellContent({
         <NotificationPermissionGate slug={slug} />
 
         {soundBlocked && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-500/30 bg-red-500/15 px-4 py-2.5 text-xs font-medium text-red-300 md:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-4 py-2.5 text-xs font-medium text-red-900 md:px-6">
             <span className="flex items-center gap-1.5">
               <span className="text-sm" aria-hidden="true">
                 🔇
@@ -1097,7 +1097,7 @@ function DashboardShellContent({
         )}
 
         {pendingOrderIds.size > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-500/30 bg-red-500/15 px-4 py-2.5 text-xs font-medium text-red-300 md:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-4 py-2.5 text-xs font-medium text-red-900 md:px-6">
             <span className="flex items-center gap-1.5">
               <span className="text-sm" aria-hidden="true">
                 🔔
@@ -1117,7 +1117,7 @@ function DashboardShellContent({
         )}
 
         {!isOnline && (
-          <div className="border-b border-amber-500/30 bg-amber-500/15 px-4 py-2 text-xs font-medium text-amber-300 md:px-6">
+          <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800 md:px-6">
             <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" />
             You&apos;re offline — POS, Orders, and KDS will keep working and sync automatically once
             you&apos;re back online. Other pages may show stale data until then.
@@ -1125,23 +1125,23 @@ function DashboardShellContent({
         )}
 
         {canViewServiceCalls && activeCalls.length > 0 && (
-          <div className="space-y-2 border-b border-orange-100 bg-orange-500/15 px-4 py-3 md:px-6">
+          <div className="space-y-2 border-b border-orange-100 bg-orange-50 px-4 py-3 md:px-6">
             {activeCalls.map((call) => (
               <div
                 key={call.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-2 px-3 py-2 shadow-sm"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 shadow-sm"
               >
                 <div className="flex items-center gap-2.5">
                   <span
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm ${
-                      call.status === "acknowledged" ? "bg-green-500/15" : "animate-pulse bg-orange-500/20"
+                      call.status === "acknowledged" ? "bg-green-50" : "animate-pulse bg-orange-100"
                     }`}
                   >
                     🔔
                   </span>
                   <span className="text-sm">
-                    <span className="font-semibold text-ink">{call.tableName}</span>{" "}
-                    <span className="text-ink-muted">
+                    <span className="font-semibold text-neutral-900">{call.tableName}</span>{" "}
+                    <span className="text-neutral-500">
                       {call.status === "acknowledged" ? "— on the way" : "is calling for staff"}
                     </span>
                   </span>
@@ -1159,7 +1159,7 @@ function DashboardShellContent({
                   <button
                     onClick={() => actOnCall(call.id, "resolve")}
                     disabled={callActionBusy === call.id}
-                    className="rounded-full border border-hairline px-3 py-1.5 text-xs font-medium text-ink-secondary disabled:opacity-50"
+                    className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 disabled:opacity-50"
                   >
                     Done
                   </button>
@@ -1199,7 +1199,7 @@ function BranchSwitcher() {
         aria-label="Switch branch"
         value={activeBranchId ?? "__all__"}
         onChange={(e) => setActiveBranchId(e.target.value === "__all__" ? null : e.target.value)}
-        className="appearance-none rounded-full border border-hairline bg-surface-2 py-1.5 pl-3 pr-7 text-xs font-medium text-ink-secondary hover:bg-surface-1"
+        className="appearance-none rounded-full border border-neutral-200 bg-white py-1.5 pl-3 pr-7 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
       >
         <option value="__all__">All branches</option>
         {branches.map((b) => (
@@ -1209,7 +1209,7 @@ function BranchSwitcher() {
           </option>
         ))}
       </select>
-      <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 rotate-90 items-center text-ink-faint">
+      <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 rotate-90 items-center text-neutral-400">
         <NavIcon.ChevronRight />
       </span>
     </div>
@@ -1248,7 +1248,7 @@ function NotificationBell({
         aria-label={t("nav.notifications")}
         aria-expanded={open}
         onClick={onToggle}
-        className="relative rounded-full border border-hairline bg-surface-2 p-2 text-ink-muted transition-colors hover:bg-surface-1 hover:text-ink-secondary"
+        className="relative rounded-full border border-neutral-200 bg-white p-2 text-neutral-500 transition-colors hover:bg-neutral-50 hover:text-neutral-700"
       >
         <span className="flex h-4 w-4 items-center justify-center">
           <NavIcon.Bell />
@@ -1267,28 +1267,28 @@ function NotificationBell({
             className="fixed inset-0 z-40 cursor-default"
             onClick={onClose}
           />
-          <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border border-hairline bg-surface-2 p-2 shadow-lg">
-            <p className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+          <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border border-neutral-200 bg-white p-2 shadow-lg">
+            <p className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-400">
               Needs attention
             </p>
             {alertCount === 0 ? (
-              <p className="px-2 py-3 text-sm text-ink-muted">You&apos;re all caught up.</p>
+              <p className="px-2 py-3 text-sm text-neutral-500">You&apos;re all caught up.</p>
             ) : (
               <div className="space-y-1">
                 {lowStock > 0 && (
                   <Link
                     href="/dashboard/inventory"
                     onClick={onClose}
-                    className="flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm hover:bg-surface-1"
+                    className="flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm hover:bg-neutral-50"
                   >
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-400">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
                       <NavIcon.AlertCircle />
                     </span>
                     <span className="min-w-0">
-                      <span className="block font-medium text-ink">
+                      <span className="block font-medium text-neutral-900">
                         {lowStock} item{lowStock === 1 ? "" : "s"} low on stock
                       </span>
-                      <span className="block text-xs text-ink-muted">At or below reorder level</span>
+                      <span className="block text-xs text-neutral-500">At or below reorder level</span>
                     </span>
                   </Link>
                 )}
@@ -1296,17 +1296,17 @@ function NotificationBell({
                   <Link
                     href="/dashboard/reservations"
                     onClick={onClose}
-                    className="flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm hover:bg-surface-1"
+                    className="flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm hover:bg-neutral-50"
                   >
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-400">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
                       <NavIcon.Reservations />
                     </span>
                     <span className="min-w-0">
-                      <span className="block font-medium text-ink">
+                      <span className="block font-medium text-neutral-900">
                         {pendingReservations} reservation{pendingReservations === 1 ? "" : "s"} awaiting
                         confirmation
                       </span>
-                      <span className="block text-xs text-ink-muted">Requested, not yet confirmed</span>
+                      <span className="block text-xs text-neutral-500">Requested, not yet confirmed</span>
                     </span>
                   </Link>
                 )}
@@ -1354,7 +1354,7 @@ function LanguageToggle({
 }) {
   return (
     <div
-      className="hidden items-center rounded-full bg-surface-1 p-0.5 sm:flex"
+      className="hidden items-center rounded-full bg-neutral-100 p-0.5 sm:flex"
       role="group"
       aria-label={label}
     >
@@ -1366,8 +1366,8 @@ function LanguageToggle({
           aria-pressed={locale === option}
           className={`rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ${
             locale === option
-              ? "bg-surface-2 text-orange-400 shadow-sm"
-              : "text-ink-faint hover:text-ink-secondary"
+              ? "bg-white text-orange-700 shadow-sm"
+              : "text-neutral-400 hover:text-neutral-600"
           }`}
         >
           {option === "en" ? "EN" : "ने"}
@@ -1388,8 +1388,8 @@ function DateSystemToggle({
   const label = dateSystem === "BS" ? formatBsDate(today) : formatAdDate(today);
 
   return (
-    <div className="hidden items-center gap-2 rounded-full border border-hairline bg-surface-2 py-1 pl-1 pr-3 text-xs font-medium text-ink-secondary sm:flex">
-      <div className="flex items-center rounded-full bg-surface-1 p-0.5" role="group" aria-label="Calendar system">
+    <div className="hidden items-center gap-2 rounded-full border border-neutral-200 bg-white py-1 pl-1 pr-3 text-xs font-medium text-neutral-600 sm:flex">
+      <div className="flex items-center rounded-full bg-neutral-100 p-0.5" role="group" aria-label="Calendar system">
         {(["BS", "AD"] as const).map((system) => (
           <button
             key={system}
@@ -1398,15 +1398,15 @@ function DateSystemToggle({
             aria-pressed={dateSystem === system}
             className={`rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ${
               dateSystem === system
-                ? "bg-surface-2 text-orange-400 shadow-sm"
-                : "text-ink-faint hover:text-ink-secondary"
+                ? "bg-white text-orange-700 shadow-sm"
+                : "text-neutral-400 hover:text-neutral-600"
             }`}
           >
             {system}
           </button>
         ))}
       </div>
-      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-ink-faint" aria-hidden="true">
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-neutral-400" aria-hidden="true">
         <NavIcon.Calendar />
       </span>
       <span className="whitespace-nowrap">{label}</span>

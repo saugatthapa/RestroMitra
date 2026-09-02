@@ -180,10 +180,10 @@ export function KotTicketView({
   }, [order, hasAutoPrinted, triggerPrint]);
 
   if (loadError) {
-    return <p className="p-6 text-sm text-red-400">{loadError}</p>;
+    return <p className="p-6 text-sm text-red-700">{loadError}</p>;
   }
   if (!order) {
-    return <p className="p-6 text-sm text-ink-muted">Loading ticket…</p>;
+    return <p className="p-6 text-sm text-neutral-500">Loading ticket…</p>;
   }
 
   const headerText = resolveKotHeaderText({ name: restaurantName, kotHeaderText });
@@ -192,21 +192,21 @@ export function KotTicketView({
   return (
     <div className="mx-auto max-w-sm p-4">
       <div className="mb-2 flex items-center justify-between print:hidden">
-        <p className="text-xs text-ink-muted">Kitchen Order Ticket — Order #{order.orderNumber}</p>
+        <p className="text-xs text-neutral-500">Kitchen Order Ticket — Order #{order.orderNumber}</p>
         <button onClick={() => triggerPrint()} className="btn-secondary text-xs">
           Reprint
         </button>
       </div>
 
       {webSerialSupported && (
-        <div className="mb-4 rounded-lg border border-hairline bg-surface-1 p-2.5 text-xs print:hidden">
+        <div className="mb-4 rounded-lg border border-neutral-200 bg-neutral-50 p-2.5 text-xs print:hidden">
           {printerLabel && printerReady ? (
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-ink-secondary">
-                🖨️ <span className="font-medium text-ink">{printerLabel}</span> paired
+              <span className="text-neutral-600">
+                🖨️ <span className="font-medium text-neutral-900">{printerLabel}</span> paired
               </span>
               <div className="flex items-center gap-2">
-                <label className="flex items-center gap-1.5 text-ink-secondary">
+                <label className="flex items-center gap-1.5 text-neutral-600">
                   <input
                     type="checkbox"
                     checked={thermalMode}
@@ -214,14 +214,14 @@ export function KotTicketView({
                   />
                   Print directly (skip dialog)
                 </label>
-                <button onClick={handleForget} className="text-ink-faint underline">
+                <button onClick={handleForget} className="text-neutral-400 underline">
                   Forget
                 </button>
               </div>
             </div>
           ) : (
             <div className="flex items-center justify-between gap-2">
-              <span className="text-ink-muted">
+              <span className="text-neutral-500">
                 {printerLabel
                   ? "Paired printer not found — check it's plugged in and turned on."
                   : "No thermal printer connected on this device."}
@@ -231,27 +231,27 @@ export function KotTicketView({
               </button>
             </div>
           )}
-          {printerError && <p className="mt-1.5 text-red-400">{printerError}</p>}
+          {printerError && <p className="mt-1.5 text-red-600">{printerError}</p>}
         </div>
       )}
 
       {stationTickets.length === 0 ? (
-        <p className="text-sm text-ink-faint print:hidden">This order has no items.</p>
+        <p className="text-sm text-neutral-400 print:hidden">This order has no items.</p>
       ) : (
         <div className="space-y-6">
           {stationTickets.map((ticket, index) => (
             <div
               key={ticket.station.id}
-              className="border border-dashed border-hairline-strong p-3 font-mono text-xs"
+              className="border border-dashed border-neutral-300 p-3 font-mono text-xs"
               // One physical ticket per station — force each onto its own
               // printed page/sheet rather than letting them run together.
               style={index < stationTickets.length - 1 ? { breakAfter: "page" } : undefined}
             >
               <div className="mb-2 text-center">
                 <p className="text-sm font-bold uppercase">{headerText}</p>
-                <p className="text-[11px] text-ink-muted">Kitchen Order Ticket</p>
+                <p className="text-[11px] text-neutral-500">Kitchen Order Ticket</p>
               </div>
-              <div className="mb-2 flex items-center justify-between border-y border-dashed border-hairline-strong py-1">
+              <div className="mb-2 flex items-center justify-between border-y border-dashed border-neutral-400 py-1">
                 <span className="font-bold">Ticket #{order.kotSequence ?? "—"}</span>
                 <span className="font-bold">{ticket.station.name}</span>
               </div>
@@ -261,7 +261,7 @@ export function KotTicketView({
                 {order.customerName ? ` · ${order.customerName}` : ""}
               </p>
               <p>{new Date(order.placedAt).toLocaleString("en-NP")}</p>
-              <div className="my-2 border-t border-dashed border-hairline-strong" />
+              <div className="my-2 border-t border-dashed border-neutral-300" />
               <div className="space-y-1.5">
                 {ticket.items.map((item) => (
                   <div key={item.id}>
@@ -270,16 +270,16 @@ export function KotTicketView({
                       {item.variantNameSnapshot ? ` (${item.variantNameSnapshot})` : ""}
                     </p>
                     {item.addons.length > 0 && (
-                      <p className="pl-3 text-ink-secondary">
+                      <p className="pl-3 text-neutral-600">
                         + {item.addons.map((a) => a.nameSnapshot).join(", ")}
                       </p>
                     )}
-                    {item.notes && <p className="pl-3 italic text-ink-secondary">Note: {item.notes}</p>}
+                    {item.notes && <p className="pl-3 italic text-neutral-600">Note: {item.notes}</p>}
                   </div>
                 ))}
               </div>
               {order.notes && (
-                <div className="mt-2 border-t border-dashed border-hairline-strong pt-2 italic">
+                <div className="mt-2 border-t border-dashed border-neutral-300 pt-2 italic">
                   Order notes: {order.notes}
                 </div>
               )}

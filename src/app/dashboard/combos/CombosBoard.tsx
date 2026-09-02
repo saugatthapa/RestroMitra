@@ -83,10 +83,10 @@ export function CombosBoard({ slug }: { slug: string }) {
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-ink-muted">
+        <p className="text-sm text-neutral-500">
           {combos.length} combo{combos.length === 1 ? "" : "s"}
         </p>
         <button
@@ -99,7 +99,7 @@ export function CombosBoard({ slug }: { slug: string }) {
       </div>
 
       {!loading && orderableItems.length === 0 && (
-        <p className="rounded-lg bg-amber-500/15 px-3 py-2 text-xs text-amber-300">
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
           Add an active, available menu item first — a combo needs at least one item to bundle.
         </p>
       )}
@@ -117,9 +117,9 @@ export function CombosBoard({ slug }: { slug: string }) {
       )}
 
       {loading ? (
-        <p className="text-sm text-ink-muted">Loading combos…</p>
+        <p className="text-sm text-neutral-500">Loading combos…</p>
       ) : combos.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-hairline-strong px-4 py-8 text-center text-sm text-ink-faint">
+        <p className="rounded-2xl border border-dashed border-neutral-300 px-4 py-8 text-center text-sm text-neutral-400">
           No combos yet. Bundle a few menu items at a fixed price for staff to add at the POS.
         </p>
       ) : (
@@ -162,12 +162,12 @@ function ItemRowsBuilder({
 
   return (
     <div className="space-y-2">
-      <span className="mb-1 block text-sm text-ink-secondary">Items in this combo</span>
+      <span className="mb-1 block text-sm text-neutral-600">Items in this combo</span>
       {rows.map((row) => {
         const item = menuItems.find((i) => i.id === row.menuItemId);
         const activeVariants = item?.variants.filter((v) => v.isActive) ?? [];
         return (
-          <div key={row.key} className="flex flex-wrap items-center gap-2 rounded-lg border border-hairline p-2">
+          <div key={row.key} className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 p-2">
             <select
               value={row.menuItemId}
               onChange={(e) => updateRow(row.key, { menuItemId: e.target.value, variantId: "" })}
@@ -207,7 +207,7 @@ function ItemRowsBuilder({
             <button
               type="button"
               onClick={() => removeRow(row.key)}
-              className="shrink-0 text-ink-faint hover:text-red-400"
+              className="shrink-0 text-neutral-400 hover:text-red-600"
             >
               ✕
             </button>
@@ -272,11 +272,11 @@ function ComboForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-2xl border border-hairline bg-surface-2 p-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+    <form onSubmit={submit} className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-sm sm:col-span-2">
-          <span className="mb-1 block text-ink-secondary">Combo name</span>
+          <span className="mb-1 block text-neutral-600">Combo name</span>
           <input
             required
             value={name}
@@ -286,7 +286,7 @@ function ComboForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Bundle price (Rs.)</span>
+          <span className="mb-1 block text-neutral-600">Bundle price (Rs.)</span>
           <input
             required
             type="number"
@@ -298,7 +298,7 @@ function ComboForm({
           />
         </label>
         <label className="text-sm sm:col-span-3">
-          <span className="mb-1 block text-ink-secondary">Description (optional)</span>
+          <span className="mb-1 block text-neutral-600">Description (optional)</span>
           <input value={description} onChange={(e) => setDescription(e.target.value)} className="input" />
         </label>
       </div>
@@ -357,20 +357,20 @@ function ComboRow({
   }
 
   return (
-    <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">{error}</p>}
+    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-ink">{combo.name}</span>
-            <span className="rounded-full bg-surface-1 px-2 py-0.5 text-xs text-ink-secondary">
+            <span className="text-sm font-semibold text-neutral-900">{combo.name}</span>
+            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
               {formatNPR(combo.priceInPaisa)}
             </span>
             {!combo.isActive && (
-              <span className="rounded-full bg-surface-3 px-2 py-0.5 text-xs text-ink-secondary">Inactive</span>
+              <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-xs text-neutral-600">Inactive</span>
             )}
           </div>
-          <p className="mt-1 text-xs text-ink-muted">
+          <p className="mt-1 text-xs text-neutral-500">
             {combo.items.map(describeItem).join(", ")}
             {combo.description && <> · {combo.description}</>}
           </p>
@@ -385,7 +385,7 @@ function ComboRow({
         </div>
       </div>
       {editing && (
-        <div className="mt-4 border-t border-hairline/60 pt-4">
+        <div className="mt-4 border-t border-neutral-100 pt-4">
           <EditComboForm
             slug={slug}
             combo={combo}
@@ -457,14 +457,14 @@ function EditComboForm({
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-sm sm:col-span-2">
-          <span className="mb-1 block text-ink-secondary">Combo name</span>
+          <span className="mb-1 block text-neutral-600">Combo name</span>
           <input required value={name} onChange={(e) => setName(e.target.value)} className="input" />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Bundle price (Rs.)</span>
+          <span className="mb-1 block text-neutral-600">Bundle price (Rs.)</span>
           <input
             required
             type="number"
@@ -476,7 +476,7 @@ function EditComboForm({
           />
         </label>
         <label className="text-sm sm:col-span-3">
-          <span className="mb-1 block text-ink-secondary">Description</span>
+          <span className="mb-1 block text-neutral-600">Description</span>
           <input value={description} onChange={(e) => setDescription(e.target.value)} className="input" />
         </label>
       </div>

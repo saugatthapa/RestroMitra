@@ -176,7 +176,7 @@ export function AccountBooksBoard({ slug, canManage }: { slug: string; canManage
 
   if (!canManage) {
     return (
-      <p className="text-sm text-ink-faint">
+      <p className="text-sm text-neutral-400">
         Your role doesn&apos;t have access to Account Books.
       </p>
     );
@@ -191,16 +191,16 @@ export function AccountBooksBoard({ slug, canManage }: { slug: string; canManage
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-1 rounded-full border border-hairline bg-surface-2 p-1">
+        <div className="flex gap-1 rounded-full border border-neutral-200 bg-white p-1">
           {(["day", "month", "year", "due", "reconcile"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`rounded-full px-3 py-1.5 text-xs font-medium capitalize transition ${
-                tab === t ? "bg-orange-600 text-white" : "text-ink-secondary hover:bg-surface-1"
+                tab === t ? "bg-orange-600 text-white" : "text-neutral-600 hover:bg-neutral-50"
               }`}
             >
               {t === "due" ? "Due tracking" : t === "reconcile" ? "Reconciliation" : `${t} book`}
@@ -224,15 +224,15 @@ export function AccountBooksBoard({ slug, canManage }: { slug: string; canManage
       </div>
 
       {(totalOutstandingReceivable > 0 || totalOutstandingPayable > 0) && (
-        <div className="flex flex-wrap gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/15 px-4 py-3 text-sm">
+        <div className="flex flex-wrap gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
           {totalOutstandingReceivable > 0 && (
-            <p className="text-amber-300">
+            <p className="text-amber-800">
               <span className="font-semibold">{formatNPR(totalOutstandingReceivable)}</span> owed to
               you (uncollected sales)
             </p>
           )}
           {totalOutstandingPayable > 0 && (
-            <p className="text-amber-300">
+            <p className="text-amber-800">
               <span className="font-semibold">{formatNPR(totalOutstandingPayable)}</span> you owe
               (unpaid dues)
             </p>
@@ -252,7 +252,7 @@ export function AccountBooksBoard({ slug, canManage }: { slug: string; canManage
       )}
 
       {loading ? (
-        <p className="text-sm text-ink-muted">Loading…</p>
+        <p className="text-sm text-neutral-500">Loading…</p>
       ) : tab === "day" ? (
         <DayBookView
           slug={slug}
@@ -311,10 +311,10 @@ function TotalsStrip({ totals }: { totals: Totals }) {
 
 function Stat({ label, value, tone }: { label: string; value: string; tone: "green" | "red" | "amber" }) {
   const toneClass =
-    tone === "green" ? "text-green-400" : tone === "red" ? "text-red-400" : "text-amber-400";
+    tone === "green" ? "text-green-700" : tone === "red" ? "text-red-700" : "text-amber-700";
   return (
-    <div className="rounded-xl bg-surface-1 px-3 py-2">
-      <p className="text-xs text-ink-muted">{label}</p>
+    <div className="rounded-xl bg-neutral-50 px-3 py-2">
+      <p className="text-xs text-neutral-500">{label}</p>
       <p className={`text-base font-semibold ${toneClass}`}>{value}</p>
     </div>
   );
@@ -355,21 +355,21 @@ function DayBookView({
           className="input w-auto"
         />
         {dateSystem === "BS" && (
-          <span className="text-xs text-ink-faint">{formatBsHint(anchorDate)}</span>
+          <span className="text-xs text-neutral-400">{formatBsHint(anchorDate)}</span>
         )}
         <button onClick={() => onNavigate(1)} className="btn-secondary px-2 py-1 text-xs">
           →
         </button>
-        <button onClick={() => onDateChange(todayIso())} className="text-xs text-orange-400 hover:underline">
+        <button onClick={() => onDateChange(todayIso())} className="text-xs text-orange-700 hover:underline">
           Today
         </button>
       </div>
 
       <TotalsStrip totals={book.totals} />
 
-      <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
             <tr>
               <th className="px-3 py-2">Time</th>
               <th className="px-3 py-2">Category</th>
@@ -382,7 +382,7 @@ function DayBookView({
           <tbody>
             {book.entries.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-ink-faint">
+                <td colSpan={6} className="px-3 py-6 text-center text-neutral-400">
                   No entries for {formatDayLabel(book.date, dateSystem)}.
                 </td>
               </tr>
@@ -403,30 +403,30 @@ function EntryRow({ slug, entry, onSettled }: { slug: string; entry: LedgerEntry
 
   return (
     <>
-      <tr className="border-t border-hairline/60">
-        <td className="px-3 py-2 text-ink-muted">{formatTimeOfDay(entry.createdAt)}</td>
+      <tr className="border-t border-neutral-100">
+        <td className="px-3 py-2 text-neutral-500">{formatTimeOfDay(entry.createdAt)}</td>
         <td className="px-3 py-2">{LEDGER_CATEGORY_LABELS[entry.category]}</td>
-        <td className="px-3 py-2 text-ink-secondary">{entry.description}</td>
-        <td className="px-3 py-2 text-ink-muted">{entry.counterpartyName || "—"}</td>
+        <td className="px-3 py-2 text-neutral-700">{entry.description}</td>
+        <td className="px-3 py-2 text-neutral-500">{entry.counterpartyName || "—"}</td>
         <td className="px-3 py-2">
           {entry.dueStatus === "outstanding" ? (
             <button
               onClick={() => setShowSettle((v) => !v)}
-              className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-300 hover:bg-amber-200"
+              className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 hover:bg-amber-200"
             >
               On credit — settle
             </button>
           ) : entry.dueStatus === "settled" ? (
-            <span className="rounded-full bg-surface-1 px-2 py-0.5 text-xs font-medium text-ink-muted">
+            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-500">
               Settled
             </span>
           ) : (
-            <span className="text-xs text-ink-faint">Cash</span>
+            <span className="text-xs text-neutral-400">Cash</span>
           )}
         </td>
         <td
           className={`px-3 py-2 text-right font-medium ${
-            entry.direction === "credit" ? "text-green-400" : "text-red-400"
+            entry.direction === "credit" ? "text-green-700" : "text-red-700"
           }`}
         >
           {entry.direction === "credit" ? "+" : "−"}
@@ -434,7 +434,7 @@ function EntryRow({ slug, entry, onSettled }: { slug: string; entry: LedgerEntry
         </td>
       </tr>
       {showSettle && (
-        <tr className="border-t border-hairline/60 bg-amber-500/15">
+        <tr className="border-t border-neutral-100 bg-amber-50/50">
           <td colSpan={6} className="px-3 py-2">
             <SettleForm
               slug={slug}
@@ -487,9 +487,9 @@ function SettleForm({
 
   return (
     <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
-      {error && <p className="w-full text-xs text-red-400">{error}</p>}
+      {error && <p className="w-full text-xs text-red-700">{error}</p>}
       <label className="text-xs">
-        <span className="mb-1 block text-ink-secondary">Amount received/paid (Rs)</span>
+        <span className="mb-1 block text-neutral-600">Amount received/paid (Rs)</span>
         <input
           required
           type="number"
@@ -502,13 +502,13 @@ function SettleForm({
         />
       </label>
       <label className="text-xs">
-        <span className="mb-1 block text-ink-secondary">Note (optional)</span>
+        <span className="mb-1 block text-neutral-600">Note (optional)</span>
         <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
       </label>
       <button disabled={saving} className="btn-primary text-xs disabled:opacity-50">
         {saving ? "Settling…" : "Confirm settlement"}
       </button>
-      <span className="text-xs text-ink-faint">
+      <span className="text-xs text-neutral-400">
         Remaining: {formatNPR(remainingInPaisa)}
       </span>
     </form>
@@ -550,7 +550,7 @@ function RollupView({
         <button onClick={() => onNavigate(-1)} className="btn-secondary px-2 py-1 text-xs">
           ← Previous {granularity}
         </button>
-        <p className="text-sm font-semibold text-ink">{heading}</p>
+        <p className="text-sm font-semibold text-neutral-900">{heading}</p>
         <button onClick={() => onNavigate(1)} className="btn-secondary px-2 py-1 text-xs">
           Next {granularity} →
         </button>
@@ -558,9 +558,9 @@ function RollupView({
 
       <TotalsStrip totals={rollup.totals} />
 
-      <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
             <tr>
               <th className="px-3 py-2">{granularity === "month" ? "Day" : "Month"}</th>
               <th className="px-3 py-2 text-right">Cash in</th>
@@ -572,7 +572,7 @@ function RollupView({
           <tbody>
             {rollup.rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-ink-faint">
+                <td colSpan={5} className="px-3 py-6 text-center text-neutral-400">
                   No entries in this {granularity}.
                 </td>
               </tr>
@@ -581,23 +581,23 @@ function RollupView({
               <tr
                 key={row.key}
                 onClick={() => onDrillDown(row.key)}
-                className="cursor-pointer border-t border-hairline/60 hover:bg-surface-1"
+                className="cursor-pointer border-t border-neutral-100 hover:bg-neutral-50"
               >
-                <td className="px-3 py-2 font-medium text-ink">
+                <td className="px-3 py-2 font-medium text-neutral-900">
                   {granularity === "month"
                     ? formatDayLabel(row.key, dateSystem)
                     : formatMonthLabel(`${row.key}-01`, dateSystem)}
                 </td>
-                <td className="px-3 py-2 text-right text-green-400">{formatNPR(row.creditInPaisa)}</td>
-                <td className="px-3 py-2 text-right text-red-400">{formatNPR(row.debitInPaisa)}</td>
+                <td className="px-3 py-2 text-right text-green-700">{formatNPR(row.creditInPaisa)}</td>
+                <td className="px-3 py-2 text-right text-red-700">{formatNPR(row.debitInPaisa)}</td>
                 <td
                   className={`px-3 py-2 text-right font-medium ${
-                    row.netInPaisa >= 0 ? "text-green-400" : "text-red-400"
+                    row.netInPaisa >= 0 ? "text-green-700" : "text-red-700"
                   }`}
                 >
                   {formatNPR(row.netInPaisa)}
                 </td>
-                <td className="px-3 py-2 text-right text-amber-400">
+                <td className="px-3 py-2 text-right text-amber-700">
                   {row.outstandingCreditInPaisa + row.outstandingDebitInPaisa > 0
                     ? formatNPR(row.outstandingCreditInPaisa + row.outstandingDebitInPaisa)
                     : "—"}
@@ -625,13 +625,13 @@ function DueTrackingView({
   onSettled: () => void;
 }) {
   if (dues.length === 0) {
-    return <p className="text-sm text-ink-faint">No outstanding dues right now.</p>;
+    return <p className="text-sm text-neutral-400">No outstanding dues right now.</p>;
   }
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
+    <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
       <table className="w-full text-sm">
-        <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+        <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
           <tr>
             <th className="px-3 py-2">Since</th>
             <th className="px-3 py-2">Direction</th>
@@ -656,20 +656,20 @@ function DueRow({ slug, due, onSettled }: { slug: string; due: OutstandingDue; o
   const dateSystem = useDateSystem();
   return (
     <>
-      <tr className="border-t border-hairline/60">
-        <td className="px-3 py-2 text-ink-muted">{formatDate(`${due.entryDate}T00:00:00`, dateSystem)}</td>
+      <tr className="border-t border-neutral-100">
+        <td className="px-3 py-2 text-neutral-500">{formatDate(`${due.entryDate}T00:00:00`, dateSystem)}</td>
         <td className="px-3 py-2">
           <span
             className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-              due.direction === "credit" ? "bg-green-500/20 text-green-300" : "bg-red-500/20 text-red-300"
+              due.direction === "credit" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
             }`}
           >
             {due.direction === "credit" ? "Owed to you" : "You owe"}
           </span>
         </td>
-        <td className="px-3 py-2 text-ink-secondary">{due.counterpartyName || "—"}</td>
-        <td className="px-3 py-2 text-ink-muted">{due.description}</td>
-        <td className="px-3 py-2 text-right font-medium text-amber-400">
+        <td className="px-3 py-2 text-neutral-700">{due.counterpartyName || "—"}</td>
+        <td className="px-3 py-2 text-neutral-500">{due.description}</td>
+        <td className="px-3 py-2 text-right font-medium text-amber-700">
           {formatNPR(due.remainingInPaisa)}
         </td>
         <td className="px-3 py-2 text-right">
@@ -679,7 +679,7 @@ function DueRow({ slug, due, onSettled }: { slug: string; due: OutstandingDue; o
         </td>
       </tr>
       {showSettle && (
-        <tr className="border-t border-hairline/60 bg-amber-500/15">
+        <tr className="border-t border-neutral-100 bg-amber-50/50">
           <td colSpan={6} className="px-3 py-2">
             <SettleForm
               slug={slug}
@@ -746,11 +746,11 @@ function AddEntryForm({
   }
 
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-hairline bg-surface-2 p-4">
-      {error && <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Direction</span>
+          <span className="mb-1 block text-neutral-600">Direction</span>
           <select
             value={direction}
             onChange={(e) => setDirection(e.target.value as LedgerDirection)}
@@ -761,7 +761,7 @@ function AddEntryForm({
           </select>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Category</span>
+          <span className="mb-1 block text-neutral-600">Category</span>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as LedgerCategory)}
@@ -775,7 +775,7 @@ function AddEntryForm({
           </select>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Amount (Rs)</span>
+          <span className="mb-1 block text-neutral-600">Amount (Rs)</span>
           <input
             required
             type="number"
@@ -787,7 +787,7 @@ function AddEntryForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Date</span>
+          <span className="mb-1 block text-neutral-600">Date</span>
           <input
             type="date"
             value={entryDate}
@@ -795,11 +795,11 @@ function AddEntryForm({
             className="input"
           />
           {dateSystem === "BS" && (
-            <span className="mt-1 block text-xs text-ink-faint">{formatBsHint(entryDate)}</span>
+            <span className="mt-1 block text-xs text-neutral-400">{formatBsHint(entryDate)}</span>
           )}
         </label>
         <label className="text-sm sm:col-span-2">
-          <span className="mb-1 block text-ink-secondary">Description</span>
+          <span className="mb-1 block text-neutral-600">Description</span>
           <input
             required
             value={description}
@@ -809,7 +809,7 @@ function AddEntryForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Counterparty (optional)</span>
+          <span className="mb-1 block text-neutral-600">Counterparty (optional)</span>
           <input
             value={counterpartyName}
             onChange={(e) => setCounterpartyName(e.target.value)}
@@ -818,11 +818,11 @@ function AddEntryForm({
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-secondary">Note (optional)</span>
+          <span className="mb-1 block text-neutral-600">Note (optional)</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
         </label>
       </div>
-      <label className="mt-3 flex items-center gap-2 text-sm text-ink-secondary">
+      <label className="mt-3 flex items-center gap-2 text-sm text-neutral-600">
         <input type="checkbox" checked={markAsDue} onChange={(e) => setMarkAsDue(e.target.checked)} />
         On credit — no cash has changed hands yet (tracks as an outstanding due)
       </label>
@@ -917,9 +917,9 @@ function ReconciliationView({ slug }: { slug: string }) {
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <p className="text-sm text-ink-muted">
+      <p className="text-sm text-neutral-500">
         Card, mobile wallet, and other non-cash payments — confirm each against your bank or
         gateway statement, then mark it reconciled. Cash is reconciled separately via Cash
         Register shift close / Daily Closing.
@@ -928,17 +928,17 @@ function ReconciliationView({ slug }: { slug: string }) {
       {summary.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-3">
           {summary.map((s) => (
-            <div key={s.method} className="rounded-2xl border border-hairline bg-surface-2 p-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+            <div key={s.method} className="rounded-2xl border border-neutral-200 bg-white p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
                 {PAYMENT_METHOD_LABELS[s.method]}
               </p>
-              <p className="mt-1 text-sm text-amber-400">
+              <p className="mt-1 text-sm text-amber-700">
                 {formatNPR(s.unreconciledTotalInPaisa)} unreconciled
-                <span className="text-ink-faint"> ({s.unreconciledCount})</span>
+                <span className="text-neutral-400"> ({s.unreconciledCount})</span>
               </p>
-              <p className="text-sm text-green-400">
+              <p className="text-sm text-green-700">
                 {formatNPR(s.reconciledTotalInPaisa)} reconciled
-                <span className="text-ink-faint"> ({s.reconciledCount})</span>
+                <span className="text-neutral-400"> ({s.reconciledCount})</span>
               </p>
             </div>
           ))}
@@ -946,13 +946,13 @@ function ReconciliationView({ slug }: { slug: string }) {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-1 rounded-full border border-hairline bg-surface-2 p-1">
+        <div className="flex gap-1 rounded-full border border-neutral-200 bg-white p-1">
           {(["unreconciled", "reconciled", "all"] as ReconciliationStatusFilter[]).map((s) => (
             <button
               key={s}
               onClick={() => setStatus(s)}
               className={`rounded-full px-3 py-1.5 text-xs font-medium capitalize transition ${
-                status === s ? "bg-orange-600 text-white" : "text-ink-secondary hover:bg-surface-1"
+                status === s ? "bg-orange-600 text-white" : "text-neutral-600 hover:bg-neutral-50"
               }`}
             >
               {s}
@@ -984,13 +984,13 @@ function ReconciliationView({ slug }: { slug: string }) {
       </div>
 
       {loading ? (
-        <p className="text-sm text-ink-muted">Loading…</p>
+        <p className="text-sm text-neutral-500">Loading…</p>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-ink-faint">Nothing to show for this filter.</p>
+        <p className="text-sm text-neutral-400">Nothing to show for this filter.</p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-2">
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
           <table className="w-full text-sm">
-            <thead className="bg-surface-1 text-left text-xs uppercase tracking-wide text-ink-muted">
+            <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500">
               <tr>
                 <th className="px-3 py-2">Date</th>
                 <th className="px-3 py-2">Order</th>
@@ -1003,30 +1003,30 @@ function ReconciliationView({ slug }: { slug: string }) {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="border-t border-hairline/60">
-                  <td className="px-3 py-2 text-ink-muted">
+                <tr key={row.id} className="border-t border-neutral-100">
+                  <td className="px-3 py-2 text-neutral-500">
                     {formatDate(row.createdAt, dateSystem, { withTime: true })}
                   </td>
-                  <td className="px-3 py-2 text-ink-secondary">{row.orderNumber}</td>
+                  <td className="px-3 py-2 text-neutral-700">{row.orderNumber}</td>
                   {branches.length > 1 && (
-                    <td className="px-3 py-2 text-ink-muted">{branchName(row.branchId)}</td>
+                    <td className="px-3 py-2 text-neutral-500">{branchName(row.branchId)}</td>
                   )}
-                  <td className="px-3 py-2 text-ink-muted">{PAYMENT_METHOD_LABELS[row.method]}</td>
+                  <td className="px-3 py-2 text-neutral-500">{PAYMENT_METHOD_LABELS[row.method]}</td>
                   <td
                     className={`px-3 py-2 text-right font-medium ${
-                      row.amountInPaisa < 0 ? "text-red-400" : "text-ink"
+                      row.amountInPaisa < 0 ? "text-red-700" : "text-neutral-800"
                     }`}
                   >
                     {formatNPR(row.amountInPaisa)}
-                    {row.amountInPaisa < 0 && <span className="ml-1 text-xs text-ink-faint">(refund)</span>}
+                    {row.amountInPaisa < 0 && <span className="ml-1 text-xs text-neutral-400">(refund)</span>}
                   </td>
                   <td className="px-3 py-2">
                     {row.reconciledAt ? (
-                      <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-xs font-medium text-green-300">
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
                         Reconciled
                       </span>
                     ) : (
-                      <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-300">
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
                         Unreconciled
                       </span>
                     )}

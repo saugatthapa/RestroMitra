@@ -178,9 +178,9 @@ const FAQ_ITEMS: FaqItem[] = [
 export default async function LandingPage() {
   const plans = await getActivePlans();
   return (
-    <div className="relative flex min-h-screen flex-col overflow-x-clip bg-surface-2">
+    <div className="relative flex min-h-screen flex-col overflow-x-clip bg-white">
       {/* ---------------------------------------------------------------- Header */}
-      <header className="sticky top-0 z-50 border-b border-hairline bg-surface-2/75 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-neutral-200/70 bg-white/75 backdrop-blur-md">
         <div className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
           <Link href="/" className="group flex items-center">
             {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset from /public */}
@@ -196,7 +196,7 @@ export default async function LandingPage() {
               <a
                 key={link.href}
                 href={link.href}
-                className="nav-link text-sm font-medium text-ink-secondary transition-colors hover:text-ink"
+                className="nav-link text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900"
               >
                 {link.label}
               </a>
@@ -206,7 +206,7 @@ export default async function LandingPage() {
           <div className="hidden items-center gap-3 sm:flex">
             <Link
               href="/login"
-              className="nav-link text-sm font-medium text-ink-secondary transition-colors hover:text-ink"
+              className="nav-link text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900"
             >
               Log in
             </Link>
@@ -225,16 +225,16 @@ export default async function LandingPage() {
             transform/opacity animation so they never touch layout. */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
           <div className="animate-blob absolute -top-24 left-1/2 h-[28rem] w-[28rem] -translate-x-[70%] rounded-full bg-orange-200/50 blur-3xl" />
-          <div className="animate-blob-delayed absolute top-10 left-1/2 h-[24rem] w-[24rem] translate-x-[10%] rounded-full bg-amber-500/20 blur-3xl" />
+          <div className="animate-blob-delayed absolute top-10 left-1/2 h-[24rem] w-[24rem] translate-x-[10%] rounded-full bg-amber-100/60 blur-3xl" />
         </div>
 
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center text-center">
-          <span className="animate-hero-in text-xs font-bold tracking-[0.2em] text-orange-400 uppercase">
+          <span className="animate-hero-in text-xs font-bold tracking-[0.2em] text-orange-600 uppercase">
             Restaurant OS · Made in Nepal
           </span>
 
           <span
-            className="animate-hero-in mt-4 mb-5 inline-flex items-center gap-2 rounded-full border border-orange-500/30 bg-orange-500/15 px-3.5 py-1.5 text-xs font-semibold text-orange-400"
+            className="animate-hero-in mt-4 mb-5 inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3.5 py-1.5 text-xs font-semibold text-orange-700"
             style={{ animationDelay: "40ms" }}
           >
             <span className="animate-pulse-ring h-1.5 w-1.5 rounded-full bg-orange-500" />
@@ -242,7 +242,7 @@ export default async function LandingPage() {
           </span>
 
           <h1
-            className="animate-hero-in max-w-3xl text-4xl leading-[1.08] font-extrabold tracking-tight text-ink sm:text-5xl md:text-6xl"
+            className="animate-hero-in max-w-3xl text-4xl leading-[1.08] font-extrabold tracking-tight text-neutral-900 sm:text-5xl md:text-6xl"
             style={{ animationDelay: "80ms" }}
           >
             The modern way to{" "}
@@ -252,7 +252,7 @@ export default async function LandingPage() {
           </h1>
 
           <p
-            className="animate-hero-in mt-5 max-w-xl text-base text-ink-secondary sm:text-lg"
+            className="animate-hero-in mt-5 max-w-xl text-base text-neutral-600 sm:text-lg"
             style={{ animationDelay: "160ms" }}
           >
             QR ordering, POS, kitchen display, inventory, staff, loyalty, account books, an
@@ -273,7 +273,7 @@ export default async function LandingPage() {
             </a>
           </div>
           <p
-            className="animate-hero-in mt-4 text-xs text-ink-faint"
+            className="animate-hero-in mt-4 text-xs text-neutral-400"
             style={{ animationDelay: "300ms" }}
           >
             No credit card required · No hardware to buy · Cancel anytime
@@ -285,7 +285,7 @@ export default async function LandingPage() {
 
       {/* ---------------------------------------------------------------- Differentiators strip */}
       <Reveal>
-        <section className="border-y border-hairline/60 bg-surface-1/70 py-8">
+        <section className="border-y border-neutral-100 bg-neutral-50/70 py-8">
           <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-6 px-4 text-center sm:grid-cols-4 sm:px-6">
             {[
               "30-day free trial",
@@ -295,7 +295,7 @@ export default async function LandingPage() {
             ].map((item) => (
               <div
                 key={item}
-                className="group flex items-center justify-center gap-2 text-sm font-medium text-ink-secondary transition-colors duration-200 hover:text-ink"
+                className="group flex items-center justify-center gap-2 text-sm font-medium text-neutral-600 transition-colors duration-200 hover:text-neutral-900"
               >
                 <CheckCircle />
                 {item}
@@ -308,11 +308,11 @@ export default async function LandingPage() {
       {/* ---------------------------------------------------------------- Features */}
       <section id="features" className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
         <Reveal className="mx-auto max-w-2xl text-center">
-          <span className="text-xs font-semibold tracking-wide text-orange-400 uppercase">Features</span>
-          <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
+          <span className="text-xs font-semibold tracking-wide text-orange-600 uppercase">Features</span>
+          <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-neutral-900 sm:text-4xl">
             Everything a restaurant needs, already talking to each other
           </h2>
-          <p className="mt-4 text-ink-secondary">
+          <p className="mt-4 text-neutral-600">
             No plugins to configure and no separate logins to juggle — every module below
             shares the same menu, the same orders, and the same real-time data.
           </p>
@@ -321,14 +321,14 @@ export default async function LandingPage() {
         <div className="mt-14 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((feature, i) => (
             <Reveal key={feature.title} delayMs={(i % 3) * 90}>
-              <div className="feature-card group h-full rounded-2xl border border-hairline bg-surface-2 p-6 transition duration-300 hover:-translate-y-1 hover:border-orange-500/30 hover:shadow-lg hover:shadow-orange-900/5">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-500/15 text-orange-400 transition-all duration-300 ease-out group-hover:scale-110 group-hover:-rotate-6 group-hover:bg-orange-600 group-hover:text-white">
+              <div className="feature-card group h-full rounded-2xl border border-neutral-200 bg-white p-6 transition duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-lg hover:shadow-orange-900/5">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-50 text-orange-600 transition-all duration-300 ease-out group-hover:scale-110 group-hover:-rotate-6 group-hover:bg-orange-600 group-hover:text-white">
                   {feature.icon}
                 </div>
-                <h3 className="mt-4 text-base font-semibold text-ink transition-colors group-hover:text-orange-300">
+                <h3 className="mt-4 text-base font-semibold text-neutral-900 transition-colors group-hover:text-orange-700">
                   {feature.title}
                 </h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{feature.desc}</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-neutral-500">{feature.desc}</p>
               </div>
             </Reveal>
           ))}
@@ -336,13 +336,13 @@ export default async function LandingPage() {
       </section>
 
       {/* ---------------------------------------------------------------- How it works */}
-      <section id="how-it-works" className="border-t border-hairline/60 bg-surface-1/70 px-4 py-20 sm:px-6 sm:py-28">
+      <section id="how-it-works" className="border-t border-neutral-100 bg-neutral-50/70 px-4 py-20 sm:px-6 sm:py-28">
         <div className="mx-auto w-full max-w-6xl">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <span className="text-xs font-semibold tracking-wide text-orange-400 uppercase">
+            <span className="text-xs font-semibold tracking-wide text-orange-600 uppercase">
               How it works
             </span>
-            <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
+            <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-neutral-900 sm:text-4xl">
               From order to receipt, in three steps
             </h2>
           </Reveal>
@@ -354,13 +354,13 @@ export default async function LandingPage() {
             />
             {STEPS.map((step, i) => (
               <Reveal key={step.number} delayMs={i * 120} className="group relative text-center sm:text-left">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border-2 border-orange-500 bg-surface-2 text-sm font-bold text-orange-400 transition-all duration-300 group-hover:scale-110 group-hover:bg-orange-600 group-hover:text-white group-hover:shadow-lg group-hover:shadow-orange-300/50 sm:mx-0">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border-2 border-orange-500 bg-white text-sm font-bold text-orange-600 transition-all duration-300 group-hover:scale-110 group-hover:bg-orange-600 group-hover:text-white group-hover:shadow-lg group-hover:shadow-orange-300/50 sm:mx-0">
                   {step.number}
                 </div>
-                <h3 className="mt-4 text-lg font-semibold text-ink transition-colors group-hover:text-orange-300">
+                <h3 className="mt-4 text-lg font-semibold text-neutral-900 transition-colors group-hover:text-orange-700">
                   {step.title}
                 </h3>
-                <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{step.desc}</p>
+                <p className="mt-2 text-sm leading-relaxed text-neutral-600">{step.desc}</p>
               </Reveal>
             ))}
           </div>
@@ -370,24 +370,24 @@ export default async function LandingPage() {
       {/* ---------------------------------------------------------------- Comparison */}
       <section id="compare" className="mx-auto w-full max-w-5xl px-4 py-20 sm:px-6 sm:py-28">
         <Reveal className="mx-auto max-w-2xl text-center">
-          <span className="text-xs font-semibold tracking-wide text-orange-400 uppercase">Compare</span>
-          <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
+          <span className="text-xs font-semibold tracking-wide text-orange-600 uppercase">Compare</span>
+          <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-neutral-900 sm:text-4xl">
             Better than paper, faster than a generic system
           </h2>
-          <p className="mt-4 text-ink-secondary">
+          <p className="mt-4 text-neutral-600">
             Spreadsheets and register tape don&apos;t talk to your kitchen. Generic,
             one-size-fits-all POS software wasn&apos;t built with Nepal&apos;s restaurants in
             mind. RestroKendra was.
           </p>
         </Reveal>
 
-        <Reveal className="mt-12 overflow-hidden rounded-2xl border border-hairline shadow-sm">
+        <Reveal className="mt-12 overflow-hidden rounded-2xl border border-neutral-200 shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
-                <tr className="bg-surface-1 text-left text-xs font-semibold tracking-wide text-ink-muted uppercase">
+                <tr className="bg-neutral-50 text-left text-xs font-semibold tracking-wide text-neutral-500 uppercase">
                   <th className="px-5 py-3.5">Capability</th>
-                  <th className="bg-orange-500/15 px-5 py-3.5 text-orange-400">RestroKendra</th>
+                  <th className="bg-orange-50 px-5 py-3.5 text-orange-700">RestroKendra</th>
                   <th className="px-5 py-3.5">Paper &amp; spreadsheets</th>
                   <th className="px-5 py-3.5">Generic POS software</th>
                 </tr>
@@ -396,16 +396,16 @@ export default async function LandingPage() {
                 {COMPARE_ROWS.map((row, i) => (
                   <tr
                     key={row.label}
-                    className={`transition-colors duration-200 hover:bg-orange-500/15 ${
-                      i % 2 === 0 ? "bg-surface-2" : "bg-surface-1/50"
+                    className={`transition-colors duration-200 hover:bg-orange-50/60 ${
+                      i % 2 === 0 ? "bg-white" : "bg-neutral-50/50"
                     }`}
                   >
-                    <td className="px-5 py-3.5 font-medium text-ink">{row.label}</td>
-                    <td className="bg-orange-500/15 px-5 py-3.5 font-semibold text-orange-400">
+                    <td className="px-5 py-3.5 font-medium text-neutral-800">{row.label}</td>
+                    <td className="bg-orange-50/60 px-5 py-3.5 font-semibold text-orange-700">
                       {row.restromitra}
                     </td>
-                    <td className="px-5 py-3.5 text-ink-muted">{row.manual}</td>
-                    <td className="px-5 py-3.5 text-ink-muted">{row.generic}</td>
+                    <td className="px-5 py-3.5 text-neutral-500">{row.manual}</td>
+                    <td className="px-5 py-3.5 text-neutral-500">{row.generic}</td>
                   </tr>
                 ))}
               </tbody>
@@ -415,14 +415,14 @@ export default async function LandingPage() {
       </section>
 
       {/* ---------------------------------------------------------------- Pricing */}
-      <section id="pricing" className="border-t border-hairline/60 bg-surface-1/70 px-4 py-20 sm:px-6 sm:py-28">
+      <section id="pricing" className="border-t border-neutral-100 bg-neutral-50/70 px-4 py-20 sm:px-6 sm:py-28">
         <div className="mx-auto w-full max-w-5xl">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <span className="text-xs font-semibold tracking-wide text-orange-400 uppercase">Pricing</span>
-            <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
+            <span className="text-xs font-semibold tracking-wide text-orange-600 uppercase">Pricing</span>
+            <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-neutral-900 sm:text-4xl">
               Simple pricing that scales with you
             </h2>
-            <p className="mt-4 text-ink-secondary">
+            <p className="mt-4 text-neutral-600">
               No hidden fees, no per-order commission. Every plan includes a full 30-day free
               trial — no credit card required.
             </p>
@@ -438,8 +438,8 @@ export default async function LandingPage() {
       <Reveal className="px-4 sm:px-6">
         <section className="relative mx-auto w-full max-w-6xl overflow-hidden rounded-3xl bg-gradient-to-br from-orange-600 via-orange-500 to-amber-500 px-6 py-16 text-center shadow-xl sm:py-20">
           <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <div className="animate-blob absolute -top-16 -left-16 h-64 w-64 rounded-full bg-surface-2/10 blur-3xl" />
-            <div className="animate-blob-delayed absolute -right-10 -bottom-16 h-72 w-72 rounded-full bg-surface-2/10 blur-3xl" />
+            <div className="animate-blob absolute -top-16 -left-16 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+            <div className="animate-blob-delayed absolute -right-10 -bottom-16 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
           </div>
           <div className="relative">
             <h2 className="mx-auto max-w-xl text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
@@ -452,14 +452,14 @@ export default async function LandingPage() {
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
                 href="/register"
-                className="btn-shine inline-flex items-center justify-center rounded-lg bg-surface-2 px-6 py-3 text-base font-semibold text-orange-400 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-orange-500/15 hover:shadow-lg active:translate-y-0"
+                className="btn-shine inline-flex items-center justify-center rounded-lg bg-white px-6 py-3 text-base font-semibold text-orange-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-orange-50 hover:shadow-lg active:translate-y-0"
               >
                 Start your 30-day free trial
                 <ArrowRight color="currentColor" />
               </Link>
               <Link
                 href="/login"
-                className="inline-flex items-center justify-center rounded-lg border border-white/40 px-6 py-3 text-base font-semibold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-surface-2/10 active:translate-y-0"
+                className="inline-flex items-center justify-center rounded-lg border border-white/40 px-6 py-3 text-base font-semibold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-white/10 active:translate-y-0"
               >
                 Log in
               </Link>
@@ -471,8 +471,8 @@ export default async function LandingPage() {
       {/* ---------------------------------------------------------------- FAQ */}
       <section id="faq" className="mx-auto w-full max-w-3xl px-4 py-20 sm:px-6 sm:py-28">
         <Reveal className="text-center">
-          <span className="text-xs font-semibold tracking-wide text-orange-400 uppercase">FAQ</span>
-          <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
+          <span className="text-xs font-semibold tracking-wide text-orange-600 uppercase">FAQ</span>
+          <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-neutral-900 sm:text-4xl">
             Questions restaurant owners ask us
           </h2>
         </Reveal>
@@ -498,13 +498,13 @@ export default async function LandingPage() {
                 className="h-12 w-auto transition-transform duration-500 ease-out group-hover:scale-105 sm:h-14"
               />
             </Link>
-            <p className="mt-2 max-w-xs text-center text-xs text-ink-faint sm:text-left">
+            <p className="mt-2 max-w-xs text-center text-xs text-neutral-400 sm:text-left">
               An independent restaurant management platform, launching first in Itahari and
               Sunsari — built for restaurants across Nepal.
             </p>
           </div>
 
-          <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-ink-faint sm:justify-end">
+          <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-neutral-300 sm:justify-end">
             {NAV_LINKS.map((link) => (
               <a key={link.href} href={link.href} className="nav-link transition-colors hover:text-white">
                 {link.label}
@@ -522,17 +522,17 @@ export default async function LandingPage() {
           </nav>
         </div>
         <div className="mt-8 flex flex-col items-center gap-3 border-t border-white/10 pt-8 sm:flex-row sm:justify-center sm:gap-6">
-          <p className="text-xs text-ink-faint">
+          <p className="text-xs text-neutral-400">
             © {new Date().getFullYear()} RestroKendra · by Saugat Thapa
           </p>
-          <span className="hidden text-ink-secondary sm:inline" aria-hidden="true">
+          <span className="hidden text-neutral-600 sm:inline" aria-hidden="true">
             ·
           </span>
-          <nav className="flex items-center gap-4 text-xs text-ink-faint">
-            <Link href="/privacy" className="transition-colors hover:text-ink-faint">
+          <nav className="flex items-center gap-4 text-xs text-neutral-400">
+            <Link href="/privacy" className="transition-colors hover:text-neutral-200">
               Privacy Policy
             </Link>
-            <Link href="/terms" className="transition-colors hover:text-ink-faint">
+            <Link href="/terms" className="transition-colors hover:text-neutral-200">
               Terms of Service
             </Link>
           </nav>
@@ -564,27 +564,27 @@ function HeroDashboardMockup() {
   return (
     <div className="relative mt-16 w-full max-w-3xl sm:mt-20 md:max-w-4xl">
       {/* Main dashboard frame */}
-      <div className="hero-float-card animate-float-slow relative mx-auto overflow-hidden rounded-2xl border border-hairline bg-surface-2 text-left shadow-2xl shadow-orange-900/10">
-        <div className="flex items-center gap-1.5 border-b border-hairline/60 bg-surface-1/80 px-4 py-2.5">
+      <div className="hero-float-card animate-float-slow relative mx-auto overflow-hidden rounded-2xl border border-neutral-200 bg-white text-left shadow-2xl shadow-orange-900/10">
+        <div className="flex items-center gap-1.5 border-b border-neutral-100 bg-neutral-50/80 px-4 py-2.5">
           <span className="h-2.5 w-2.5 rounded-full bg-red-300" />
           <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
           <span className="h-2.5 w-2.5 rounded-full bg-green-300" />
-          <span className="ml-2 truncate text-[11px] font-medium text-ink-faint">
+          <span className="ml-2 truncate text-[11px] font-medium text-neutral-400">
             RestroKendra — Dashboard
           </span>
-          <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+          <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-ring" />
             Live
           </span>
         </div>
 
         <div className="flex">
-          <div className="hidden w-14 flex-none flex-col items-center gap-4 border-r border-hairline/60 bg-surface-1/60 py-5 sm:flex">
+          <div className="hidden w-14 flex-none flex-col items-center gap-4 border-r border-neutral-100 bg-neutral-50/60 py-5 sm:flex">
             {sidebarIcons.map((item, i) => (
               <span
                 key={i}
                 className={`flex h-7 w-7 items-center justify-center rounded-lg ${
-                  item.active ? "bg-orange-500/20 text-orange-400" : "text-ink-faint"
+                  item.active ? "bg-orange-100 text-orange-600" : "text-neutral-400"
                 }`}
               >
                 {item.icon}
@@ -593,8 +593,8 @@ function HeroDashboardMockup() {
           </div>
 
           <div className="min-w-0 flex-1 p-4 sm:p-5">
-            <div className="flex items-center justify-between rounded-lg border border-hairline/60 px-3 py-2">
-              <span className="text-xs font-semibold text-ink-secondary sm:text-sm">Cafe Pink Floyd</span>
+            <div className="flex items-center justify-between rounded-lg border border-neutral-100 px-3 py-2">
+              <span className="text-xs font-semibold text-neutral-700 sm:text-sm">Cafe Pink Floyd</span>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-600 px-2.5 py-1 text-[10px] font-semibold text-white sm:text-xs">
                 <span className="flex h-3 w-3 items-center justify-center">
                   <NavIcon.Pos />
@@ -610,9 +610,9 @@ function HeroDashboardMockup() {
               <MockStat label="Peak hour" value="7 PM" color="amber" />
             </div>
 
-            <div className="mt-3 rounded-xl border border-hairline/60 p-3">
+            <div className="mt-3 rounded-xl border border-neutral-100 p-3">
               <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-[10px] font-semibold text-ink-faint uppercase tracking-wide">
+                <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide">
                   This week&apos;s revenue
                 </span>
               </div>
@@ -628,31 +628,31 @@ function HeroDashboardMockup() {
           content. Same placement idea as the reference layout this hero
           is modeled on: a "Revenue today" chip riding the top-left corner,
           a real-time order chip riding the bottom-right. */}
-      <div className="hero-float-card animate-float absolute -top-12 -left-3 w-[10.5rem] cursor-default rounded-xl border border-hairline bg-surface-2 p-3 shadow-xl shadow-neutral-900/10 sm:-top-14 sm:-left-10 sm:w-48">
+      <div className="hero-float-card animate-float absolute -top-12 -left-3 w-[10.5rem] cursor-default rounded-xl border border-neutral-200 bg-white p-3 shadow-xl shadow-neutral-900/10 sm:-top-14 sm:-left-10 sm:w-48">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-semibold tracking-wide text-ink-faint uppercase">
+          <span className="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
             Revenue today
           </span>
-          <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400">
+          <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700">
             Live
           </span>
         </div>
-        <p className="mt-1 text-lg font-extrabold text-ink sm:text-xl">Rs 52,840</p>
+        <p className="mt-1 text-lg font-extrabold text-neutral-900 sm:text-xl">Rs 52,840</p>
       </div>
 
-      <div className="hero-float-card animate-float-delayed absolute -bottom-14 -right-3 w-40 cursor-default rounded-xl border border-hairline bg-surface-2 p-3 shadow-xl shadow-neutral-900/10 sm:-bottom-16 sm:-right-10 sm:w-48">
-        <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-red-400">
+      <div className="hero-float-card animate-float-delayed absolute -bottom-14 -right-3 w-40 cursor-default rounded-xl border border-neutral-200 bg-white p-3 shadow-xl shadow-neutral-900/10 sm:-bottom-16 sm:-right-10 sm:w-48">
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-1.5 py-0.5 text-[9px] font-semibold text-red-600">
           <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-ring" />
           Real-time
         </span>
-        <p className="mt-1.5 text-sm font-semibold text-ink">New order · Table 9</p>
-        <p className="text-xs text-ink-muted">2× Chicken Momo, 1× Cold Drink</p>
+        <p className="mt-1.5 text-sm font-semibold text-neutral-900">New order · Table 9</p>
+        <p className="text-xs text-neutral-500">2× Chicken Momo, 1× Cold Drink</p>
       </div>
 
-      <div className="hero-float-card animate-float-slow absolute top-[38%] -left-3 hidden w-40 -translate-y-1/2 cursor-default rounded-xl border border-hairline bg-surface-2 p-3 shadow-xl shadow-neutral-900/10 md:-left-32 md:block md:w-44">
-        <span className="text-[10px] font-semibold tracking-wide text-ink-faint uppercase">Loyalty</span>
-        <p className="mt-1 text-sm font-semibold text-ink">Sunita Rai</p>
-        <p className="text-xs text-ink-muted">1,240 pts · Gold tier</p>
+      <div className="hero-float-card animate-float-slow absolute top-[38%] -left-3 hidden w-40 -translate-y-1/2 cursor-default rounded-xl border border-neutral-200 bg-white p-3 shadow-xl shadow-neutral-900/10 md:-left-32 md:block md:w-44">
+        <span className="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">Loyalty</span>
+        <p className="mt-1 text-sm font-semibold text-neutral-900">Sunita Rai</p>
+        <p className="text-xs text-neutral-500">1,240 pts · Gold tier</p>
       </div>
     </div>
   );
@@ -666,9 +666,9 @@ const STAT_COLORS = {
   // color (positive/negative), not a brand color, so it stays semantic
   // rather than being forced into the two-color brand palette.
   navy: { bg: "bg-brand-navy-50", text: "text-brand-navy" },
-  orange: { bg: "bg-orange-500/15", text: "text-orange-400" },
-  green: { bg: "bg-emerald-500/15", text: "text-emerald-400" },
-  amber: { bg: "bg-amber-500/15", text: "text-amber-400" },
+  orange: { bg: "bg-orange-50", text: "text-orange-600" },
+  green: { bg: "bg-emerald-50", text: "text-emerald-600" },
+  amber: { bg: "bg-amber-50", text: "text-amber-600" },
 } as const;
 
 function MockStat({
@@ -684,7 +684,7 @@ function MockStat({
   return (
     <div className={`rounded-lg ${c.bg} px-2.5 py-2`}>
       <p className={`text-sm font-bold sm:text-base ${c.text}`}>{value}</p>
-      <p className="mt-0.5 truncate text-[9px] font-medium text-ink-muted sm:text-[10px]">{label}</p>
+      <p className="mt-0.5 truncate text-[9px] font-medium text-neutral-500 sm:text-[10px]">{label}</p>
     </div>
   );
 }

@@ -26,9 +26,9 @@ export type SupportPanelData = {
 };
 
 const BAND_CLASSES: Record<HealthBand, string> = {
-  healthy: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-  watch: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  at_risk: "bg-red-500/15 text-red-400 border-red-500/30",
+  healthy: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  watch: "bg-amber-50 text-amber-700 border-amber-200",
+  at_risk: "bg-red-50 text-red-700 border-red-200",
 };
 
 type ActiveSession = {
@@ -149,19 +149,19 @@ export function SupportPanel({
   }
 
   return (
-    <div className="mt-6 rounded-xl border border-hairline bg-surface-2 p-4">
-      <h2 className="mb-3 text-sm font-semibold text-ink">Support</h2>
-      {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
-      {revokedMessage && <p className="mb-3 text-sm text-emerald-400">{revokedMessage}</p>}
+    <div className="mt-6 rounded-xl border border-neutral-200 bg-white p-4">
+      <h2 className="mb-3 text-sm font-semibold text-neutral-900">Support</h2>
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {revokedMessage && <p className="mb-3 text-sm text-emerald-700">{revokedMessage}</p>}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div>
           <div className="mb-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
               Health score
             </h3>
             <div className="flex items-center gap-3">
-              <span className="text-2xl font-semibold tabular-nums text-ink">
+              <span className="text-2xl font-semibold tabular-nums text-neutral-900">
                 {healthScore.score}
               </span>
               <span
@@ -171,35 +171,35 @@ export function SupportPanel({
               </span>
             </div>
             {healthScore.reasons.length > 0 ? (
-              <ul className="mt-2 space-y-1 text-xs text-ink-secondary">
+              <ul className="mt-2 space-y-1 text-xs text-neutral-600">
                 {healthScore.reasons.map((r, i) => (
                   <li key={i}>
-                    {r.label} <span className="text-ink-faint">({r.delta})</span>
+                    {r.label} <span className="text-neutral-400">({r.delta})</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="mt-2 text-xs text-ink-muted">No issues found.</p>
+              <p className="mt-2 text-xs text-neutral-500">No issues found.</p>
             )}
           </div>
 
           <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
               Status tags
             </h3>
             <div className="mb-2 flex flex-wrap gap-1.5">
-              {supportTags.length === 0 && <p className="text-xs text-ink-faint">No tags.</p>}
+              {supportTags.length === 0 && <p className="text-xs text-neutral-400">No tags.</p>}
               {supportTags.map((t) => (
                 <span
                   key={t.id}
-                  className="inline-flex items-center gap-1 rounded-full bg-surface-1 px-2.5 py-1 text-xs font-medium text-ink-secondary"
+                  className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-700"
                 >
                   {SUPPORT_TAG_LABELS[t.tag]}
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() => removeTag(t.id)}
-                    className="text-ink-faint hover:text-red-400"
+                    className="text-neutral-400 hover:text-red-600"
                     aria-label={`Remove ${SUPPORT_TAG_LABELS[t.tag]}`}
                   >
                     ×
@@ -215,7 +215,7 @@ export function SupportPanel({
                     type="button"
                     disabled={busy}
                     onClick={() => addTag(t)}
-                    className="rounded-full border border-hairline px-2.5 py-1 text-xs text-ink-secondary transition hover:bg-surface-1 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-full border border-neutral-200 px-2.5 py-1 text-xs text-neutral-600 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     + {SUPPORT_TAG_LABELS[t]}
                   </button>
@@ -225,15 +225,15 @@ export function SupportPanel({
           </div>
 
           <div className="mt-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
               Staff sessions
             </h3>
-            <p className="mb-2 text-xs text-ink-faint">
+            <p className="mb-2 text-xs text-neutral-400">
               Expand a staff member to see their actual active sessions (device, IP, created/expires)
               and revoke one at a time — or use &quot;Revoke all&quot; for a compromised-account sweep.
             </p>
             <div className="space-y-1.5">
-              {staff.length === 0 && <p className="text-xs text-ink-faint">No active staff.</p>}
+              {staff.length === 0 && <p className="text-xs text-neutral-400">No active staff.</p>}
               {staff.map((s) => (
                 <StaffSessionRow
                   key={s.userRoleId}
@@ -251,10 +251,10 @@ export function SupportPanel({
         </div>
 
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
             Internal notes
           </h3>
-          <p className="mb-2 text-xs text-ink-faint">
+          <p className="mb-2 text-xs text-neutral-400">
             Visible to the support team only — never shown in this restaurant&apos;s own dashboard.
           </p>
           <textarea
@@ -273,10 +273,10 @@ export function SupportPanel({
             Add note
           </button>
           <div className="max-h-72 space-y-2 overflow-y-auto">
-            {supportNotes.length === 0 && <p className="text-xs text-ink-faint">No notes yet.</p>}
+            {supportNotes.length === 0 && <p className="text-xs text-neutral-400">No notes yet.</p>}
             {supportNotes.map((n) => (
-              <div key={n.id} className="rounded-lg border border-hairline/60 px-3 py-2 text-xs">
-                <div className="mb-1 flex items-center justify-between text-ink-faint">
+              <div key={n.id} className="rounded-lg border border-neutral-100 px-3 py-2 text-xs">
+                <div className="mb-1 flex items-center justify-between text-neutral-400">
                   <span>
                     {n.authorFullName ?? "Unknown"} · {formatDateTime(n.createdAt)}
                   </span>
@@ -284,12 +284,12 @@ export function SupportPanel({
                     type="button"
                     disabled={busy}
                     onClick={() => removeNote(n.id)}
-                    className="hover:text-red-400"
+                    className="hover:text-red-600"
                   >
                     Remove
                   </button>
                 </div>
-                <p className="whitespace-pre-wrap text-ink-secondary">{n.note}</p>
+                <p className="whitespace-pre-wrap text-neutral-700">{n.note}</p>
               </div>
             ))}
           </div>
@@ -360,19 +360,19 @@ function StaffSessionRow({
   }
 
   return (
-    <div className="rounded-lg border border-hairline/60 px-2.5 py-1.5 text-xs">
+    <div className="rounded-lg border border-neutral-100 px-2.5 py-1.5 text-xs">
       <div className="flex items-center justify-between">
         <button
           type="button"
           onClick={toggle}
-          className="text-left text-ink-secondary hover:text-ink"
+          className="text-left text-neutral-700 hover:text-neutral-900"
         >
-          <span aria-hidden className="mr-1 inline-block w-3 text-ink-faint">
+          <span aria-hidden className="mr-1 inline-block w-3 text-neutral-400">
             {expanded ? "▾" : "▸"}
           </span>
-          {fullName} <span className="text-ink-faint">· {role}</span>
+          {fullName} <span className="text-neutral-400">· {role}</span>
           {sessions !== null && (
-            <span className="ml-1 text-ink-faint">
+            <span className="ml-1 text-neutral-400">
               ({sessions.length} active session{sessions.length === 1 ? "" : "s"})
             </span>
           )}
@@ -381,23 +381,23 @@ function StaffSessionRow({
           type="button"
           disabled={busy}
           onClick={onRevokeAll}
-          className="text-ink-muted underline decoration-dotted hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="text-neutral-500 underline decoration-dotted hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Revoke all
         </button>
       </div>
       {expanded && (
-        <div className="mt-2 space-y-1.5 border-t border-hairline/60 pt-2">
-          {loading && <p className="text-ink-faint">Loading sessions…</p>}
+        <div className="mt-2 space-y-1.5 border-t border-neutral-100 pt-2">
+          {loading && <p className="text-neutral-400">Loading sessions…</p>}
           {!loading && sessions && sessions.length === 0 && (
-            <p className="text-ink-faint">No active sessions.</p>
+            <p className="text-neutral-400">No active sessions.</p>
           )}
           {!loading &&
             sessions?.map((s) => (
-              <div key={s.id} className="flex items-center justify-between gap-2 rounded bg-surface-1 px-2 py-1.5">
+              <div key={s.id} className="flex items-center justify-between gap-2 rounded bg-neutral-50 px-2 py-1.5">
                 <div className="min-w-0">
-                  <p className="truncate text-ink-secondary">{s.userAgent ?? "Unknown device"}</p>
-                  <p className="text-ink-faint">
+                  <p className="truncate text-neutral-700">{s.userAgent ?? "Unknown device"}</p>
+                  <p className="text-neutral-400">
                     {s.ipAddress ?? "Unknown IP"} · Created {formatDateTime(s.createdAt)} · Expires{" "}
                     {formatDateTime(s.expiresAt)}
                   </p>
@@ -406,7 +406,7 @@ function StaffSessionRow({
                   type="button"
                   disabled={revokingId === s.id}
                   onClick={() => revokeOne(s.id)}
-                  className="shrink-0 text-ink-muted underline decoration-dotted hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="shrink-0 text-neutral-500 underline decoration-dotted hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {revokingId === s.id ? "Revoking…" : "Revoke"}
                 </button>

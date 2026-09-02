@@ -50,13 +50,13 @@ function formatEventType(eventType: string) {
 function statusTone(status: SubscriptionStatus): { bg: string; text: string } {
   switch (status) {
     case "active":
-      return { bg: "bg-emerald-500/15", text: "text-emerald-400" };
+      return { bg: "bg-emerald-50", text: "text-emerald-700" };
     case "trialing":
-      return { bg: "bg-orange-500/15", text: "text-orange-400" };
+      return { bg: "bg-orange-50", text: "text-orange-700" };
     case "past_due":
-      return { bg: "bg-amber-500/15", text: "text-amber-400" };
+      return { bg: "bg-amber-50", text: "text-amber-700" };
     default:
-      return { bg: "bg-red-500/15", text: "text-red-400" };
+      return { bg: "bg-red-50", text: "text-red-700" };
   }
 }
 
@@ -108,10 +108,10 @@ export function BillingBoard({ slug }: { slug: string }) {
   }
 
   if (loading && !data) {
-    return <p className="text-sm text-ink-faint">Loading billing status…</p>;
+    return <p className="text-sm text-neutral-400">Loading billing status…</p>;
   }
   if (error && !data) {
-    return <p className="text-sm text-red-400">{error}</p>;
+    return <p className="text-sm text-red-600">{error}</p>;
   }
   if (!data) return null;
 
@@ -122,53 +122,53 @@ export function BillingBoard({ slug }: { slug: string }) {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-ink">Billing</h1>
-        <p className="text-sm text-ink-muted">Your plan and subscription status.</p>
+        <h1 className="text-xl font-semibold text-neutral-900">Billing</h1>
+        <p className="text-sm text-neutral-500">Your plan and subscription status.</p>
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/15 px-3 py-2 text-sm text-red-400">
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      <div className={`mb-8 rounded-xl border border-hairline p-5 ${tone.bg}`}>
+      <div className={`mb-8 rounded-xl border border-neutral-200 p-5 ${tone.bg}`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <span className={`text-sm font-semibold ${tone.text}`}>
               {SUBSCRIPTION_STATUS_LABELS[data.subscriptionStatus]}
             </span>
             {data.subscriptionStatus === "trialing" && days !== null && (
-              <p className="mt-1 text-sm text-ink-secondary">
+              <p className="mt-1 text-sm text-neutral-600">
                 {days > 0
                   ? `${days} day${days === 1 ? "" : "s"} left in your free trial.`
                   : "Your free trial has ended."}
               </p>
             )}
             {data.subscriptionStatus === "active" && data.planKey && (
-              <p className="mt-1 text-sm text-ink-secondary">
+              <p className="mt-1 text-sm text-neutral-600">
                 You&apos;re on the {data.plan?.name ?? data.plans.find((p) => p.key === data.planKey)?.name} plan
                 {data.plan && ` at ${formatRupees(data.plan.priceInPaisaMonthly)}/mo`}.
               </p>
             )}
             {data.subscriptionStatus === "past_due" && (
-              <p className="mt-1 text-sm text-ink-secondary">
+              <p className="mt-1 text-sm text-neutral-600">
                 There&apos;s an issue with your last payment — you still have full access while
                 this is resolved.
               </p>
             )}
             {data.subscriptionStatus === "cancelled" && (
-              <p className="mt-1 text-sm text-ink-secondary">Your subscription was cancelled.</p>
+              <p className="mt-1 text-sm text-neutral-600">Your subscription was cancelled.</p>
             )}
             {data.subscriptionStatus === "paused" && (
-              <p className="mt-1 text-sm text-ink-secondary">
+              <p className="mt-1 text-sm text-neutral-600">
                 Your subscription was paused by RestroKendra. Contact support to resume it.
               </p>
             )}
           </div>
         </div>
         {blocked && (
-          <p className="mt-3 border-t border-hairline pt-3 text-sm font-medium text-ink">
+          <p className="mt-3 border-t border-neutral-200/60 pt-3 text-sm font-medium text-neutral-800">
             {/* Renamed from "is paused" — now that "paused" is also a real,
                 distinct subscription status (see subscription.ts), reusing
                 the word here as generic filler for ANY blocked reason
@@ -185,13 +185,13 @@ export function BillingBoard({ slug }: { slug: string }) {
       </div>
 
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-ink">Plans</h2>
-        <div className="inline-flex rounded-full border border-hairline bg-surface-1 p-0.5 text-xs font-medium">
+        <h2 className="text-sm font-semibold text-neutral-900">Plans</h2>
+        <div className="inline-flex rounded-full border border-neutral-200 bg-neutral-50 p-0.5 text-xs font-medium">
           <button
             type="button"
             onClick={() => setBillingCycle("monthly")}
             className={`rounded-full px-3 py-1.5 transition ${
-              billingCycle === "monthly" ? "bg-surface-2 text-ink shadow-sm" : "text-ink-muted"
+              billingCycle === "monthly" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500"
             }`}
           >
             Monthly
@@ -200,11 +200,11 @@ export function BillingBoard({ slug }: { slug: string }) {
             type="button"
             onClick={() => setBillingCycle("yearly")}
             className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition ${
-              billingCycle === "yearly" ? "bg-surface-2 text-ink shadow-sm" : "text-ink-muted"
+              billingCycle === "yearly" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500"
             }`}
           >
             Yearly
-            <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+            <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
               2 months free
             </span>
           </button>
@@ -223,38 +223,38 @@ export function BillingBoard({ slug }: { slug: string }) {
             <div
               key={plan.key}
               className={`flex flex-col rounded-2xl border p-5 ${
-                plan.highlight ? "border-orange-500/40 shadow-sm" : "border-hairline"
+                plan.highlight ? "border-orange-300 shadow-sm" : "border-neutral-200"
               }`}
             >
               {plan.highlight && (
-                <span className="mb-2 inline-block w-fit rounded-full bg-orange-500/20 px-2 py-0.5 text-[10px] font-semibold text-orange-400">
+                <span className="mb-2 inline-block w-fit rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
                   Most popular
                 </span>
               )}
-              <h3 className="text-base font-semibold text-ink">{plan.name}</h3>
+              <h3 className="text-base font-semibold text-neutral-900">{plan.name}</h3>
               {billingCycle === "monthly" ? (
-                <p className="mt-1 text-2xl font-bold text-ink">
+                <p className="mt-1 text-2xl font-bold text-neutral-900">
                   {formatRupees(displayPlan.priceInPaisaMonthly)}
-                  <span className="text-sm font-normal text-ink-muted">/mo</span>
+                  <span className="text-sm font-normal text-neutral-500">/mo</span>
                 </p>
               ) : (
                 <>
-                  <p className="mt-1 text-2xl font-bold text-ink">
+                  <p className="mt-1 text-2xl font-bold text-neutral-900">
                     {formatRupees(monthlyEquivalentWhenYearlyInPaisa(displayPlan))}
-                    <span className="text-sm font-normal text-ink-muted">/mo</span>
+                    <span className="text-sm font-normal text-neutral-500">/mo</span>
                   </p>
-                  <p className="text-xs text-ink-muted">
+                  <p className="text-xs text-neutral-500">
                     {formatRupees(yearlyPriceInPaisa(displayPlan))} billed yearly
                   </p>
                 </>
               )}
               {isCurrent && data.plan && data.plan.priceInPaisaMonthly !== plan.priceInPaisaMonthly && (
-                <p className="mt-1 text-[11px] text-ink-faint">
+                <p className="mt-1 text-[11px] text-neutral-400">
                   Locked-in rate — new subscribers pay {formatRupees(plan.priceInPaisaMonthly)}/mo.
                 </p>
               )}
-              <p className="mt-2 text-xs text-ink-muted">{plan.tagline}</p>
-              <ul className="mt-4 flex-1 space-y-1.5 text-sm text-ink-secondary">
+              <p className="mt-2 text-xs text-neutral-500">{plan.tagline}</p>
+              <ul className="mt-4 flex-1 space-y-1.5 text-sm text-neutral-600">
                 {plan.features.map((f) => (
                   <li key={f} className="flex items-start gap-1.5">
                     <span className="mt-0.5 text-orange-500">✓</span>
@@ -266,7 +266,7 @@ export function BillingBoard({ slug }: { slug: string }) {
                 {isCurrent ? (
                   <span className="btn-secondary w-full cursor-default">Current plan</span>
                 ) : !data.canManageSubscription ? (
-                  <span className="block text-center text-xs text-ink-faint">
+                  <span className="block text-center text-xs text-neutral-400">
                     Only the owner can change plans
                   </span>
                 ) : (
@@ -287,22 +287,22 @@ export function BillingBoard({ slug }: { slug: string }) {
           );
         })}
       </div>
-      <p className="mt-3 text-xs text-ink-faint">
+      <p className="mt-3 text-xs text-neutral-400">
         Requesting a plan lets us know what you want — we&apos;ll follow up to activate it.
         Self-serve checkout is coming soon.
       </p>
 
       {data.events.length > 0 && (
         <div className="mt-10">
-          <h2 className="mb-4 text-sm font-semibold text-ink">Recent activity</h2>
-          <div className="divide-y divide-hairline rounded-xl border border-hairline bg-surface-2">
+          <h2 className="mb-4 text-sm font-semibold text-neutral-900">Recent activity</h2>
+          <div className="divide-y divide-neutral-200 rounded-xl border border-neutral-200 bg-white">
             {data.events.map((event) => (
               <div key={event.id} className="flex items-center justify-between px-4 py-3 text-sm">
                 <div>
-                  <p className="font-medium text-ink">{formatEventType(event.eventType)}</p>
-                  {event.note && <p className="text-xs text-ink-muted">{event.note}</p>}
+                  <p className="font-medium text-neutral-800">{formatEventType(event.eventType)}</p>
+                  {event.note && <p className="text-xs text-neutral-500">{event.note}</p>}
                 </div>
-                <span className="text-xs text-ink-faint">
+                <span className="text-xs text-neutral-400">
                   {new Date(event.createdAt).toLocaleDateString("en-IN", {
                     day: "numeric",
                     month: "short",

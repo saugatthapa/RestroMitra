@@ -546,16 +546,16 @@ export function POSOrderBuilder({
   }
 
   if (loading) {
-    return <p className="text-sm text-ink-muted">Loading menu…</p>;
+    return <p className="text-sm text-neutral-500">Loading menu…</p>;
   }
 
   if (loadError) {
-    return <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{loadError}</p>;
+    return <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{loadError}</p>;
   }
 
   if (categories.length === 0 || menuItems.length === 0) {
     return (
-      <p className="rounded-lg bg-surface-1 px-4 py-3 text-sm text-ink-muted">
+      <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-500">
         No orderable menu items yet — add some from the Menu page first.
       </p>
     );
@@ -564,46 +564,46 @@ export function POSOrderBuilder({
   return (
     <div className="flex flex-col gap-4">
       {!isOnline && (
-        <div className="flex items-center gap-2 rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-medium text-amber-300">
+        <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
           <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
           You&apos;re offline — new orders will be saved on this device and submitted
           automatically once you&apos;re back online.
         </div>
       )}
       {usingCachedMenu && (
-        <div className="rounded-lg bg-surface-1 px-3 py-2 text-xs text-ink-secondary">
+        <div className="rounded-lg bg-neutral-100 px-3 py-2 text-xs text-neutral-600">
           Showing the menu from your last sync — couldn&apos;t reach the server just now.
         </div>
       )}
       {queuedOrders.length > 0 && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/15 p-3">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold text-amber-300">
+            <p className="text-xs font-semibold text-amber-800">
               {queuedOrders.length} order{queuedOrders.length === 1 ? "" : "s"} waiting to sync
             </p>
             <button
               onClick={runSync}
               disabled={!isOnline || syncing}
-              className="rounded-lg border border-amber-500/40 bg-surface-2 px-2.5 py-1 text-xs font-medium text-amber-300 disabled:opacity-50"
+              className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 disabled:opacity-50"
             >
               {syncing ? "Syncing…" : "Sync now"}
             </button>
           </div>
           <ul className="mt-2 space-y-1">
             {queuedOrders.map((o) => (
-              <li key={o.clientRequestId} className="flex items-center justify-between gap-2 text-xs text-amber-400">
+              <li key={o.clientRequestId} className="flex items-center justify-between gap-2 text-xs text-amber-700">
                 <span>
                   {o.summary.itemCount} item{o.summary.itemCount === 1 ? "" : "s"} ·{" "}
                   {o.summary.totalLabel}
                 </span>
                 <span className="flex items-center gap-2">
-                  <span className={o.status === "error" ? "font-medium text-red-400" : ""}>
+                  <span className={o.status === "error" ? "font-medium text-red-600" : ""}>
                     {o.status === "error" ? `Sync failed — will retry` : "Waiting"}
                   </span>
                   {o.status === "error" && (
                     <button
                       onClick={() => discardQueuedOrder(o)}
-                      className="rounded border border-red-500/40 px-1.5 py-0.5 font-medium text-red-400 hover:bg-red-500/15"
+                      className="rounded border border-red-300 px-1.5 py-0.5 font-medium text-red-700 hover:bg-red-50"
                     >
                       Discard
                     </button>
@@ -615,7 +615,7 @@ export function POSOrderBuilder({
         </div>
       )}
       {queuedMessage && (
-        <p className="rounded-lg bg-green-500/15 px-3 py-2 text-xs font-medium text-green-400">
+        <p className="rounded-lg bg-green-50 px-3 py-2 text-xs font-medium text-green-700">
           {queuedMessage}
         </p>
       )}
@@ -629,8 +629,8 @@ export function POSOrderBuilder({
                 onClick={() => setSelectedCategoryId(c.id)}
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-sm ${
                   selectedCategoryId === c.id
-                    ? "border-orange-600 bg-orange-500/15 font-medium text-orange-400"
-                    : "border-hairline text-ink-secondary"
+                    ? "border-orange-600 bg-orange-50 font-medium text-orange-700"
+                    : "border-neutral-200 text-neutral-600"
                 }`}
               >
                 {c.name}
@@ -641,8 +641,8 @@ export function POSOrderBuilder({
                 onClick={() => setSelectedCategoryId(COMBOS_TAB_ID)}
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-sm ${
                   selectedCategoryId === COMBOS_TAB_ID
-                    ? "border-orange-600 bg-orange-500/15 font-medium text-orange-400"
-                    : "border-hairline text-ink-secondary"
+                    ? "border-orange-600 bg-orange-50 font-medium text-orange-700"
+                    : "border-neutral-200 text-neutral-600"
                 }`}
               >
                 Combos
@@ -656,32 +656,32 @@ export function POSOrderBuilder({
                 <button
                   key={combo.id}
                   onClick={() => addComboToCart(combo)}
-                  className="overflow-hidden rounded-xl border border-hairline bg-surface-2 p-3 text-left shadow-sm transition hover:border-orange-500/40 hover:shadow-md"
+                  className="overflow-hidden rounded-xl border border-neutral-200 bg-white p-3 text-left shadow-sm transition hover:border-orange-300 hover:shadow-md"
                 >
-                  <p className="line-clamp-1 text-sm font-semibold text-ink">{combo.name}</p>
+                  <p className="line-clamp-1 text-sm font-semibold text-neutral-900">{combo.name}</p>
                   {combo.description && (
-                    <p className="mt-0.5 line-clamp-2 text-xs text-ink-muted">{combo.description}</p>
+                    <p className="mt-0.5 line-clamp-2 text-xs text-neutral-500">{combo.description}</p>
                   )}
-                  <p className="mt-1 text-xs font-medium text-orange-400">{formatNPR(combo.priceInPaisa)}</p>
+                  <p className="mt-1 text-xs font-medium text-orange-700">{formatNPR(combo.priceInPaisa)}</p>
                 </button>
               ))}
             </div>
           ) : itemsInCategory.length === 0 ? (
-            <p className="text-sm text-ink-faint">No items in this category.</p>
+            <p className="text-sm text-neutral-400">No items in this category.</p>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
               {itemsInCategory.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setCustomizingItem(item)}
-                  className="overflow-hidden rounded-xl border border-hairline bg-surface-2 text-left shadow-sm transition hover:border-orange-500/40 hover:shadow-md"
+                  className="overflow-hidden rounded-xl border border-neutral-200 bg-white text-left shadow-sm transition hover:border-orange-300 hover:shadow-md"
                 >
-                  <div className="aspect-square w-full bg-surface-1">
+                  <div className="aspect-square w-full bg-neutral-50">
                     <MenuItemThumb imageUrl={item.imageUrl} name={item.name} size="fill" rounded="rounded-none" />
                   </div>
                   <div className="p-3">
-                    <p className="line-clamp-1 text-sm font-semibold text-ink">{item.name}</p>
-                    <p className="mt-1 text-xs font-medium text-orange-400">
+                    <p className="line-clamp-1 text-sm font-semibold text-neutral-900">{item.name}</p>
+                    <p className="mt-1 text-xs font-medium text-orange-700">
                       {item.variants.filter((v) => v.isActive).length > 0
                         ? priceRange(item.variants.filter((v) => v.isActive))
                         : formatNPR(item.basePriceInPaisa)}
@@ -694,8 +694,8 @@ export function POSOrderBuilder({
         </div>
 
         <div className="w-full shrink-0 lg:w-80">
-          <div className="rounded-2xl border border-hairline bg-surface-2 p-4">
-            <p className="mb-3 text-sm font-semibold text-ink">Current order</p>
+          <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+            <p className="mb-3 text-sm font-semibold text-neutral-900">Current order</p>
 
             <div className="mb-3 flex gap-2">
               <button
@@ -705,8 +705,8 @@ export function POSOrderBuilder({
                 }}
                 className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium ${
                   orderType === "takeaway"
-                    ? "border-orange-600 bg-orange-500/15 text-orange-400"
-                    : "border-hairline text-ink-muted"
+                    ? "border-orange-600 bg-orange-50 text-orange-700"
+                    : "border-neutral-200 text-neutral-500"
                 }`}
               >
                 Takeaway
@@ -715,8 +715,8 @@ export function POSOrderBuilder({
                 onClick={() => setOrderType("dine_in")}
                 className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium ${
                   orderType === "dine_in"
-                    ? "border-orange-600 bg-orange-500/15 text-orange-400"
-                    : "border-hairline text-ink-muted"
+                    ? "border-orange-600 bg-orange-50 text-orange-700"
+                    : "border-neutral-200 text-neutral-500"
                 }`}
               >
                 Dine-in
@@ -739,16 +739,16 @@ export function POSOrderBuilder({
             )}
 
             {cart.length === 0 && comboCart.length === 0 ? (
-              <p className="text-sm text-ink-faint">No items added yet.</p>
+              <p className="text-sm text-neutral-400">No items added yet.</p>
             ) : (
               <div className="mb-3 max-h-80 space-y-2 overflow-y-auto">
                 {comboCart.map((line) => (
-                  <div key={line.key} className="rounded-lg border border-orange-500/30 bg-orange-500/15 p-2 text-xs">
+                  <div key={line.key} className="rounded-lg border border-orange-200 bg-orange-50/40 p-2 text-xs">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-medium text-ink">{line.comboName} (Combo)</p>
+                      <p className="font-medium text-neutral-900">{line.comboName} (Combo)</p>
                       <button
                         onClick={() => removeComboLine(line.key)}
-                        className="shrink-0 text-ink-faint hover:text-red-400"
+                        className="shrink-0 text-neutral-400 hover:text-red-600"
                       >
                         ✕
                       </button>
@@ -756,42 +756,42 @@ export function POSOrderBuilder({
                     <div className="mt-1 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <button
-                          className="h-6 w-6 rounded-full border border-hairline-strong"
+                          className="h-6 w-6 rounded-full border border-neutral-300"
                           onClick={() => changeComboQuantity(line.key, -1)}
                         >
                           −
                         </button>
                         <span className="w-4 text-center">{line.quantity}</span>
                         <button
-                          className="h-6 w-6 rounded-full border border-hairline-strong"
+                          className="h-6 w-6 rounded-full border border-neutral-300"
                           onClick={() => changeComboQuantity(line.key, 1)}
                         >
                           +
                         </button>
                       </div>
-                      <span className="font-semibold text-ink">
+                      <span className="font-semibold text-neutral-900">
                         {formatNPR(line.priceInPaisa * line.quantity)}
                       </span>
                     </div>
                   </div>
                 ))}
                 {cart.map((line) => (
-                  <div key={line.key} className="rounded-lg border border-hairline p-2 text-xs">
+                  <div key={line.key} className="rounded-lg border border-neutral-200 p-2 text-xs">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <p className="font-medium text-ink">
+                        <p className="font-medium text-neutral-900">
                           {line.itemName}
                           {line.variantName ? ` — ${line.variantName}` : ""}
                         </p>
                         {line.addonsSummary.length > 0 && (
-                          <p className="text-ink-muted">
+                          <p className="text-neutral-500">
                             {line.addonsSummary.map((a) => a.name).join(", ")}
                           </p>
                         )}
                       </div>
                       <button
                         onClick={() => removeCartLine(line.key)}
-                        className="shrink-0 text-ink-faint hover:text-red-400"
+                        className="shrink-0 text-neutral-400 hover:text-red-600"
                       >
                         ✕
                       </button>
@@ -799,20 +799,20 @@ export function POSOrderBuilder({
                     <div className="mt-1 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <button
-                          className="h-6 w-6 rounded-full border border-hairline-strong"
+                          className="h-6 w-6 rounded-full border border-neutral-300"
                           onClick={() => changeQuantity(line.key, -1)}
                         >
                           −
                         </button>
                         <span className="w-4 text-center">{line.quantity}</span>
                         <button
-                          className="h-6 w-6 rounded-full border border-hairline-strong"
+                          className="h-6 w-6 rounded-full border border-neutral-300"
                           onClick={() => changeQuantity(line.key, 1)}
                         >
                           +
                         </button>
                       </div>
-                      <span className="font-semibold text-ink">
+                      <span className="font-semibold text-neutral-900">
                         {formatNPR(cartLineTotal(line))}
                       </span>
                     </div>
@@ -844,18 +844,18 @@ export function POSOrderBuilder({
             </div>
 
             {canManageCustomers && (
-              <div className="mb-3 rounded-lg border border-hairline p-2.5">
-                <p className="mb-2 text-xs font-semibold text-ink-secondary">
+              <div className="mb-3 rounded-lg border border-neutral-200 p-2.5">
+                <p className="mb-2 text-xs font-semibold text-neutral-700">
                   Loyalty customer (optional)
                 </p>
                 {loyaltyCustomer ? (
                   <div>
                     <div className="flex items-center justify-between gap-2">
                       <div>
-                        <p className="text-sm font-medium text-ink">
+                        <p className="text-sm font-medium text-neutral-900">
                           {loyaltyCustomer.fullName || loyaltyCustomer.phone}
                         </p>
-                        <p className="text-xs text-ink-muted">
+                        <p className="text-xs text-neutral-500">
                           {loyaltyCustomer.phone} · {loyaltyCustomer.loyaltyPointsBalance} pts
                           available
                         </p>
@@ -866,13 +866,13 @@ export function POSOrderBuilder({
                           setLoyaltyCustomer(null);
                           setRedeemPointsInput("");
                         }}
-                        className="shrink-0 text-xs font-medium text-ink-faint hover:text-red-400"
+                        className="shrink-0 text-xs font-medium text-neutral-400 hover:text-red-600"
                       >
                         Remove
                       </button>
                     </div>
                     {loyaltyCustomer.loyaltyPointsBalance > 0 && (
-                      <div className="mt-2 border-t border-hairline/60 pt-2">
+                      <div className="mt-2 border-t border-neutral-100 pt-2">
                         <input
                           className="input"
                           type="number"
@@ -885,12 +885,12 @@ export function POSOrderBuilder({
                           onChange={(e) => setRedeemPointsInput(e.target.value)}
                         />
                         {discountType !== "none" ? (
-                          <p className="mt-1 text-[11px] text-amber-400">
+                          <p className="mt-1 text-[11px] text-amber-600">
                             Clear the manual discount below to redeem points instead.
                           </p>
                         ) : (
                           redeemPointsRequested > 0 && (
-                            <p className="mt-1 text-[11px] text-ink-muted">
+                            <p className="mt-1 text-[11px] text-neutral-500">
                               {loyaltyRedemptionPreview.pointsToRedeem > 0
                                 ? `Redeeming ${loyaltyRedemptionPreview.pointsToRedeem} point${loyaltyRedemptionPreview.pointsToRedeem === 1 ? "" : "s"} for ${formatNPR(loyaltyRedemptionPreview.redemptionValueInPaisa)} off.`
                                 : "Add items to the cart to redeem points against."}
@@ -912,10 +912,10 @@ export function POSOrderBuilder({
                       }}
                     />
                     {customerSearching && (
-                      <p className="mt-1 text-xs text-ink-faint">Searching…</p>
+                      <p className="mt-1 text-xs text-neutral-400">Searching…</p>
                     )}
                     {showCustomerSearch && customerSearchResults.length > 0 && (
-                      <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-hairline">
+                      <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-neutral-200">
                         {customerSearchResults.map((c) => (
                           <button
                             key={c.id}
@@ -928,12 +928,12 @@ export function POSOrderBuilder({
                               setCustomerSearchResults([]);
                               setShowCustomerSearch(false);
                             }}
-                            className="block w-full px-2.5 py-1.5 text-left text-xs hover:bg-surface-1"
+                            className="block w-full px-2.5 py-1.5 text-left text-xs hover:bg-neutral-50"
                           >
-                            <span className="font-medium text-ink">
+                            <span className="font-medium text-neutral-900">
                               {c.fullName || "Unnamed"}
                             </span>
-                            <span className="ml-1.5 text-ink-muted">
+                            <span className="ml-1.5 text-neutral-500">
                               {c.phone} · {c.loyaltyPointsBalance} pts
                             </span>
                           </button>
@@ -944,7 +944,7 @@ export function POSOrderBuilder({
                       !customerSearching &&
                       customerSearchQuery.trim().length >= 2 &&
                       customerSearchResults.length === 0 && (
-                        <p className="mt-1 text-xs text-ink-faint">
+                        <p className="mt-1 text-xs text-neutral-400">
                           No matching customer found.
                         </p>
                       )}
@@ -957,15 +957,15 @@ export function POSOrderBuilder({
               <div
                 className={`mb-3 rounded-lg border p-2.5 ${
                   loyaltyDiscountActive
-                    ? "border-hairline/60 opacity-50"
-                    : "border-hairline"
+                    ? "border-neutral-100 opacity-50"
+                    : "border-neutral-200"
                 }`}
               >
-                <p className="mb-2 text-xs font-semibold text-ink-secondary">
+                <p className="mb-2 text-xs font-semibold text-neutral-700">
                   Discount / service charge
                 </p>
                 {loyaltyDiscountActive && (
-                  <p className="mb-2 text-[11px] text-ink-muted">
+                  <p className="mb-2 text-[11px] text-neutral-500">
                     Discount is disabled while redeeming loyalty points above (service charge
                     still applies).
                   </p>
@@ -979,8 +979,8 @@ export function POSOrderBuilder({
                       onClick={() => setDiscountType(t)}
                       className={`flex-1 rounded-lg border px-2 py-1 text-xs font-medium ${
                         discountType === t
-                          ? "border-orange-600 bg-orange-500/15 text-orange-400"
-                          : "border-hairline text-ink-muted"
+                          ? "border-orange-600 bg-orange-50 text-orange-700"
+                          : "border-neutral-200 text-neutral-500"
                       }`}
                     >
                       {t === "none" ? "No discount" : t === "percentage" ? "% off" : "Flat Rs. off"}
@@ -1034,13 +1034,13 @@ export function POSOrderBuilder({
               </div>
             )}
 
-            <div className="mb-3 space-y-1 border-t border-hairline pt-2 text-sm text-ink-secondary">
+            <div className="mb-3 space-y-1 border-t border-neutral-200 pt-2 text-sm text-neutral-700">
               <div className="flex items-center justify-between">
                 <span>Subtotal · {cartCount} item{cartCount === 1 ? "" : "s"}</span>
                 <span>{formatNPR(cartTotal)}</span>
               </div>
               {adjustmentsPreview.discountInPaisa > 0 && (
-                <div className="flex items-center justify-between text-red-400">
+                <div className="flex items-center justify-between text-red-700">
                   <span>
                     {loyaltyDiscountActive
                       ? `Loyalty points redeemed (${loyaltyRedemptionPreview.pointsToRedeem})`
@@ -1055,17 +1055,17 @@ export function POSOrderBuilder({
                   <span>+{formatNPR(adjustmentsPreview.serviceChargeInPaisa)}</span>
                 </div>
               )}
-              <div className="flex items-center justify-between text-sm font-semibold text-ink">
+              <div className="flex items-center justify-between text-sm font-semibold text-neutral-900">
                 <span>Estimated total</span>
                 <span>{formatNPR(adjustmentsPreview.totalInPaisa)}</span>
               </div>
-              <p className="text-[11px] text-ink-faint">
+              <p className="text-[11px] text-neutral-400">
                 Excludes tax — the final total (with applicable tax) is calculated at checkout.
               </p>
             </div>
 
             {submitError && (
-              <p className="mb-3 rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-400">
+              <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
                 {submitError}
               </p>
             )}
@@ -1150,30 +1150,30 @@ function CustomizeModal({
 
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/30 sm:items-center sm:p-4">
-      <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-surface-2 p-5 shadow-xl sm:rounded-2xl">
+      <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <MenuItemThumb imageUrl={item.imageUrl} name={item.name} size="md" />
             <div className="min-w-0">
-              <p className="text-base font-semibold text-ink">{item.name}</p>
+              <p className="text-base font-semibold text-neutral-900">{item.name}</p>
               {item.description && (
-                <p className="mt-0.5 text-xs text-ink-muted">{item.description}</p>
+                <p className="mt-0.5 text-xs text-neutral-500">{item.description}</p>
               )}
             </div>
           </div>
-          <button onClick={onClose} className="shrink-0 text-ink-faint hover:text-ink-secondary">
+          <button onClick={onClose} className="shrink-0 text-neutral-400 hover:text-neutral-700">
             ✕
           </button>
         </div>
 
         {activeVariants.length > 0 && (
           <div className="mb-4">
-            <p className="mb-1.5 text-xs font-semibold text-ink-secondary">Choose an option</p>
+            <p className="mb-1.5 text-xs font-semibold text-neutral-700">Choose an option</p>
             <div className="space-y-1.5">
               {activeVariants.map((v) => (
                 <label
                   key={v.id}
-                  className="flex items-center justify-between rounded-lg border border-hairline px-3 py-2 text-sm"
+                  className="flex items-center justify-between rounded-lg border border-neutral-200 px-3 py-2 text-sm"
                 >
                   <span className="flex items-center gap-2">
                     <input
@@ -1184,7 +1184,7 @@ function CustomizeModal({
                     />
                     {v.name}
                   </span>
-                  <span className="text-ink-muted">{formatNPR(v.priceInPaisa)}</span>
+                  <span className="text-neutral-500">{formatNPR(v.priceInPaisa)}</span>
                 </label>
               ))}
             </div>
@@ -1193,12 +1193,12 @@ function CustomizeModal({
 
         {availableAddons.length > 0 && (
           <div className="mb-4">
-            <p className="mb-1.5 text-xs font-semibold text-ink-secondary">Add-ons</p>
+            <p className="mb-1.5 text-xs font-semibold text-neutral-700">Add-ons</p>
             <div className="space-y-1.5">
               {availableAddons.map((a) => (
                 <label
                   key={a.id}
-                  className="flex items-center justify-between rounded-lg border border-hairline px-3 py-2 text-sm"
+                  className="flex items-center justify-between rounded-lg border border-neutral-200 px-3 py-2 text-sm"
                 >
                   <span className="flex items-center gap-2">
                     <input
@@ -1208,7 +1208,7 @@ function CustomizeModal({
                     />
                     {a.name}
                   </span>
-                  <span className="text-ink-muted">
+                  <span className="text-neutral-500">
                     {a.priceInPaisa > 0 ? `+${formatNPR(a.priceInPaisa)}` : "free"}
                   </span>
                 </label>
@@ -1226,17 +1226,17 @@ function CustomizeModal({
         />
 
         <div className="mb-4 flex items-center justify-between">
-          <p className="text-xs font-semibold text-ink-secondary">Quantity</p>
+          <p className="text-xs font-semibold text-neutral-700">Quantity</p>
           <div className="flex items-center gap-3">
             <button
-              className="h-8 w-8 rounded-full border border-hairline-strong text-ink-secondary"
+              className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-600"
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
             >
               −
             </button>
             <span className="w-6 text-center text-sm font-medium">{quantity}</span>
             <button
-              className="h-8 w-8 rounded-full border border-hairline-strong text-ink-secondary"
+              className="h-8 w-8 rounded-full border border-neutral-300 text-neutral-600"
               onClick={() => setQuantity((q) => Math.min(50, q + 1))}
             >
               +

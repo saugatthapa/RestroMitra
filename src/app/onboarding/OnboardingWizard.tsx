@@ -118,11 +118,11 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
 
   if (done) {
     return (
-      <div className="rounded-2xl border border-hairline bg-surface-2 p-6 shadow-sm">
-        <h1 className="text-lg font-semibold text-ink">
+      <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+        <h1 className="text-lg font-semibold text-neutral-900">
           {form.name} is set up 🎉
         </h1>
-        <p className="mt-1 text-sm text-ink-muted">
+        <p className="mt-1 text-sm text-neutral-500">
           Your 30-day free trial has started. Here&apos;s what&apos;s ready now, and
           what&apos;s coming as we build out the rest of the platform.
         </p>
@@ -149,15 +149,15 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
   }
 
   return (
-    <div className="rounded-2xl border border-hairline bg-surface-2 p-6 shadow-sm">
+    <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
       <div className="mb-6">
-        <div className="mb-2 flex items-center justify-between text-xs font-medium text-ink-muted">
+        <div className="mb-2 flex items-center justify-between text-xs font-medium text-neutral-500">
           <span>
             Step {step + 1} of {STEPS.length}
           </span>
           <span>{STEPS[step]}</span>
         </div>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-1">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
           <div
             className="h-full rounded-full bg-orange-600 transition-all"
             style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
@@ -176,7 +176,7 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
           />
 
           <div className="mt-4">
-            <span className="mb-1.5 block text-xs font-medium text-ink-muted">
+            <span className="mb-1.5 block text-xs font-medium text-neutral-500">
               Logo (optional)
             </span>
             <div className="flex items-center gap-3">
@@ -186,10 +186,10 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
                 <img
                   src={form.logoUrl}
                   alt=""
-                  className="h-12 w-12 shrink-0 rounded-full border border-hairline object-cover"
+                  className="h-12 w-12 shrink-0 rounded-full border border-neutral-200 object-cover"
                 />
               ) : (
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-dashed border-hairline-strong text-[10px] font-medium text-ink-faint">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-dashed border-neutral-300 text-[10px] font-medium text-neutral-400">
                   No logo
                 </span>
               )}
@@ -214,18 +214,18 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
                     <button
                       type="button"
                       onClick={() => update("logoUrl", "")}
-                      className="text-xs font-medium text-ink-faint hover:text-red-400"
+                      className="text-xs font-medium text-neutral-400 hover:text-red-600"
                     >
                       Remove
                     </button>
                   )}
                 </div>
-                <p className="text-[11px] text-ink-faint">
+                <p className="text-[11px] text-neutral-400">
                   Shown in your dashboard sidebar. You can skip this and add it later.
                 </p>
               </div>
             </div>
-            {logoError && <p className="mt-1 text-xs text-red-400">{logoError}</p>}
+            {logoError && <p className="mt-1 text-xs text-red-600">{logoError}</p>}
           </div>
         </StepBlock>
       )}
@@ -240,8 +240,8 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
                 onClick={() => update("type", t)}
                 className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition ${
                   form.type === t
-                    ? "border-orange-600 bg-orange-500/15 text-orange-400"
-                    : "border-hairline-strong text-ink-secondary hover:bg-surface-1"
+                    ? "border-orange-600 bg-orange-50 text-orange-700"
+                    : "border-neutral-300 text-neutral-700 hover:bg-neutral-50"
                 }`}
               >
                 {TYPE_LABELS[t]}
@@ -293,7 +293,7 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
             value={form.panVat}
             onChange={(e) => update("panVat", e.target.value)}
           />
-          <p className="mt-2 text-xs text-ink-muted">
+          <p className="mt-2 text-xs text-neutral-500">
             You can add this later from Settings. Before commercial launch, tax/invoice
             configuration should be confirmed against current IRD requirements.
           </p>
@@ -304,7 +304,7 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
         <StepBlock title="Opening hours">
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-ink-secondary">Opens</span>
+              <span className="mb-1 block text-sm font-medium text-neutral-700">Opens</span>
               <input
                 type="time"
                 className="input"
@@ -313,7 +313,7 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-ink-secondary">Closes</span>
+              <span className="mb-1 block text-sm font-medium text-neutral-700">Closes</span>
               <input
                 type="time"
                 className="input"
@@ -322,7 +322,7 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
               />
             </label>
           </div>
-          <p className="mt-2 text-xs text-ink-muted">
+          <p className="mt-2 text-xs text-neutral-500">
             Applied to all days for now — per-day hours can be customized later in Settings.
           </p>
         </StepBlock>
@@ -330,7 +330,7 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
 
       {step === 5 && (
         <StepBlock title="Review & create">
-          <dl className="divide-y divide-hairline/60 rounded-lg border border-hairline text-sm">
+          <dl className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 text-sm">
             <ReviewRow label="Name" value={form.name} />
             <ReviewRow label="Type" value={TYPE_LABELS[form.type]} />
             <ReviewRow label="Address" value={`${form.address}, ${form.city}, ${form.district}`} />
@@ -338,17 +338,17 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
             <ReviewRow label="PAN/VAT" value={form.panVat || "—"} />
             <ReviewRow label="Hours" value={`${form.openTime} – ${form.closeTime}`} />
             <div className="flex items-center justify-between gap-4 px-3 py-2">
-              <dt className="text-ink-muted">Logo</dt>
+              <dt className="text-neutral-500">Logo</dt>
               <dd>
                 {form.logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element -- see note above
                   <img
                     src={form.logoUrl}
                     alt=""
-                    className="h-7 w-7 rounded-full border border-hairline object-cover"
+                    className="h-7 w-7 rounded-full border border-neutral-200 object-cover"
                   />
                 ) : (
-                  <span className="text-ink-faint">—</span>
+                  <span className="text-neutral-400">—</span>
                 )}
               </dd>
             </div>
@@ -357,7 +357,7 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
       )}
 
       {error && (
-        <p className="mt-4 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>
+        <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
       <div className="mt-6 flex gap-3">
@@ -398,7 +398,7 @@ export function OnboardingWizard({ ownerName }: { ownerName: string }) {
 function StepBlock({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h2 className="mb-3 text-base font-semibold text-ink">{title}</h2>
+      <h2 className="mb-3 text-base font-semibold text-neutral-900">{title}</h2>
       {children}
     </div>
   );
@@ -407,8 +407,8 @@ function StepBlock({ title, children }: { title: string; children: React.ReactNo
 function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4 px-3 py-2">
-      <dt className="text-ink-muted">{label}</dt>
-      <dd className="text-right font-medium text-ink">{value}</dd>
+      <dt className="text-neutral-500">{label}</dt>
+      <dd className="text-right font-medium text-neutral-900">{value}</dd>
     </div>
   );
 }
@@ -418,12 +418,12 @@ function ProgressItem({ label, done }: { label: string; done?: boolean }) {
     <li className="flex items-center gap-2">
       <span
         className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] ${
-          done ? "bg-green-600 text-white" : "bg-surface-3 text-ink-muted"
+          done ? "bg-green-600 text-white" : "bg-neutral-200 text-neutral-500"
         }`}
       >
         {done ? "✓" : "•"}
       </span>
-      <span className={done ? "text-ink" : "text-ink-muted"}>{label}</span>
+      <span className={done ? "text-neutral-800" : "text-neutral-500"}>{label}</span>
     </li>
   );
 }

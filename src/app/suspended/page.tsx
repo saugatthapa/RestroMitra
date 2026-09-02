@@ -27,29 +27,29 @@ export default async function SuspendedPage() {
     restaurants.find((r) => r.id === session.activeRestaurantId) ?? restaurants[0];
 
   return (
-    <div className="min-h-screen bg-surface-1">
-      <header className="flex items-center justify-between border-b border-hairline bg-surface-2 px-4 py-3 md:px-6">
+    <div className="min-h-screen bg-neutral-50">
+      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3 md:px-6">
         <div className="flex items-center gap-3">
           <span className="flex flex-col leading-tight">
-            <span className="text-lg font-semibold tracking-tight text-ink">
-              Restro<span className="text-orange-400">Kendra</span>
+            <span className="text-lg font-semibold tracking-tight text-neutral-900">
+              Restro<span className="text-orange-600">Mitra</span>
             </span>
-            <span className="text-[10px] font-medium text-ink-faint">by Saugat Thapa</span>
+            <span className="text-[10px] font-medium text-neutral-400">by Saugat Thapa</span>
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-ink-muted">{active.name}</span>
+          <span className="text-sm text-neutral-500">{active.name}</span>
           <LogoutButton />
         </div>
       </header>
       <main className="mx-auto w-full max-w-lg p-4 py-16 text-center md:p-8">
-        <div className="rounded-xl border border-red-500/30 bg-red-500/15 p-6">
-          <h1 className="text-lg font-semibold text-red-300">Access suspended</h1>
-          <p className="mt-2 text-sm text-red-300">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-6">
+          <h1 className="text-lg font-semibold text-red-900">Access suspended</h1>
+          <p className="mt-2 text-sm text-red-800">
             {active.name}&apos;s access to RestroKendra has been suspended by the platform. Your
             data is preserved and nothing has been deleted — this can be reversed.
           </p>
-          <p className="mt-3 text-sm text-red-300">
+          <p className="mt-3 text-sm text-red-800">
             Contact RestroKendra support for details or to request reinstatement.
           </p>
         </div>

@@ -163,32 +163,32 @@ export function RegisterBoard({ slug }: { slug: string }) {
   }
 
   if (shift === undefined) {
-    return <p className="text-sm text-ink-faint">Loading…</p>;
+    return <p className="text-sm text-neutral-400">Loading…</p>;
   }
 
   return (
     <div className="space-y-6">
       {error && (
-        <p className="rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
       {!shift ? (
-        <form onSubmit={handleOpen} className="max-w-md rounded-lg border border-hairline bg-surface-2 p-5">
-          <h2 className="text-sm font-semibold text-ink">Open a register shift</h2>
-          <p className="mt-1 text-xs text-ink-muted">
+        <form onSubmit={handleOpen} className="max-w-md rounded-lg border border-neutral-200 bg-white p-5">
+          <h2 className="text-sm font-semibold text-neutral-900">Open a register shift</h2>
+          <p className="mt-1 text-xs text-neutral-500">
             You don&apos;t have an open shift right now. Count your starting cash and open one to begin.
           </p>
           <div className="mt-4 space-y-3">
             <label className="block text-sm">
-              <span className="mb-1 block text-ink-secondary">Register name</span>
+              <span className="mb-1 block text-neutral-700">Register name</span>
               <input
                 value={registerName}
                 onChange={(e) => setRegisterName(e.target.value)}
-                className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm"
+                className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block text-ink-secondary">Opening cash (Rs)</span>
+              <span className="mb-1 block text-neutral-700">Opening cash (Rs)</span>
               <input
                 type="number"
                 step="0.01"
@@ -196,15 +196,15 @@ export function RegisterBoard({ slug }: { slug: string }) {
                 value={openingCash}
                 onChange={(e) => setOpeningCash(e.target.value)}
                 required
-                className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm"
+                className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block text-ink-secondary">Notes (optional)</span>
+              <span className="mb-1 block text-neutral-700">Notes (optional)</span>
               <input
                 value={openingNotes}
                 onChange={(e) => setOpeningNotes(e.target.value)}
-                className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm"
+                className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
               />
             </label>
           </div>
@@ -218,36 +218,36 @@ export function RegisterBoard({ slug }: { slug: string }) {
         </form>
       ) : (
         <>
-          <div className="rounded-lg border border-hairline bg-surface-2 p-5">
+          <div className="rounded-lg border border-neutral-200 bg-white p-5">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-ink">
+                <h2 className="text-sm font-semibold text-neutral-900">
                   {shift.registerName} — open since {new Date(shift.openedAt).toLocaleString()}
                 </h2>
-                <p className="mt-1 text-xs text-ink-muted">Opening cash: {formatRupees(shift.openingCashInPaisa)}</p>
+                <p className="mt-1 text-xs text-neutral-500">Opening cash: {formatRupees(shift.openingCashInPaisa)}</p>
               </div>
-              <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-400">
+              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                 Open
               </span>
             </div>
             {liveExpected !== null && (
-              <p className="mt-3 text-2xl font-semibold text-ink">
+              <p className="mt-3 text-2xl font-semibold text-neutral-900">
                 {formatRupees(liveExpected)}
-                <span className="ml-2 text-sm font-normal text-ink-muted">expected cash right now</span>
+                <span className="ml-2 text-sm font-normal text-neutral-500">expected cash right now</span>
               </p>
             )}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <form onSubmit={handleMovement} className="rounded-lg border border-hairline bg-surface-2 p-5">
-              <h3 className="text-sm font-semibold text-ink">Record a cash movement</h3>
+            <form onSubmit={handleMovement} className="rounded-lg border border-neutral-200 bg-white p-5">
+              <h3 className="text-sm font-semibold text-neutral-900">Record a cash movement</h3>
               <div className="mt-3 space-y-3">
                 <label className="block text-sm">
-                  <span className="mb-1 block text-ink-secondary">Type</span>
+                  <span className="mb-1 block text-neutral-700">Type</span>
                   <select
                     value={movementType}
                     onChange={(e) => setMovementType(e.target.value as CashMovement["type"])}
-                    className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm"
+                    className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
                   >
                     <option value="addition">Addition (cash in)</option>
                     <option value="drop">Drop (to safe)</option>
@@ -255,7 +255,7 @@ export function RegisterBoard({ slug }: { slug: string }) {
                   </select>
                 </label>
                 <label className="block text-sm">
-                  <span className="mb-1 block text-ink-secondary">Amount (Rs)</span>
+                  <span className="mb-1 block text-neutral-700">Amount (Rs)</span>
                   <input
                     type="number"
                     step="0.01"
@@ -263,35 +263,35 @@ export function RegisterBoard({ slug }: { slug: string }) {
                     value={movementAmount}
                     onChange={(e) => setMovementAmount(e.target.value)}
                     required
-                    className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm"
+                    className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="mb-1 block text-ink-secondary">Reason (optional)</span>
+                  <span className="mb-1 block text-neutral-700">Reason (optional)</span>
                   <input
                     value={movementReason}
                     onChange={(e) => setMovementReason(e.target.value)}
-                    className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm"
+                    className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
                   />
                 </label>
               </div>
               <button
                 type="submit"
                 disabled={busy}
-                className="mt-4 rounded-md border border-hairline-strong px-4 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-1 disabled:opacity-60"
+                className="mt-4 rounded-md border border-neutral-300 px-4 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
               >
                 Record
               </button>
             </form>
 
-            <div className="rounded-lg border border-hairline bg-surface-2 p-5">
-              <h3 className="text-sm font-semibold text-ink">This shift&apos;s movements</h3>
+            <div className="rounded-lg border border-neutral-200 bg-white p-5">
+              <h3 className="text-sm font-semibold text-neutral-900">This shift&apos;s movements</h3>
               {movements.length === 0 ? (
-                <p className="mt-2 text-sm text-ink-faint">No cash movements recorded yet.</p>
+                <p className="mt-2 text-sm text-neutral-400">No cash movements recorded yet.</p>
               ) : (
                 <ul className="mt-2 space-y-2 text-sm">
                   {movements.map((m) => (
-                    <li key={m.id} className="flex items-center justify-between border-b border-hairline/60 pb-1">
+                    <li key={m.id} className="flex items-center justify-between border-b border-neutral-100 pb-1">
                       <span>
                         {MOVEMENT_LABEL[m.type]}
                         {m.reason ? ` — ${m.reason}` : ""}
@@ -304,24 +304,24 @@ export function RegisterBoard({ slug }: { slug: string }) {
             </div>
           </div>
 
-          <div className="rounded-lg border border-hairline bg-surface-2 p-5">
+          <div className="rounded-lg border border-neutral-200 bg-white p-5">
             {!showCloseForm ? (
               <button
                 type="button"
                 onClick={() => setShowCloseForm(true)}
-                className="rounded-md bg-surface-0 px-4 py-1.5 text-sm font-medium text-white hover:bg-surface-3"
+                className="rounded-md bg-neutral-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-neutral-800"
               >
                 Close shift
               </button>
             ) : (
               <form onSubmit={handleClose} className="max-w-md">
-                <h3 className="text-sm font-semibold text-ink">Close this shift</h3>
-                <p className="mt-1 text-xs text-ink-muted">
+                <h3 className="text-sm font-semibold text-neutral-900">Close this shift</h3>
+                <p className="mt-1 text-xs text-neutral-500">
                   Count the physical cash in the drawer and enter it below. This locks the shift.
                 </p>
                 <div className="mt-3 space-y-3">
                   <label className="block text-sm">
-                    <span className="mb-1 block text-ink-secondary">Actual cash counted (Rs)</span>
+                    <span className="mb-1 block text-neutral-700">Actual cash counted (Rs)</span>
                     <input
                       type="number"
                       step="0.01"
@@ -329,15 +329,15 @@ export function RegisterBoard({ slug }: { slug: string }) {
                       value={actualCash}
                       onChange={(e) => setActualCash(e.target.value)}
                       required
-                      className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm"
+                      className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
                     />
                   </label>
                   <label className="block text-sm">
-                    <span className="mb-1 block text-ink-secondary">Closing notes (optional)</span>
+                    <span className="mb-1 block text-neutral-700">Closing notes (optional)</span>
                     <input
                       value={closingNotes}
                       onChange={(e) => setClosingNotes(e.target.value)}
-                      className="w-full rounded-md border border-hairline-strong px-3 py-1.5 text-sm"
+                      className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
                     />
                   </label>
                 </div>
@@ -352,7 +352,7 @@ export function RegisterBoard({ slug }: { slug: string }) {
                   <button
                     type="button"
                     onClick={() => setShowCloseForm(false)}
-                    className="rounded-md border border-hairline-strong px-4 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-1"
+                    className="rounded-md border border-neutral-300 px-4 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
                   >
                     Cancel
                   </button>

@@ -81,9 +81,9 @@ function LoginForm() {
   if (challengeToken) {
     return (
       <div>
-        <div className="rounded-2xl border border-hairline bg-surface-2 p-6 shadow-sm">
-          <h1 className="text-lg font-semibold text-ink">Two-factor verification</h1>
-          <p className="mt-1 text-sm text-ink-muted">
+        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+          <h1 className="text-lg font-semibold text-neutral-900">Two-factor verification</h1>
+          <p className="mt-1 text-sm text-neutral-500">
             {useBackupCode
               ? "Enter one of your backup codes."
               : "Enter the 6-digit code from your authenticator app."}
@@ -91,7 +91,7 @@ function LoginForm() {
 
           <form onSubmit={onSubmitMfa} className="mt-6 space-y-4">
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-ink-secondary">
+              <span className="mb-1 block text-sm font-medium text-neutral-700">
                 {useBackupCode ? "Backup code" : "6-digit code"}
               </span>
               <input
@@ -106,7 +106,7 @@ function LoginForm() {
             </label>
 
             {error && (
-              <p className="flex items-start gap-2 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">
+              <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
                 <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
                   <AuthIcon.ShieldCheck />
                 </span>
@@ -119,7 +119,7 @@ function LoginForm() {
             </button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-ink-muted">
+          <p className="mt-6 text-center text-sm text-neutral-500">
             <button
               type="button"
               onClick={() => {
@@ -127,12 +127,12 @@ function LoginForm() {
                 setMfaCode("");
                 setError(null);
               }}
-              className="font-medium text-orange-400 hover:text-orange-300"
+              className="font-medium text-orange-600 hover:text-orange-700"
             >
               {useBackupCode ? "Use my authenticator app instead" : "Use a backup code instead"}
             </button>
           </p>
-          <p className="mt-2 text-center text-sm text-ink-muted">
+          <p className="mt-2 text-center text-sm text-neutral-500">
             <button
               type="button"
               onClick={() => {
@@ -140,7 +140,7 @@ function LoginForm() {
                 setMfaCode("");
                 setError(null);
               }}
-              className="text-ink-faint hover:text-ink-secondary"
+              className="text-neutral-400 hover:text-neutral-600"
             >
               ← Back to sign in
             </button>
@@ -154,9 +154,9 @@ function LoginForm() {
     <div>
       <AuthTabs />
 
-      <div className="rounded-2xl border border-hairline bg-surface-2 p-6 shadow-sm">
-        <h1 className="text-lg font-semibold text-ink">Welcome back</h1>
-        <p className="mt-1 text-sm text-ink-muted">Log in to your restaurant dashboard.</p>
+      <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+        <h1 className="text-lg font-semibold text-neutral-900">Welcome back</h1>
+        <p className="mt-1 text-sm text-neutral-500">Log in to your restaurant dashboard.</p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <AuthField label="Phone number" icon={<AuthIcon.Phone />}>
@@ -180,14 +180,14 @@ function LoginForm() {
               autoComplete="current-password"
             />
             <div className="mt-1.5 text-right">
-              <Link href="/forgot-password" className="text-xs font-medium text-orange-400 hover:text-orange-300">
+              <Link href="/forgot-password" className="text-xs font-medium text-orange-600 hover:text-orange-700">
                 Forgot password?
               </Link>
             </div>
           </div>
 
           {error && (
-            <p className="flex items-start gap-2 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">
+            <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
               <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
                 <AuthIcon.ShieldCheck />
               </span>
@@ -200,9 +200,9 @@ function LoginForm() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-ink-muted">
+        <p className="mt-6 text-center text-sm text-neutral-500">
           New to RestroKendra?{" "}
-          <Link href="/register" className="font-medium text-orange-400 hover:text-orange-300">
+          <Link href="/register" className="font-medium text-orange-600 hover:text-orange-700">
             Create an account
           </Link>
         </p>
