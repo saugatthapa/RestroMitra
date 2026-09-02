@@ -2,7 +2,16 @@ import Link from "next/link";
 import { Reveal } from "@/components/landing/Reveal";
 import { FaqAccordion, type FaqItem } from "@/components/landing/FaqAccordion";
 import { MobileNav } from "@/components/landing/MobileNav";
+import { PricingCards } from "@/components/landing/PricingCards";
 import { NavIcon } from "@/components/NavIcon";
+import { getActivePlans } from "@/lib/plans-db";
+
+// Plan pricing rarely changes (see /admin/plans — a platform admin edits it
+// deliberately, not every request), and this page has no per-visitor state
+// at all, so a long ISR window keeps the highest-traffic page on the whole
+// site off the database on almost every request while still picking up a
+// genuine price change within the hour.
+export const revalidate = 3600;
 
 // Deliberately no next/font/google pull here — a webfont is bytes and a
 // font-swap the system stack already defined in globals.css doesn't pay
@@ -17,6 +26,7 @@ const NAV_LINKS = [
   { href: "#features", label: "Features" },
   { href: "#how-it-works", label: "How it works" },
   { href: "#compare", label: "Compare" },
+  { href: "#pricing", label: "Pricing" },
   { href: "#faq", label: "FAQ" },
 ];
 
@@ -142,7 +152,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "How much does it cost after the trial?",
     answer:
-      "Pricing plans are being finalized as we roll out. Every new restaurant starts with a full 30-day free trial and no credit card required, so you can try the whole platform risk-free first.",
+      "Plans start at Rs 799/month for a single counter, up to Rs 3,499/month for unlimited staff and branches — see the Pricing section above for the full breakdown. Every new restaurant starts with a full 30-day free trial and no credit card required, so you can try the whole platform risk-free first.",
   },
   {
     question: "Is my restaurant's data safe?",
@@ -165,7 +175,8 @@ const FAQ_ITEMS: FaqItem[] = [
   },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const plans = await getActivePlans();
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-clip bg-white">
       {/* ---------------------------------------------------------------- Header */}
@@ -204,7 +215,7 @@ export default function LandingPage() {
             </Link>
           </div>
 
-          <MobileNav />
+          <MobileNav links={NAV_LINKS} />
         </div>
       </header>
 
@@ -403,6 +414,26 @@ export default function LandingPage() {
         </Reveal>
       </section>
 
+      {/* ---------------------------------------------------------------- Pricing */}
+      <section id="pricing" className="border-t border-neutral-100 bg-neutral-50/70 px-4 py-20 sm:px-6 sm:py-28">
+        <div className="mx-auto w-full max-w-5xl">
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <span className="text-xs font-semibold tracking-wide text-orange-600 uppercase">Pricing</span>
+            <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-neutral-900 sm:text-4xl">
+              Simple pricing that scales with you
+            </h2>
+            <p className="mt-4 text-neutral-600">
+              No hidden fees, no per-order commission. Every plan includes a full 30-day free
+              trial — no credit card required.
+            </p>
+          </Reveal>
+
+          <Reveal className="mt-14" delayMs={80}>
+            <PricingCards plans={plans} />
+          </Reveal>
+        </div>
+      </section>
+
       {/* ---------------------------------------------------------------- CTA banner */}
       <Reveal className="px-4 sm:px-6">
         <section className="relative mx-auto w-full max-w-6xl overflow-hidden rounded-3xl bg-gradient-to-br from-orange-600 via-orange-500 to-amber-500 px-6 py-16 text-center shadow-xl sm:py-20">
@@ -451,7 +482,12 @@ export default function LandingPage() {
       </section>
 
       {/* ---------------------------------------------------------------- Footer */}
-      <footer className="border-t border-neutral-100 px-4 py-12 sm:px-6">
+      {/* Brand navy — the second color in the logo mark (chef hat/"R"),
+          previously unused anywhere on the site outside the mark itself.
+          The horizontal logo's own white outline keeps it fully legible
+          against this background, so no separate light-background variant
+          is needed here. */}
+      <footer className="bg-brand-navy px-4 py-12 sm:px-6">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex flex-col items-center sm:items-start">
             <Link href="/" className="group flex items-center">
@@ -468,35 +504,35 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-neutral-500 sm:justify-end">
+          <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-neutral-300 sm:justify-end">
             {NAV_LINKS.map((link) => (
-              <a key={link.href} href={link.href} className="nav-link transition-colors hover:text-neutral-900">
+              <a key={link.href} href={link.href} className="nav-link transition-colors hover:text-white">
                 {link.label}
               </a>
             ))}
-            <Link href="/login" className="nav-link transition-colors hover:text-neutral-900">
+            <Link href="/login" className="nav-link transition-colors hover:text-white">
               Log in
             </Link>
             <Link
               href="/register"
-              className="nav-link font-medium text-orange-600 transition-colors hover:text-orange-700"
+              className="nav-link font-medium text-orange-400 transition-colors hover:text-orange-300"
             >
               Start free trial
             </Link>
           </nav>
         </div>
-        <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-6">
+        <div className="mt-8 flex flex-col items-center gap-3 border-t border-white/10 pt-8 sm:flex-row sm:justify-center sm:gap-6">
           <p className="text-xs text-neutral-400">
             © {new Date().getFullYear()} RestroKendra · by Saugat Thapa
           </p>
-          <span className="hidden text-neutral-300 sm:inline" aria-hidden="true">
+          <span className="hidden text-neutral-600 sm:inline" aria-hidden="true">
             ·
           </span>
           <nav className="flex items-center gap-4 text-xs text-neutral-400">
-            <Link href="/privacy" className="transition-colors hover:text-neutral-700">
+            <Link href="/privacy" className="transition-colors hover:text-neutral-200">
               Privacy Policy
             </Link>
-            <Link href="/terms" className="transition-colors hover:text-neutral-700">
+            <Link href="/terms" className="transition-colors hover:text-neutral-200">
               Terms of Service
             </Link>
           </nav>
@@ -568,7 +604,7 @@ function HeroDashboardMockup() {
             </div>
 
             <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              <MockStat label="Today's sales" value="Rs 42,860" color="blue" />
+              <MockStat label="Today's sales" value="Rs 42,860" color="navy" />
               <MockStat label="Orders" value="38" color="orange" />
               <MockStat label="Net profit" value="Rs 18,240" color="green" />
               <MockStat label="Peak hour" value="7 PM" color="amber" />
@@ -623,7 +659,13 @@ function HeroDashboardMockup() {
 }
 
 const STAT_COLORS = {
-  blue: { bg: "bg-blue-50", text: "text-blue-600" },
+  // "navy" (not the generic "blue" this replaced) ties this mock stat back
+  // to the logo's actual second color instead of an arbitrary Tailwind hue
+  // — see globals.css's --color-brand-navy-* tokens for where it's sampled
+  // from. "green" for profit is a deliberate exception: that's a status
+  // color (positive/negative), not a brand color, so it stays semantic
+  // rather than being forced into the two-color brand palette.
+  navy: { bg: "bg-brand-navy-50", text: "text-brand-navy" },
   orange: { bg: "bg-orange-50", text: "text-orange-600" },
   green: { bg: "bg-emerald-50", text: "text-emerald-600" },
   amber: { bg: "bg-amber-50", text: "text-amber-600" },

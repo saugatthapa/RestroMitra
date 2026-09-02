@@ -8,6 +8,18 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  /* Brand navy — sampled directly from public/brand/icon-*.png (the chef
+     hat / "R" mark), which sits at roughly #001028-#001830. Lifted a touch
+     from that literal near-black for use as UI chrome (footer, dark
+     badges, the "navy" mock-stat below) while still reading as the same
+     color family as the logo, not a generic slate/neutral. Pairs with
+     Tailwind's own orange/amber scale for the gradient half of the mark
+     (orange-500 #f97316 is already within a few hue-degrees of the
+     logo's sampled #f97e01-#fb4e01 gradient, so that half needed no new
+     token — only navy, the half nothing in the existing palette covered). */
+  --color-brand-navy: #0b1e3d;
+  --color-brand-navy-light: #16304f;
+  --color-brand-navy-50: #eef2f7;
   --font-sans:
     system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
     sans-serif;

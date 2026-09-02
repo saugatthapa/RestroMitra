@@ -3,14 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 
-const LINKS = [
-  { href: "#features", label: "Features" },
-  { href: "#how-it-works", label: "How it works" },
-  { href: "#compare", label: "Compare" },
-  { href: "#faq", label: "FAQ" },
-];
+type NavLink = { href: string; label: string };
 
-export function MobileNav() {
+// `links` is passed in from page.tsx's own NAV_LINKS (the same array the
+// desktop nav and footer nav render) rather than duplicated here — a
+// hardcoded second copy previously existed and could silently drift out of
+// sync with the desktop nav whenever a section was added or renamed.
+export function MobileNav({ links }: { links: NavLink[] }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -39,7 +38,7 @@ export function MobileNav() {
       {open && (
         <div className="absolute inset-x-0 top-full z-40 border-b border-neutral-200 bg-white/95 px-4 pb-4 pt-2 shadow-lg backdrop-blur">
           <nav className="flex flex-col gap-1">
-            {LINKS.map((link) => (
+            {links.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
