@@ -51,6 +51,19 @@ export async function GET(
       .where(and(eq(userRoles.restaurantId, restaurantId), eq(userRoles.role, "owner")))
       .limit(1);
 
+    // New-signup verification (see restaurants.verifiedAt's own schema
+    // comment) — only resolved when set, same "one extra small query,
+    // never an N+1" shape as `owner` above.
+    const verifiedByName = restaurant.verifiedByUserId
+      ? (
+          await db
+            .select({ fullName: users.fullName })
+            .from(users)
+            .where(eq(users.id, restaurant.verifiedByUserId))
+            .limit(1)
+        )[0]?.fullName ?? null
+      : null;
+
     const [staffCountRow] = await db
       .select({ n: count() })
       .from(userRoles)
@@ -143,6 +156,8 @@ export async function GET(
         aiMonthlyRequestLimit,
         aiRequestsThisMonth,
         isActive: restaurant.isActive,
+        verifiedAt: restaurant.verifiedAt,
+        verifiedByName,
         createdAt: restaurant.createdAt,
       },
       owner: owner ?? null,

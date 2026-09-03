@@ -4,6 +4,7 @@ import { PLATFORM_PERMISSIONS } from "@/lib/rbac/platform-permissions";
 import { toErrorResponse } from "@/lib/api-route-helpers";
 import { getSystemHealth } from "@/lib/system/health-db";
 import { getMaintenanceMode } from "@/lib/system/maintenance-mode-db";
+import { getVerificationContact } from "@/lib/system/verification-contact-db";
 import { rateLimit } from "@/lib/rate-limit";
 
 /** Platform Control Center (Phase 10) — the /admin/system health page's data source. */
@@ -18,8 +19,12 @@ export async function GET() {
       return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
     }
 
-    const [health, maintenanceMode] = await Promise.all([getSystemHealth(), getMaintenanceMode()]);
-    return NextResponse.json({ health, maintenanceMode });
+    const [health, maintenanceMode, verificationContact] = await Promise.all([
+      getSystemHealth(),
+      getMaintenanceMode(),
+      getVerificationContact(),
+    ]);
+    return NextResponse.json({ health, maintenanceMode, verificationContact });
   } catch (err) {
     return toErrorResponse(err);
   }

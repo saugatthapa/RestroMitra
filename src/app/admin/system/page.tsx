@@ -1,4 +1,5 @@
 import { SystemHealthPanel } from "./SystemHealthPanel";
+import { VerificationContactPanel } from "./VerificationContactPanel";
 
 export default function SystemPage() {
   return (
@@ -12,6 +13,9 @@ export default function SystemPage() {
         </p>
       </div>
       <SystemHealthPanel />
+      <div className="mt-6">
+        <VerificationContactPanel />
+      </div>
     </div>
   );
 }

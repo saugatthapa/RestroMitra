@@ -22,6 +22,12 @@ export type OwnedRestaurant = {
   // redirect a suspended restaurant's staff to /suspended the same way it
   // already redirects an inactive subscription to /billing.
   isActive: boolean;
+  // New-signup manual verification gate (see restaurants.verifiedAt's own
+  // schema comment and guard.ts's requireRestaurantVerified). Null means
+  // pending — surfaced here so the dashboard layout can redirect to
+  // /verify-account the same way it redirects a suspended restaurant to
+  // /suspended.
+  verifiedAt: Date | null;
 };
 
 async function getUserRestaurantsUncached(
@@ -40,6 +46,7 @@ async function getUserRestaurantsUncached(
       planKey: restaurants.planKey,
       onboardingCompletedAt: restaurants.onboardingCompletedAt,
       isActive: restaurants.isActive,
+      verifiedAt: restaurants.verifiedAt,
     })
     .from(userRoles)
     .innerJoin(restaurants, eq(userRoles.restaurantId, restaurants.id))
@@ -117,6 +124,7 @@ export async function getRestaurantForImpersonation(
       planKey: restaurants.planKey,
       onboardingCompletedAt: restaurants.onboardingCompletedAt,
       isActive: restaurants.isActive,
+      verifiedAt: restaurants.verifiedAt,
     })
     .from(restaurants)
     .where(eq(restaurants.id, restaurantId))

@@ -90,6 +90,19 @@ export default async function DashboardLayout({
     redirect("/suspended");
   }
 
+  // No payment gateway is integrated yet, so a self-serve signup can't be
+  // confirmed as real/paying the way a checkout would — see
+  // restaurants.verifiedAt's own schema comment and guard.ts's
+  // requireRestaurantVerified (the matching API-layer check). Same
+  // platform-admin/impersonation exemption, same "checked before the
+  // subscription check" ordering as suspension above, and for the same
+  // reason: a brand-new signup is "trialing" (subscription-wise fine) the
+  // instant onboarding finishes, so this has to run first or it'd never
+  // trigger.
+  if (!isPlatformOrImpersonatedRole(active.role) && !active.verifiedAt) {
+    redirect("/verify-account");
+  }
+
   // Phase 10: every /dashboard/* page is gated on the restaurant's
   // subscription being currently active — except for platform_admin and an
   // active impersonation session, who must always be able to reach a

@@ -8,6 +8,7 @@ import {
   requireRestaurantBySlug,
   requireActiveSubscription,
   requireRestaurantActive,
+  requireRestaurantVerified,
   requireNotInMaintenanceMode,
   requireOwnerMfaEnabled,
   isPlatformOrImpersonatedRole,
@@ -137,6 +138,14 @@ export async function resolveRestaurantContext(
   // task impersonation exists for.
   if (!isPlatformOrImpersonatedRole(role)) {
     await requireRestaurantActive(restaurantId);
+    // Same platform-admin/impersonation exemption as suspension above —
+    // support/ops must be able to reach an unverified tenant to actually
+    // verify it. Checked right after suspension, before the subscription
+    // check: a brand-new signup is "trialing" (subscription-wise fine) the
+    // instant it completes onboarding, so without this it would sail
+    // straight through resolveRestaurantContext despite never having been
+    // manually confirmed.
+    await requireRestaurantVerified(restaurantId);
   }
   if (!isPlatformOrImpersonatedRole(role) && !opts?.allowInactiveSubscription) {
     await requireActiveSubscription(restaurantId);

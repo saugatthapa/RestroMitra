@@ -96,6 +96,13 @@ export async function createRestaurantOnboarding(
             onboardingStep: 8,
             subscriptionStatus: "trialing",
             trialEndsAt,
+            // No payment gateway is integrated yet, so this self-serve
+            // signup path is the one place that explicitly opts a new
+            // restaurant OUT of the verified-by-default state (see
+            // restaurants.verifiedAt's own schema comment) — the owner
+            // hits /verify-account right after this, until a platform
+            // admin confirms them via WhatsApp/Instagram/TikTok.
+            verifiedAt: null,
           })
           .returning({ id: restaurants.id, slug: restaurants.slug });
 

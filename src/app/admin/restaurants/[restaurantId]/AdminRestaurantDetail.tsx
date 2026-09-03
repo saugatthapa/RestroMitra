@@ -30,6 +30,10 @@ type Detail = {
     aiMonthlyRequestLimit: number | null;
     aiRequestsThisMonth: number;
     isActive: boolean;
+    // New-signup verification (see restaurants.verifiedAt's own schema
+    // comment) — null means pending.
+    verifiedAt: string | null;
+    verifiedByName: string | null;
     createdAt: string;
   };
   owner: { fullName: string; phone: string; email: string | null } | null;
@@ -73,6 +77,10 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
   const [suspendReason, setSuspendReason] = useState("");
   const [suspendBusy, setSuspendBusy] = useState(false);
   const [suspendError, setSuspendError] = useState<string | null>(null);
+
+  const [verifyNote, setVerifyNote] = useState("");
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -130,6 +138,23 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
     }
   }
 
+  async function runVerificationAction(action: "verify" | "reset") {
+    setVerifyBusy(true);
+    setVerifyError(null);
+    try {
+      await apiPost(`/api/admin/restaurants/${restaurantId}/verification`, {
+        action,
+        note: verifyNote || undefined,
+      });
+      setVerifyNote("");
+      await load();
+    } catch (err) {
+      setVerifyError(err instanceof ApiError ? err.message : "That action failed.");
+    } finally {
+      setVerifyBusy(false);
+    }
+  }
+
   if (error && !data) return <p className="text-sm text-red-600">{error}</p>;
   if (!data) return <p className="text-sm text-neutral-400">Loading…</p>;
 
@@ -155,6 +180,11 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
           {!restaurant.isActive && (
             <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800">
               Suspended
+            </span>
+          )}
+          {!restaurant.verifiedAt && (
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
+              Pending verification
             </span>
           )}
         </div>
@@ -211,6 +241,48 @@ export function AdminRestaurantDetail({ restaurantId }: { restaurantId: string }
                 className="btn-primary"
               >
                 Reactivate restaurant
+              </button>
+            )}
+          </div>
+
+          <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-4">
+            <h2 className="mb-1 text-sm font-semibold text-neutral-900">Verification</h2>
+            <p className="mb-3 text-xs text-neutral-500">
+              No payment gateway is integrated yet, so a new signup stays blocked at
+              /verify-account (WhatsApp/Instagram/TikTok contact details) until you confirm them
+              here and they can hear from you and use the dashboard.
+            </p>
+            {restaurant.verifiedAt ? (
+              <p className="mb-3 text-xs text-neutral-600">
+                Verified {formatDate(restaurant.verifiedAt)}
+                {restaurant.verifiedByName && ` by ${restaurant.verifiedByName}`}.
+              </p>
+            ) : (
+              <p className="mb-3 text-xs text-amber-700">Pending — this restaurant can&apos;t reach the dashboard.</p>
+            )}
+            <textarea
+              value={verifyNote}
+              onChange={(e) => setVerifyNote(e.target.value)}
+              placeholder="Optional note (recorded in the audit log)…"
+              rows={2}
+              className="input mb-3"
+            />
+            {verifyError && <p className="mb-3 text-sm text-red-600">{verifyError}</p>}
+            {restaurant.verifiedAt ? (
+              <button
+                disabled={verifyBusy}
+                onClick={() => runVerificationAction("reset")}
+                className="inline-flex items-center justify-center rounded-lg border border-amber-200 bg-white px-4 py-2.5 text-sm font-semibold text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Revert to pending
+              </button>
+            ) : (
+              <button
+                disabled={verifyBusy}
+                onClick={() => runVerificationAction("verify")}
+                className="btn-primary"
+              >
+                Mark as verified
               </button>
             )}
           </div>

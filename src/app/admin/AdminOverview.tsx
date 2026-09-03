@@ -18,11 +18,15 @@ type AdminRestaurant = {
   // /api/admin/restaurants route.
   planName: string | null;
   isActive: boolean;
+  // New-signup verification (see restaurants.verifiedAt's own schema
+  // comment) — null means pending.
+  verifiedAt: string | null;
   createdAt: string;
   owner: { fullName: string; phone: string } | null;
 };
 
 const SUSPENDED_BADGE_CLASS = "bg-red-100 text-red-800";
+const PENDING_VERIFICATION_BADGE_CLASS = "bg-amber-100 text-amber-800";
 
 function statusBadgeClass(status: SubscriptionStatus) {
   switch (status) {
@@ -77,16 +81,18 @@ export function AdminOverview() {
   const stats = useMemo(() => {
     const byStatus: Record<string, number> = {};
     let suspended = 0;
+    let pendingVerification = 0;
     for (const r of restaurants) {
       byStatus[r.subscriptionStatus] = (byStatus[r.subscriptionStatus] ?? 0) + 1;
       if (!r.isActive) suspended += 1;
+      if (!r.verifiedAt) pendingVerification += 1;
     }
-    return { byStatus, suspended };
+    return { byStatus, suspended, pendingVerification };
   }, [restaurants]);
 
   return (
     <div>
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-7">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-8">
         <StatTile label="Total" value={restaurants.length} />
         <StatTile label="Trialing" value={stats.byStatus.trialing ?? 0} />
         <StatTile label="Active" value={stats.byStatus.active ?? 0} />
@@ -94,6 +100,7 @@ export function AdminOverview() {
         <StatTile label="Paused" value={stats.byStatus.paused ?? 0} />
         <StatTile label="Expired / cancelled" value={(stats.byStatus.expired ?? 0) + (stats.byStatus.cancelled ?? 0)} />
         <StatTile label="Suspended" value={stats.suspended} />
+        <StatTile label="Pending verification" value={stats.pendingVerification} />
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -157,6 +164,11 @@ export function AdminOverview() {
                     {!r.isActive && (
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${SUSPENDED_BADGE_CLASS}`}>
                         Suspended
+                      </span>
+                    )}
+                    {!r.verifiedAt && (
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PENDING_VERIFICATION_BADGE_CLASS}`}>
+                        Pending verification
                       </span>
                     )}
                   </div>

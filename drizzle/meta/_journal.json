@@ -561,6 +561,13 @@
       "when": 1788353119116,
       "tag": "0079_fiscal_invoice_and_tax_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1788432573488,
+      "tag": "0080_add_restaurant_verification",
+      "breakpoints": true
     }
   ]
 }

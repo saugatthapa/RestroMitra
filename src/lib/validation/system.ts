@@ -29,3 +29,27 @@ export const setMaintenanceModeSchema = z.discriminatedUnion("enabled", [
     enabled: z.literal(false),
   }),
 ]);
+
+const optionalUrl = z
+  .string()
+  .trim()
+  .max(500)
+  .optional()
+  .or(z.literal(""))
+  .refine((v) => !v || /^https?:\/\//i.test(v), "Enter a full https:// link.");
+
+/**
+ * The admin-editable contact details shown on /verify-account — see
+ * verification-contact-db.ts's own comment. whatsappNumber deliberately
+ * has no strict format check (unlike onboarding's Nepal-only phone regex):
+ * an admin should be able to paste whatever number actually works,
+ * including one already in international format — whatsapp.ts's
+ * whatsappLink() only special-cases the bare-10-digit-Nepal-number shape,
+ * anything else passes through as typed.
+ */
+export const updateVerificationContactSchema = z.object({
+  instagramUrl: optionalUrl,
+  tiktokUrl: optionalUrl,
+  whatsappNumber: z.string().trim().max(32).optional().or(z.literal("")),
+  message: z.string().trim().min(1, "Enter a message.").max(1000),
+});

@@ -305,6 +305,39 @@ export async function requireRestaurantActive(restaurantId: string): Promise<voi
 }
 
 /**
+ * No payment gateway is integrated yet, so a self-serve signup can't be
+ * confirmed as a real, paying restaurant the way a checkout would confirm
+ * it — see restaurants.verifiedAt's own schema comment. Distinct error
+ * class from TenantSuspendedError: this isn't a policy/abuse decision, it's
+ * "we haven't manually confirmed you yet," and the dashboard layout routes
+ * it to a different page (/verify-account, not /suspended) with different
+ * messaging and no admin "reason" required to resolve it.
+ */
+export class RestaurantNotVerifiedError extends HttpError {
+  constructor(message = "This restaurant hasn't been verified yet.") {
+    super(message, 403);
+  }
+}
+
+/**
+ * Mirrors requireRestaurantActive exactly, one column over. Checked right
+ * after it in resolveRestaurantContext (and in the dashboard layout, same
+ * ordering) — suspension is the more deliberate, ops-driven block, so a
+ * restaurant that's somehow both unverified and suspended lands on
+ * /suspended, not /verify-account.
+ */
+export async function requireRestaurantVerified(restaurantId: string): Promise<void> {
+  const [row] = await db
+    .select({ verifiedAt: restaurants.verifiedAt })
+    .from(restaurants)
+    .where(eq(restaurants.id, restaurantId))
+    .limit(1);
+  if (row && !row.verifiedAt) {
+    throw new RestaurantNotVerifiedError();
+  }
+}
+
+/**
  * Platform Control Center (Phase 10) — thrown when platform-wide
  * maintenance mode is on and the caller isn't a platform admin or an
  * active impersonation session. Deliberately its own error class/status

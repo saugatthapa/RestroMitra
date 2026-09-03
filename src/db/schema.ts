@@ -530,6 +530,32 @@ export const restaurants = pgTable(
     // retroactively fix old negative stock.
     allowNegativeStock: boolean("allow_negative_stock").notNull().default(true),
     isActive: boolean("is_active").notNull().default(true),
+    // New-signup manual verification gate — added because there's no
+    // payment gateway integrated yet, so a self-serve signup can't be
+    // trusted to be a real, paying restaurant the way one that went
+    // through a checkout would be. Deliberately its OWN column, not a
+    // reuse of isActive (see requireRestaurantActive's own comment: that
+    // one is a platform-ops suspension decision, orthogonal to this) and
+    // not folded into subscriptionStatus either — a restaurant is fully
+    // "trialing" from the moment it signs up, verification is a separate
+    // axis layered on top, checked in dashboard/layout.tsx and
+    // resolveRestaurantContext (guard.ts) the same way suspension is.
+    //
+    // Null = pending (blocked, redirected to /verify-account until a
+    // platform admin manually confirms them via WhatsApp/Instagram/TikTok
+    // — see the admin restaurant detail page's Verification panel and
+    // src/lib/system/verification-contact-db.ts for the admin-editable
+    // contact details shown on that block screen). Non-null = verified,
+    // either by an admin action (verifiedByUserId set) or by the column's
+    // own DB-level default(now()) below, which exists specifically so
+    // every restaurant that already existed before this feature shipped —
+    // and any future insert path that doesn't explicitly opt in to the
+    // pending state — is grandfathered in as already-verified rather than
+    // retroactively locked out. Only src/lib/onboarding.ts (the one
+    // self-serve signup path) explicitly passes null to put a brand-new
+    // restaurant into the pending state.
+    verifiedAt: timestamp("verified_at", { withTimezone: true }).defaultNow(),
+    verifiedByUserId: uuid("verified_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -4890,6 +4916,33 @@ export const platformAnnouncementsRelations = relations(platformAnnouncements, (
 export const platformMaintenanceModeRelations = relations(platformMaintenanceMode, ({ one }) => ({
   enabledBy: one(users, {
     fields: [platformMaintenanceMode.enabledByUserId],
+    references: [users.id],
+  }),
+}));
+
+/**
+ * The admin-editable contact details shown on /verify-account (see
+ * restaurants.verifiedAt's own comment for the feature this backs) —
+ * same singleton-row shape as platformMaintenanceMode above (a fixed
+ * `id: true` primary key means there is ever only one row, read/written
+ * via src/lib/system/verification-contact-db.ts). Ships seeded with
+ * RestroKendra's real Instagram/TikTok/WhatsApp details rather than blank
+ * placeholders — see that file's SEED_DEFAULTS — but every field is
+ * editable from /admin/system afterward without a code change.
+ */
+export const platformVerificationContact = pgTable("platform_verification_contact", {
+  id: boolean("id").primaryKey().default(true),
+  instagramUrl: text("instagram_url"),
+  tiktokUrl: text("tiktok_url"),
+  whatsappNumber: varchar("whatsapp_number", { length: 32 }),
+  message: text("message"),
+  updatedByUserId: uuid("updated_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const platformVerificationContactRelations = relations(platformVerificationContact, ({ one }) => ({
+  updatedBy: one(users, {
+    fields: [platformVerificationContact.updatedByUserId],
     references: [users.id],
   }),
 }));

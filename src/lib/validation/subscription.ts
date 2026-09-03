@@ -74,3 +74,15 @@ export const adminTenantSuspensionSchema = z.object({
   action: z.enum(["suspend", "reactivate"]),
   reason: z.string().trim().min(3, "Enter a reason.").max(500),
 });
+
+/**
+ * New-signup verification toggle (see restaurants.verifiedAt's own schema
+ * comment). Unlike suspension above, `note` is optional, not required —
+ * marking someone verified after confirming them on WhatsApp/Instagram/
+ * TikTok is a routine, expected step for every new signup, not a
+ * judgment call that needs justifying the way a suspension does.
+ */
+export const adminTenantVerificationSchema = z.object({
+  action: z.enum(["verify", "reset"]),
+  note: z.string().trim().max(500).optional(),
+});

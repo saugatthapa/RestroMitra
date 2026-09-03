@@ -78,6 +78,7 @@ export async function GET(request: Request) {
         trialEndsAt: restaurants.trialEndsAt,
         planKey: restaurants.planKey,
         isActive: restaurants.isActive,
+        verifiedAt: restaurants.verifiedAt,
         createdAt: restaurants.createdAt,
       })
       .from(restaurants)
