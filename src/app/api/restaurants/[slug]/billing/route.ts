@@ -5,6 +5,7 @@ import { restaurants, subscriptionEvents } from "@/db/schema";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
 import { computeSubscriptionAccess } from "@/lib/subscription";
 import { getEffectivePlan, getActivePlans } from "@/lib/plans-db";
+import { getVerificationContact } from "@/lib/system/verification-contact-db";
 
 const EVENT_HISTORY_LIMIT = 20;
 
@@ -68,7 +69,15 @@ export async function GET(
     // instead. Active plans only — a retired plan shouldn't be offered to
     // someone choosing a NEW plan, even though `plan` above (this
     // restaurant's OWN current plan) resolves regardless of isActive.
-    const [plan, activePlans] = await Promise.all([getEffectivePlan(restaurant), getActivePlans()]);
+    // No payment gateway is integrated — upgrading past the trial is a
+    // manual, message-us flow (same admin-editable contact singleton that
+    // already powers /verify-account), so the billing page needs these
+    // details too to build its WhatsApp/Instagram/TikTok upgrade CTAs.
+    const [plan, activePlans, verificationContact] = await Promise.all([
+      getEffectivePlan(restaurant),
+      getActivePlans(),
+      getVerificationContact(),
+    ]);
 
     return NextResponse.json({
       subscriptionStatus: restaurant.subscriptionStatus,
@@ -79,6 +88,7 @@ export async function GET(
       access: computeSubscriptionAccess(restaurant),
       canManageSubscription: role === "owner" || role === "platform_admin",
       events,
+      verificationContact,
     });
   } catch (err) {
     return toErrorResponse(err);

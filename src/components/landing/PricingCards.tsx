@@ -2,21 +2,46 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { yearlyPriceInPaisa, monthlyEquivalentWhenYearlyInPaisa, type Plan } from "@/lib/plans";
+import {
+  yearlyPriceInPaisa,
+  monthlyEquivalentWhenYearlyInPaisa,
+  TRIAL_MAX_STAFF,
+  TRIAL_MAX_BRANCHES,
+  type Plan,
+} from "@/lib/plans";
 
 function formatRupees(paisa: number) {
   return `Rs ${(paisa / 100).toLocaleString("en-IN")}`;
 }
 
 /**
- * Public marketing-page pricing grid, fed the same live `plans` catalog
- * BillingBoard.tsx uses (getActivePlans() — DB-backed, admin-editable at
- * /admin/plans) so a price change there shows up here automatically, with
- * nothing to keep in sync by hand. Deliberately simpler than BillingBoard's
- * version: no "current plan"/"request this plan" state, since a visitor
- * here has no restaurant yet — every card's call to action is the same
- * "Start free trial" straight into /register. The monthly/yearly toggle and
- * the underlying math (yearlyPriceInPaisa/monthlyEquivalentWhenYearlyInPaisa)
+ * The trial is a fixed product decision (every signup gets 30 days, full
+ * access, no plan chosen up front — see onboarding.ts), not a row in the
+ * `plans` DB table, so it's a hardcoded card rather than DB-driven like
+ * Growth/Pro below. Rendered first, ahead of the live catalog. Feature
+ * bullets are deliberately honest about what the trial actually grants
+ * (see TRIAL_MAX_STAFF/TRIAL_MAX_BRANCHES in lib/plans.ts) rather than
+ * implying it unlocks every paid-plan feature.
+ */
+const FREE_TRIAL_FEATURES = [
+  "Full POS, orders & kitchen display",
+  "QR table ordering & website builder",
+  `Up to ${TRIAL_MAX_STAFF} staff, ${TRIAL_MAX_BRANCHES} branches`,
+  "No credit card required",
+];
+
+/**
+ * Public marketing-page pricing grid. The first card (Free Trial) is
+ * hardcoded — see FREE_TRIAL_FEATURES above. The rest come from the same
+ * live `plans` catalog BillingBoard.tsx uses (getActivePlans() — DB-backed,
+ * admin-editable at /admin/plans) so a price change there shows up here
+ * automatically, with nothing to keep in sync by hand. Deliberately simpler
+ * than BillingBoard's version: no "current plan"/"request this plan" state,
+ * since a visitor here has no restaurant yet — every card's call to action
+ * is the same "Start free trial" straight into /register (upgrading past
+ * day 30 happens later, from /billing, by messaging us — there's no
+ * self-serve checkout to link to here). The monthly/yearly toggle and the
+ * underlying math (yearlyPriceInPaisa/monthlyEquivalentWhenYearlyInPaisa)
  * are the exact same pure helpers BillingBoard already uses, just presented
  * for a prospective signup instead of an existing subscriber.
  */
@@ -50,6 +75,31 @@ export function PricingCards({ plans }: { plans: Plan[] }) {
       </div>
 
       <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-3">
+        <div className="relative flex flex-col rounded-2xl border border-neutral-200 bg-white p-6 transition duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-lg hover:shadow-orange-900/5">
+          <h3 className="text-lg font-bold text-neutral-900">Free Trial</h3>
+          <p className="mt-1 text-sm text-neutral-500">Try everything, no commitment.</p>
+
+          <p className="mt-5">
+            <span className="text-4xl font-extrabold tracking-tight text-neutral-900">Free</span>
+          </p>
+          <p className="mt-1 h-4 text-xs text-neutral-400">for your first 30 days</p>
+
+          <Link href="/register" className="btn-primary btn-shine mt-4 w-full">
+            Start free trial
+          </Link>
+
+          <ul className="mt-6 flex-1 space-y-2.5 text-sm text-neutral-600">
+            {FREE_TRIAL_FEATURES.map((feature) => (
+              <li key={feature} className="flex items-start gap-2">
+                <span className="mt-0.5 flex-none text-orange-500">✓</span>
+                {feature}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 border-t border-neutral-100 pt-4 text-xs text-neutral-400">
+            After 30 days, upgrade to Growth or Pro to keep going.
+          </p>
+        </div>
         {plans.map((plan) => (
           <div
             key={plan.key}

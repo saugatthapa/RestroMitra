@@ -9,6 +9,7 @@ import {
   type PlanKey,
 } from "@/lib/plans";
 import { SUBSCRIPTION_STATUS_LABELS, daysRemaining, type SubscriptionStatus } from "@/lib/subscription";
+import { whatsappLink } from "@/lib/whatsapp";
 
 type BillingInfo = {
   subscriptionStatus: SubscriptionStatus;
@@ -37,6 +38,16 @@ type BillingInfo = {
     note: string | null;
     createdAt: string;
   }[];
+  // There's no payment gateway yet — upgrading past the trial is a manual,
+  // message-us flow, same admin-editable contact singleton /verify-account
+  // already uses (see getVerificationContact()). Powers the WhatsApp
+  // upgrade CTA below instead of a "coming soon" checkout button.
+  verificationContact: {
+    instagramUrl: string | null;
+    tiktokUrl: string | null;
+    whatsappNumber: string | null;
+    message: string | null;
+  };
 };
 
 function formatRupees(paisa: number) {
@@ -60,7 +71,7 @@ function statusTone(status: SubscriptionStatus): { bg: string; text: string } {
   }
 }
 
-export function BillingBoard({ slug }: { slug: string }) {
+export function BillingBoard({ slug, restaurantName }: { slug: string; restaurantName: string }) {
   const [data, setData] = useState<BillingInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -89,19 +100,24 @@ export function BillingBoard({ slug }: { slug: string }) {
   async function requestPlan(planKey: PlanKey) {
     setRequestingPlan(planKey);
     try {
-      // The upgrade-request flow is a manual sales-assist step (see the
-      // route's own comment: no gateway subscription checkout yet, a
-      // platform admin follows up to actually activate it) — its schema
-      // has no dedicated billing-cycle field, so the toggle's choice rides
-      // along in `note` rather than being silently dropped on the floor.
+      // The upgrade-request flow keeps a record on our side (the audit
+      // trail a platform admin sees on the restaurant's detail page) even
+      // though the actual conversation now happens over WhatsApp — see the
+      // "Upgrade via WhatsApp" button below, which fires this in the
+      // background rather than gating on it. Its schema has no dedicated
+      // billing-cycle field, so the toggle's choice rides along in `note`
+      // rather than being silently dropped on the floor.
       await apiPost(`/api/restaurants/${slug}/billing/upgrade-request`, {
         planKey,
         note: billingCycle === "yearly" ? "Requested yearly billing (2 months free)." : undefined,
       });
       setRequestedPlans((prev) => new Set(prev).add(planKey));
       await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not submit the request.");
+    } catch {
+      // Silent — this is a background best-effort record, not the primary
+      // action. The primary action is the WhatsApp link itself, which has
+      // already opened in a new tab by the time this call could fail, so
+      // surfacing an error here would be confusing rather than helpful.
     } finally {
       setRequestingPlan(null);
     }
@@ -214,6 +230,16 @@ export function BillingBoard({ slug }: { slug: string }) {
         {data.plans.map((plan) => {
           const isCurrent = data.planKey === plan.key && data.subscriptionStatus === "active";
           const alreadyRequested = requestedPlans.has(plan.key);
+          const cycleLabel =
+            billingCycle === "yearly"
+              ? `${formatRupees(yearlyPriceInPaisa(plan))}/yr`
+              : `${formatRupees(plan.priceInPaisaMonthly)}/mo`;
+          const waLink = data.verificationContact.whatsappNumber
+            ? whatsappLink(
+                data.verificationContact.whatsappNumber,
+                `Hi RestroKendra! I'd like to upgrade ${restaurantName} to the ${plan.name} plan (${cycleLabel}).`,
+              )
+            : null;
           // Current plan: show what this restaurant is ACTUALLY paying
           // (may be locked to an older rate). Every other card is a
           // potential switch, so it always shows today's live catalog
@@ -269,6 +295,23 @@ export function BillingBoard({ slug }: { slug: string }) {
                   <span className="block text-center text-xs text-neutral-400">
                     Only the owner can change plans
                   </span>
+                ) : waLink ? (
+                  <>
+                    <a
+                      href={waLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => requestPlan(plan.key)}
+                      className="btn-primary w-full text-center"
+                    >
+                      Upgrade via WhatsApp
+                    </a>
+                    {alreadyRequested && (
+                      <p className="mt-1.5 text-center text-[11px] text-emerald-600">
+                        Noted on our side — we&apos;ll follow up once we hear from you.
+                      </p>
+                    )}
+                  </>
                 ) : (
                   <button
                     onClick={() => requestPlan(plan.key)}
@@ -288,8 +331,37 @@ export function BillingBoard({ slug }: { slug: string }) {
         })}
       </div>
       <p className="mt-3 text-xs text-neutral-400">
-        Requesting a plan lets us know what you want — we&apos;ll follow up to activate it.
-        Self-serve checkout is coming soon.
+        We don&apos;t have online checkout yet — tap{" "}
+        <span className="font-medium text-neutral-500">Upgrade via WhatsApp</span> and we&apos;ll
+        activate your new plan personally, usually within a day.
+        {(data.verificationContact.instagramUrl || data.verificationContact.tiktokUrl) && (
+          <>
+            {" "}
+            You can also reach us on{" "}
+            {data.verificationContact.instagramUrl && (
+              <a
+                href={data.verificationContact.instagramUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-neutral-500 underline underline-offset-2 hover:text-neutral-700"
+              >
+                Instagram
+              </a>
+            )}
+            {data.verificationContact.instagramUrl && data.verificationContact.tiktokUrl && " or "}
+            {data.verificationContact.tiktokUrl && (
+              <a
+                href={data.verificationContact.tiktokUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-neutral-500 underline underline-offset-2 hover:text-neutral-700"
+              >
+                TikTok
+              </a>
+            )}
+            .
+          </>
+        )}
       </p>
 
       {data.events.length > 0 && (

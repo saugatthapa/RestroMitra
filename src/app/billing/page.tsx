@@ -45,7 +45,7 @@ export default async function BillingPage() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-4xl p-4 md:p-8">
-        <BillingBoard slug={active.slug} />
+        <BillingBoard slug={active.slug} restaurantName={active.name} />
       </main>
     </div>
   );

@@ -168,7 +168,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "How much does it cost after the trial?",
     answer:
-      "Plans start at Rs 799/month for a single counter, up to Rs 3,499/month for unlimited staff and branches — see the Pricing section above for the full breakdown. Every new restaurant starts with a full 30-day free trial and no credit card required, so you can try the whole platform risk-free first.",
+      "Every new restaurant starts with a full 30-day free trial — the whole platform, no credit card required. After that, you choose Growth or Pro depending on how many staff and branches you run; see the Pricing section above for current rates. There's no self-serve checkout yet, so upgrading is a quick message to us on WhatsApp or Instagram, not an automatic charge.",
   },
   {
     question: "Is my restaurant's data safe?",
@@ -440,8 +440,8 @@ export default async function LandingPage() {
               Simple pricing that scales with you
             </h2>
             <p className="mt-4 text-neutral-600">
-              No hidden fees, no per-order commission. Every plan includes a full 30-day free
-              trial — no credit card required.
+              No hidden fees, no per-order commission. Start with a full 30-day free trial — no
+              credit card required — then upgrade to Growth or Pro by messaging us directly.
             </p>
           </Reveal>
 
