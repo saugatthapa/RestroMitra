@@ -5,11 +5,13 @@ import { absoluteUrl } from "./site";
 export const SITE_NAME = "RestroKendra";
 
 /**
- * A real brand asset (see public/brand/), not a placeholder — used as the
- * OG/Twitter share image until a dedicated 1200x630 share graphic exists
- * (see SEO_AUDIT.md §2 and §8 for why that isn't fabricated here).
+ * The real 1200x630 OG/Twitter share graphic (see public/brand/og-share.png)
+ * — built from the actual brand logo once a proper share-image source
+ * became available, closing the gap SEO_AUDIT.md §2 originally flagged
+ * ("no dedicated 1200×630 OG share image exists yet"; this used to point
+ * at the square /brand/icon-512.png as a stopgap).
  */
-export const DEFAULT_OG_IMAGE = "/brand/icon-512.png";
+export const DEFAULT_OG_IMAGE = "/brand/og-share.png";
 
 /** Builds the `openGraph` block of Metadata. Exported standalone so a page with a bespoke `generateMetadata` (e.g. /site/[slug]) can still reuse the same shape. */
 export function createOpenGraph({
@@ -30,7 +32,10 @@ export function createOpenGraph({
     description,
     url: absoluteUrl(path),
     siteName: SITE_NAME,
-    images: [{ url: absoluteUrl(image), width: 512, height: 512 }],
+    // 1200x630 matches DEFAULT_OG_IMAGE (og-share.png), the only image any
+    // caller currently passes through this helper — revisit if a future
+    // caller ever supplies a differently-sized `image`.
+    images: [{ url: absoluteUrl(image), width: 1200, height: 630 }],
     locale: "en_US",
     type,
   };

@@ -27,7 +27,7 @@ Production domain (per owner decision, 2026-09-03): **`https://restrokendra.com`
 | **Canonical URLs** | None anywhere. No `metadataBase`, so any relative OG/canonical Next.js *would* generate has no base to resolve against. |
 | **JSON-LD / structured data** | None anywhere in the repo (`grep -r "application/ld+json"` returns nothing). |
 | **`manifest.json`** | Exists and is correct for its purpose (PWA install), not an SEO artifact. |
-| Brand assets | `public/brand/icon-{128,256,512}.png`, `logo-horizontal.png` exist — usable for OG images / JSON-LD `logo`. No dedicated 1200×630 OG share image exists yet. |
+| Brand assets | `public/brand/icon-{128,256,512}.png` (circular badge, in-app use), `icon-square-{128,256,512}.png` (PWA/install icon), `logo-horizontal.png` (navbar/footer wordmark), and `og-share.png` (dedicated 1200×630 OG/Twitter share graphic, wired via `DEFAULT_OG_IMAGE` in `src/lib/seo/metadata.ts` — resolves the gap this row used to flag). |
 
 ## 3. Domain & environment
 
