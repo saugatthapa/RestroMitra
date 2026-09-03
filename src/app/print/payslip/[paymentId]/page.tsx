@@ -1,7 +1,13 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { getUserRestaurants } from "@/lib/restaurant";
 import { PayslipView } from "./PayslipView";
+import { NOINDEX } from "@/lib/seo/metadata";
+
+// Contains a staff member's name, pay, and payment method — real PII,
+// never indexable.
+export const metadata: Metadata = { robots: NOINDEX };
 
 /**
  * Commercial completion pass — payslip generation. Sits outside /dashboard

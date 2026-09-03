@@ -6,6 +6,9 @@ import { restaurantWebsites, restaurants } from "@/db/schema";
 import { getFeaturedMenuItems, resolveWebsiteContent } from "@/lib/website";
 import { WEBSITE_THEME_CLASSES, type WebsiteTheme } from "@/lib/website-themes";
 import { formatNPR } from "@/lib/money";
+import { createCanonical, NOINDEX } from "@/lib/seo/metadata";
+import { absoluteUrl } from "@/lib/seo/site";
+import { JsonLd } from "@/lib/seo/JsonLd";
 
 /**
  * Public, unauthenticated restaurant website — Website Builder, Phase 20.
@@ -39,7 +42,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const site = await loadSite(slug);
-  if (!site) return { title: "Not found" };
+  // Not published / doesn't exist — this page 404s (see below), but Next
+  // can still render this metadata for the instant before that boundary
+  // resolves, so it must never be indexable on its own.
+  if (!site) return { title: "Not found", robots: NOINDEX };
 
   const content = resolveWebsiteContent(site.restaurant, site.website);
   // Social crawlers fetch og:image as a URL — a data: URL (the common case,
@@ -50,7 +56,15 @@ export async function generateMetadata({
   return {
     title: content.seoTitle,
     description: content.seoDescription,
+    alternates: { canonical: createCanonical(`/site/${slug}`) },
     openGraph: {
+      title: content.seoTitle,
+      description: content.seoDescription,
+      url: createCanonical(`/site/${slug}`),
+      images: ogImage ? [ogImage] : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
       title: content.seoTitle,
       description: content.seoDescription,
       images: ogImage ? [ogImage] : undefined,
@@ -98,8 +112,28 @@ export default async function PublicWebsitePage({
         : whatsappDigits
     : undefined;
 
+  // Restaurant schema (a Restaurant is a valid, more specific subtype of
+  // LocalBusiness) — every field here comes straight from the tenant's own
+  // data, nothing invented. `image` is skipped when the hero is a data:
+  // URL for the same reason og:image is in generateMetadata above
+  // (crawlers fetch it as a URL). No `aggregateRating`/`review` — no real
+  // reviews exist yet.
+  const ogImage = content.heroImageUrl?.startsWith("http") ? content.heroImageUrl : undefined;
+  const restaurantJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Restaurant",
+    name: site.restaurant.name,
+    url: createCanonical(`/site/${slug}`),
+    ...(ogImage ? { image: absoluteUrl(ogImage) } : {}),
+    ...(content.contactPhone ? { telephone: content.contactPhone } : {}),
+    ...(content.contactAddress
+      ? { address: { "@type": "PostalAddress", streetAddress: content.contactAddress, addressCountry: "NP" } }
+      : {}),
+  };
+
   return (
     <div className={`min-h-screen ${classes.page}`}>
+      <JsonLd data={restaurantJsonLd} />
       <header className="relative overflow-hidden">
         {content.heroImageUrl && (
           <>

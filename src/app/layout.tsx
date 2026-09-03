@@ -1,7 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { getSiteUrl } from "@/lib/seo/site";
 
 export const metadata: Metadata = {
+  // Resolves every relative URL any page's metadata emits (OpenGraph/
+  // Twitter images, etc.) against the app's real absolute URL — see
+  // src/lib/seo/site.ts. Without this, Next can't turn a root-relative
+  // og:image path into the absolute URL crawlers/social previews require.
+  metadataBase: new URL(getSiteUrl()),
   title: "RestroKendra — The Restaurant Operating System for Nepal",
   description:
     "The all-in-one restaurant operating system built for Nepal: POS, QR ordering, kitchen display, inventory, staff & branches, loyalty, account books, an AI assistant, and your own free website — one connected platform, in English or the Nepali calendar. Launching first in Itahari & Sunsari, expanding across Nepal.",

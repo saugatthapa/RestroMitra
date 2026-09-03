@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { getUserRestaurants } from "@/lib/restaurant";
 import { LogoutButton } from "@/app/billing/LogoutButton";
+import { NOINDEX } from "@/lib/seo/metadata";
+
+// System-state interstitial, not real content — never indexable.
+export const metadata: Metadata = { robots: NOINDEX };
 
 /**
  * Platform Control Center (Phase 2) — a deliberately top-level route (NOT

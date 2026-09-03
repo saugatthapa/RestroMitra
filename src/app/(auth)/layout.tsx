@@ -1,6 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { AuthMarketingPanel } from "@/components/auth/AuthMarketingPanel";
 import { LogoMark } from "@/components/Logo";
+import { NOINDEX } from "@/lib/seo/metadata";
+
+// All four pages under this layout (login, register, forgot-password,
+// reset-password/[token]) are "use client" components, which can't export
+// their own `metadata` — applying `noindex` once here at the shared layout
+// covers all of them (see SEO_ROUTE_POLICY.md's NOINDEX table).
+export const metadata: Metadata = { robots: NOINDEX };
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (

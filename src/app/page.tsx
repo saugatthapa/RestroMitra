@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Reveal } from "@/components/landing/Reveal";
 import { FaqAccordion, type FaqItem } from "@/components/landing/FaqAccordion";
@@ -5,6 +6,21 @@ import { MobileNav } from "@/components/landing/MobileNav";
 import { PricingCards } from "@/components/landing/PricingCards";
 import { NavIcon } from "@/components/NavIcon";
 import { getActivePlans } from "@/lib/plans-db";
+import { createMetadata } from "@/lib/seo/metadata";
+import { JsonLd } from "@/lib/seo/JsonLd";
+import { organizationJsonLd, websiteJsonLd, softwareApplicationJsonLd, createFaqSchema } from "@/lib/seo/json-ld";
+
+// The homepage's title/description already spell the brand out on their
+// own terms (see createMetadata's `titleIsFullyFormed`) — kept in sync
+// with the root layout's fallback metadata (src/app/layout.tsx) since a
+// crawler landing on `/` should see the same thing either way.
+export const metadata: Metadata = createMetadata({
+  title: "RestroKendra — Restaurant POS & Management Software for Nepal",
+  description:
+    "POS, QR ordering, kitchen display, inventory, staff, payroll, reports, and an AI assistant — one connected restaurant operating system built for Nepal. 30-day free trial, no credit card required.",
+  path: "/",
+  titleIsFullyFormed: true,
+});
 
 // Plan pricing rarely changes (see /admin/plans — a platform admin edits it
 // deliberately, not every request), and this page has no per-visitor state
@@ -179,6 +195,7 @@ export default async function LandingPage() {
   const plans = await getActivePlans();
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-clip bg-white">
+      <JsonLd data={[organizationJsonLd(), websiteJsonLd(), softwareApplicationJsonLd(), createFaqSchema(FAQ_ITEMS)]} />
       {/* ---------------------------------------------------------------- Header */}
       <header className="sticky top-0 z-50 border-b border-neutral-200/70 bg-white/75 backdrop-blur-md">
         <div className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6">

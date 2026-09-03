@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { restaurantTables, restaurants } from "@/db/schema";
 import { PublicOrderMenu } from "./PublicOrderMenu";
+import { NOINDEX } from "@/lib/seo/metadata";
+
+// Token-gated per-table page — no search intent exists for a specific
+// table's token, and indexing would leak which tables belong to which
+// restaurant. See SEO_ROUTE_POLICY.md's NOINDEX table.
+export const metadata: Metadata = { robots: NOINDEX };
 
 /**
  * Public, unauthenticated customer-facing page — reached by scanning a

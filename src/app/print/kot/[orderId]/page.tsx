@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { getUserRestaurants } from "@/lib/restaurant";
 import { KotTicketView } from "./KotTicketView";
+import { NOINDEX } from "@/lib/seo/metadata";
+
+// Internal kitchen ticket — contains order contents, never public.
+export const metadata: Metadata = { robots: NOINDEX };
 
 /**
  * Deliberately OUTSIDE the /dashboard route segment — /dashboard/layout.tsx
