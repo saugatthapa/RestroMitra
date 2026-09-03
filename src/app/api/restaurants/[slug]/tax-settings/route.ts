@@ -12,10 +12,10 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
  * Gap-audit P2 fix (fiscal compliance) — the restaurant's PAN/VAT
  * registration numbers (see the panNumber/vatNumber columns' own comment
  * in schema.ts for why these are separate from the older freeform
- * `panVat` field). Same "dedicated small route rather than a general
- * restaurant-profile endpoint, since there isn't one yet" shape as
- * kot-settings/route.ts — see that file's own doc comment; this exposes
- * just the fields the FiscalSettingsPanel needs.
+ * `panVat` field). Same "dedicated small route rather than folded into
+ * profile/route.ts" shape as kot-settings/route.ts — see that file's own
+ * doc comment; this exposes just the fields the FiscalSettingsPanel needs,
+ * and Settings/SettingsBoard.tsx reuses this same route.
  */
 export async function GET(
   _request: Request,

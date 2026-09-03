@@ -11,11 +11,11 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 /**
  * The Kitchen Order Ticket's configurable header text (see kot-ticket.ts's
  * resolveKotHeaderText) — the "custom header config" piece of Phase 17's
- * KOT system. Deliberately its own tiny route rather than folded into a
- * general restaurant-profile endpoint, since there isn't one yet (the
- * dashboard Settings page is still a "Coming soon" placeholder) — this
- * exposes just the one field the KDS page's ticket-settings panel needs,
- * without standing up the full restaurant-profile surface early.
+ * KOT system. Deliberately its own tiny route rather than folded into
+ * profile/route.ts (the general restaurant-profile endpoint backing the
+ * dashboard's Settings page) — this exposes just the one field the KDS
+ * page's ticket-settings panel needs, and Settings/SettingsBoard.tsx
+ * reuses this same route rather than duplicating the field there.
  */
 export async function GET(
   _request: Request,

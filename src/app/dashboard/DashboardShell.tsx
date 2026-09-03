@@ -160,8 +160,9 @@ function DashboardShellContent({
   trialEndsAt: string | null;
   /** The active restaurant's slug — scopes the header's live-status poll. */
   slug: string;
-  /** Set during onboarding (or later from Settings, once that exists) via
-   * a client-compressed data: URL — see src/lib/client-image.ts. Null for
+  /** Set during onboarding, or later from Settings (see
+   * src/app/dashboard/settings/SettingsBoard.tsx) via a client-compressed
+   * data: URL — see src/lib/client-image.ts. Null for
    * the common case of a restaurant that hasn't set one, in which case the
    * sidebar falls back to a colored monogram so the brand slot is never
    * empty. */
@@ -690,10 +691,9 @@ function DashboardShellContent({
         },
         {
           label: t("nav.settings"),
-          href: "#",
-          enabled: false,
+          href: "/dashboard/settings",
+          enabled: true,
           icon: <NavIcon.Settings />,
-          badge: t("nav.comingSoon"),
           permission: PERMISSIONS.MANAGE_RESTAURANT_SETTINGS,
         },
       ],
@@ -897,9 +897,10 @@ function DashboardShellContent({
         </span>
         {!isCollapsed && (
           // RC audit P1 fix — the only way into /dashboard/account (change
-          // password, log out other sessions), since there's no broader
-          // Settings section yet (see the still-"coming soon" nav item
-          // below) to hang it off instead.
+          // password, log out other sessions), which stays separate from
+          // the Settings nav item below on purpose: this is account-level
+          // (any logged-in user), Settings is restaurant-level
+          // (MANAGE_RESTAURANT_SETTINGS only).
           <Link href="/dashboard/account" className="min-w-0 flex-1 group">
             <p className="truncate text-sm font-medium text-neutral-900 group-hover:underline">
               {ownerName}

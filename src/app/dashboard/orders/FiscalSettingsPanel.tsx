@@ -11,9 +11,11 @@ function base(slug: string) {
  * Gap-audit P2 fix (fiscal compliance) — lets an owner set/edit the
  * restaurant's PAN/VAT registration numbers, printed on the customer-facing
  * bill once set (see OrderBillView.tsx). Same "lives on the page whose
- * print output it affects, rather than a general restaurant-settings
- * screen since there isn't one yet" placement as KotSettingsPanel.tsx on
- * the KDS page — see that component's own doc comment.
+ * print output it affects" placement as KotSettingsPanel.tsx on the KDS
+ * page — see that component's own doc comment. The dashboard's Settings
+ * page (SettingsBoard.tsx) also has an always-open form for the same
+ * /tax-settings route — this popover stays here too since it's the
+ * quicker path while already looking at an order/bill.
  */
 export function FiscalSettingsPanel({ slug }: { slug: string }) {
   const [open, setOpen] = useState(false);

@@ -11,10 +11,10 @@ function base(slug: string) {
  * Phase 17 — the "custom header config" piece of the KOT system: lets an
  * owner override what prints at the top of every Kitchen Order Ticket
  * (defaults to the restaurant's own name — see resolveKotHeaderText in
- * kot-ticket.ts). Lives on the KDS page rather than a general restaurant-
- * settings screen since there isn't one yet (Settings is still a "Coming
- * soon" placeholder) — this is a small, self-contained control for the one
- * field that matters here, not a stand-in for that future page.
+ * kot-ticket.ts). Lives on the KDS page as a quick popover for the one
+ * field that matters here; the dashboard's Settings page
+ * (SettingsBoard.tsx) also has an always-open form for the same
+ * /kot-settings route.
  */
 export function KotSettingsPanel({ slug }: { slug: string }) {
   const [open, setOpen] = useState(false);
