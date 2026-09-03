@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { getSiteUrl } from "@/lib/seo/site";
+import { getGaMeasurementId } from "@/lib/seo/analytics";
 
 export const metadata: Metadata = {
   // Resolves every relative URL any page's metadata emits (OpenGraph/
@@ -31,9 +33,33 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const gaId = getGaMeasurementId();
+
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {/* Google Analytics (gtag.js) — installed manually per Google's own
+            setup instructions. next/script's "afterInteractive" strategy is
+            Next.js's documented recommendation for GA: it loads after the
+            page is interactive rather than blocking the initial render,
+            while still firing early enough to capture the pageview. Only
+            rendered when a measurement ID resolves (see getGaMeasurementId)
+            — i.e. never in local development. */}
+        {gaId && (
+          <>
+            <Script src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} strategy="afterInteractive" />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${gaId}');
+              `}
+            </Script>
+          </>
+        )}
+        {children}
+      </body>
     </html>
   );
 }

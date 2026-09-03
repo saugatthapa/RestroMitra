@@ -20,8 +20,14 @@ Legend: **INDEX** = should rank, actively optimized · **NOINDEX** = real, reach
 | `/features/inventory` | INDEX | New feature page (this pass). |
 | `/compare/restrokendra-vs-restrohub` | INDEX | New, factual, sourced (this pass). |
 | `/compare/restrokendra-vs-restrox` | INDEX | New, factual, sourced (this pass). |
+| `/compare/restrokendra-vs-restronp` | INDEX | New, factual, sourced (SEO wave 2). |
+| `/compare/restrokendra-vs-recaho` | INDEX | New, factual, sourced (SEO wave 2). |
+| `/compare/restrokendra-vs-hamrosan` | INDEX | New, factual, sourced (SEO wave 2). |
 | `/alternatives/restrohub` | INDEX | New, factual, sourced (this pass). |
 | `/alternatives/restrox` | INDEX | New, factual, sourced (this pass). |
+| `/alternatives/restronp` | INDEX | New, factual, sourced (SEO wave 2). |
+| `/alternatives/recaho` | INDEX | New, factual, sourced (SEO wave 2). |
+| `/alternatives/hamrosan` | INDEX | New, factual, sourced (SEO wave 2). |
 
 Everything else under `SEO_CONTENT_CALENDAR.md` (remaining feature pages, industry pages, blog) is **planned INDEX**, not yet built.
 

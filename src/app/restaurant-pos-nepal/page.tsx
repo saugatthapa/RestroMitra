@@ -189,18 +189,36 @@ export default async function RestaurantPosNepalPage() {
             If you&apos;re actively comparing named products, these are honest, sourced,
             feature-by-feature breakdowns rather than a sales pitch dressed up as a comparison:
           </p>
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Link
               href="/compare/restrokendra-vs-restrohub"
-              className="flex-1 rounded-xl border border-neutral-200 bg-white p-4 text-sm font-medium text-neutral-800 transition hover:border-orange-200 hover:bg-orange-50/40"
+              className="rounded-xl border border-neutral-200 bg-white p-4 text-sm font-medium text-neutral-800 transition hover:border-orange-200 hover:bg-orange-50/40"
             >
               RestroKendra vs. RestroHub →
             </Link>
             <Link
               href="/compare/restrokendra-vs-restrox"
-              className="flex-1 rounded-xl border border-neutral-200 bg-white p-4 text-sm font-medium text-neutral-800 transition hover:border-orange-200 hover:bg-orange-50/40"
+              className="rounded-xl border border-neutral-200 bg-white p-4 text-sm font-medium text-neutral-800 transition hover:border-orange-200 hover:bg-orange-50/40"
             >
               RestroKendra vs. RestroX →
+            </Link>
+            <Link
+              href="/compare/restrokendra-vs-restronp"
+              className="rounded-xl border border-neutral-200 bg-white p-4 text-sm font-medium text-neutral-800 transition hover:border-orange-200 hover:bg-orange-50/40"
+            >
+              RestroKendra vs. Restronp →
+            </Link>
+            <Link
+              href="/compare/restrokendra-vs-recaho"
+              className="rounded-xl border border-neutral-200 bg-white p-4 text-sm font-medium text-neutral-800 transition hover:border-orange-200 hover:bg-orange-50/40"
+            >
+              RestroKendra vs. Recaho →
+            </Link>
+            <Link
+              href="/compare/restrokendra-vs-hamrosan"
+              className="rounded-xl border border-neutral-200 bg-white p-4 text-sm font-medium text-neutral-800 transition hover:border-orange-200 hover:bg-orange-50/40 sm:col-span-2"
+            >
+              RestroKendra vs. Hamro SAN →
             </Link>
           </div>
         </section>

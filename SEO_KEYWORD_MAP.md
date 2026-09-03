@@ -23,6 +23,7 @@ actually does, not by an unverified volume estimate.
 | restaurant pos nepal | `/restaurant-pos-nepal` | Pillar | Commercial | Restaurant POS Software in Nepal — What to Look For & How It Works | Restaurant POS software in Nepal: what it does, and what to check before buying | Built |
 | restaurant pos software nepal | `/restaurant-pos-nepal` | Pillar | Commercial | (same as above) | (same as above) | Built |
 | restaurant management software nepal | `/restaurant-pos-nepal` | Pillar | Commercial | (same as above) | (same as above) | Built |
+| nepal restaurant software | `/restaurant-pos-nepal` | Pillar | Commercial | (same as above) | (same as above) | Built — this is the exact query the user searched that surfaced Restronp, RestroX, Meromenu, RestroHub, Recaho, and Hamro SAN in Google's results (see SEO_CONTENT_CALENDAR.md "Indexing status" note — the page targets this query, but the domain isn't indexed by Google yet as of the last check). |
 | pos system for restaurant nepal | `/restaurant-pos-nepal` | Pillar | Commercial | (same as above) | (same as above) | Built |
 | best restaurant pos nepal | `/restaurant-pos-nepal` + `/compare/*` | Pillar → Comparison | Commercial | (pillar) plus the two /compare pages | (same) | Built (honest positioning, no "#1" claim — see SEO safety rules) |
 | qr code ordering system restaurant nepal | `/features/qr-ordering` | Feature | Commercial | QR Table Ordering for Restaurants — RestroKendra | QR table ordering | Built |
@@ -50,7 +51,14 @@ competitor's name would find useful and fair.
 | restrokendra vs restrox | `/compare/restrokendra-vs-restrox` | Comparison | Commercial | Built |
 | restrox alternative | `/alternatives/restrox` | Alternatives | Commercial | Built |
 | restrox pricing | `/compare/restrokendra-vs-restrox` (has sourced pricing + monthly-equivalent) | Comparison | Commercial | Built |
-| nrestro vs restrokendra | `/compare/restrokendra-vs-nrestro` | Comparison | Commercial | **Deferred** — not researched this pass (only RestroHub and RestroX were in scope per the user's AskUserQuestion answer). Needs the same WebSearch/WebFetch sourcing pass before writing. |
+| restronp vs restrokendra | `/compare/restrokendra-vs-restronp` | Comparison | Commercial | Built (SEO wave 2) |
+| restronp alternative | `/alternatives/restronp` | Alternatives | Commercial | Built (SEO wave 2) |
+| recaho vs restrokendra | `/compare/restrokendra-vs-recaho` | Comparison | Commercial | Built (SEO wave 2) |
+| recaho alternative | `/alternatives/recaho` | Alternatives | Commercial | Built (SEO wave 2) |
+| hamro san vs restrokendra | `/compare/restrokendra-vs-hamrosan` | Comparison | Commercial | Built (SEO wave 2) |
+| hamro san alternative | `/alternatives/hamrosan` | Alternatives | Commercial | Built (SEO wave 2) |
+| meromenu vs restrokendra | none | Comparison | Commercial | **Deferred** — meromenu.com is a fully client-rendered app shell that returns no readable content to WebFetch, and no pricing is published anywhere (their own site or any third-party listing checked). Writing a comparison from that would mean guessing at their features/pricing — not acceptable. Revisit only if their site becomes fetchable or a primary-source pricing page turns up. |
+| nrestro vs restrokendra | `/compare/restrokendra-vs-nrestro` | Comparison | Commercial | **Deferred** — not yet researched (out of scope for both SEO waves so far). Needs the same WebSearch/WebFetch sourcing pass before writing. |
 | nrestro alternative | `/alternatives/nrestro` | Alternatives | Commercial | **Deferred**, same reason. |
 
 ## Cluster 3 — Business-type modifiers (informational → commercial)

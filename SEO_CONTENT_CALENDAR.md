@@ -5,8 +5,27 @@ backlog for the next 12 months. This is the honest continuation of
 `SEO_KEYWORD_MAP.md` — nothing here is promised to rank; it's a prioritized list
 of genuinely useful content still worth building.
 
-## What shipped this pass
+## Indexing status (important — read this before judging "rankings")
 
+As of the last check (September 3, 2026), **restrokendra.com is live and fully
+functional, but has zero Google index footprint** — `site:restrokendra.com`
+returns no results, and the brand name itself surfaces nothing relevant. All the
+on-page SEO work in this file (metadata, structured data, comparison content)
+makes pages worth ranking once they're crawled — it does not by itself cause
+Google to crawl and index them. That step needs the site owner's own Google
+account: Search Console verification + sitemap submission, at minimum. See
+`SEO_INDEXING_SETUP.md` for the exact steps.
+
+Once indexed, ranking above established competitors (RestroHub, RestroX,
+Restronp, Recaho, Hamro SAN — all of which already rank for "nepal restaurant
+software" per a live search checked this pass) takes real time: weeks to months,
+not days, and depends on factors beyond on-page content — domain age, backlinks,
+and real usage signals none of which a content pass can manufacture. Nothing in
+this document should be read as a promise of a ranking position or a timeline.
+
+## What shipped
+
+**Wave 1:**
 - Technical foundation: `src/lib/seo/` metadata/JSON-LD utilities, `sitemap.ts`,
   `robots.ts`, canonical URLs, homepage + `/site/[slug]` structured data.
 - 1 pillar page: `/restaurant-pos-nepal`
@@ -14,14 +33,27 @@ of genuinely useful content still worth building.
 - 2 comparison pages: `/compare/restrokendra-vs-restrohub`, `/compare/restrokendra-vs-restrox`
 - 2 alternatives pages: `/alternatives/restrohub`, `/alternatives/restrox`
 
-All 8 content pages share one internal-linking web (see the bottom of
-`SEO_KEYWORD_MAP.md`) so nothing shipped this pass is an orphan page.
+**Wave 2** (triggered by the user's own "nepal restaurant software" search, which
+surfaced three competitors not previously researched):
+- Google Analytics (GA4) installed sitewide via `next/script` in the root layout
+  (see `src/lib/seo/analytics.ts`) — only loads when a measurement ID resolves,
+  which it deliberately does not in local development.
+- 3 more comparison pages: `/compare/restrokendra-vs-restronp`,
+  `/compare/restrokendra-vs-recaho`, `/compare/restrokendra-vs-hamrosan`
+- 3 more alternatives pages: `/alternatives/restronp`, `/alternatives/recaho`,
+  `/alternatives/hamrosan`
+- Meromenu was investigated but explicitly NOT built — see
+  "Explicitly deferred" below.
+
+All 14 content pages share one internal-linking web (see the bottom of
+`SEO_KEYWORD_MAP.md`) so nothing shipped is an orphan page.
 
 ## Explicitly deferred this pass (with reasons)
 
 | Item | Why deferred |
 |---|---|
-| NRestro comparison/alternatives pages | Only RestroHub and RestroX were researched this pass, per the user's own scoping answer. Needs the same sourced WebSearch/WebFetch research pass before writing — do not write comparison copy about NRestro from memory or assumption. |
+| Meromenu comparison/alternatives pages | meromenu.com is a fully client-rendered app shell — WebFetch gets back only a "Loading..." skeleton, no real content, from every page tried (home, pricing, FAQ, about). No pricing is published anywhere, including third-party listings (the one SoftwareSuggest listing found explicitly flags itself as incomplete). Writing comparison content here would mean guessing — not acceptable. Revisit if their site becomes fetchable or a real pricing page turns up. |
+| NRestro comparison/alternatives pages | Not yet researched — out of scope for both SEO waves so far. Needs the same sourced WebSearch/WebFetch research pass before writing — do not write comparison copy about NRestro from memory or assumption. |
 | City/location pages (Itahari, Sunsari, etc.) | The master brief explicitly bans doorway pages (a template with the city name swapped in and no real local content). RestroKendra's own public copy says it's launching first in Itahari and Sunsari — a page claiming broader local presence than that would misrepresent the business. Worth building once there's real local content to say. |
 | Trust/E-E-A-T content (testimonials, case studies, reviews) | The user explicitly chose to skip this for now (AskUserQuestion answer this pass). None of it may be fabricated — build only once real customer testimonials/case studies exist with permission to publish them. |
 | Admin-facing SEO controls / CMS | The master brief marks this optional and says to prefer the simplest architecture that works. With ~10 content pages total, hand-maintained files are simpler and safer than building a CMS — revisit only if the content volume grows enough to justify it. |
@@ -74,8 +106,9 @@ the keyword map):
 
 ## Priority 4 — Competitor research follow-through
 
-1. Research NRestro (WebSearch/WebFetch, same sourced approach as RestroHub/RestroX) and build its `/compare` + `/alternatives` pair once real figures are gathered.
-2. Re-verify the RestroHub and RestroX figures already gathered on a periodic basis (quarterly is reasonable) — `competitors.ts`'s `LAST_REVIEWED` date and the in-page "Last reviewed" stamps exist specifically so a stale re-check is visible, not silent.
+1. Research NRestro (WebSearch/WebFetch, same sourced approach as the other 5) and build its `/compare` + `/alternatives` pair once real figures are gathered.
+2. Periodically retry Meromenu — their site may become fetchable, or a pricing page may eventually be published. Only build the comparison once real data can be sourced.
+3. Re-verify all 5 built competitors' figures on a periodic basis (quarterly is reasonable) — `competitors.ts`'s `LAST_REVIEWED` date and the in-page "Last reviewed" stamps exist specifically so a stale re-check is visible, not silent.
 
 ## Priority 5 — Trust content (once real assets exist)
 
