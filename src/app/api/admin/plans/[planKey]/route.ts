@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { plans } from "@/db/schema";
@@ -53,6 +54,16 @@ export async function PATCH(
       ipAddress: getClientIp(request),
       metadata: { key: planKey, changes: data },
     });
+
+    // The marketing homepage and the POS-Nepal pillar page both render the
+    // plan catalog with `export const revalidate = 3600` (ISR) — without
+    // this, a platform admin toggling isActive (or changing a price) here
+    // wouldn't show up on the live site for up to an hour, and the cache
+    // header comment isn't obvious from the admin panel, so it silently
+    // looks broken ("I turned it off but it's still showing"). Both are
+    // pure marketing pages; revalidating on every plan write is cheap.
+    revalidatePath("/");
+    revalidatePath("/restaurant-pos-nepal");
 
     return NextResponse.json({ plan: updated });
   } catch (err) {

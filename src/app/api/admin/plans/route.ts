@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { plans } from "@/db/schema";
@@ -79,6 +80,13 @@ export async function POST(request: Request) {
       ipAddress: getClientIp(request),
       metadata: { key: plan.key, name: plan.name, priceInPaisaMonthly: plan.priceInPaisaMonthly },
     });
+
+    // See the matching comment in [planKey]/route.ts's PATCH handler — the
+    // marketing pages that render this catalog are ISR-cached for up to an
+    // hour, so a new plan needs the same explicit revalidation a plan edit
+    // does, or it won't appear on the live site until the cache expires.
+    revalidatePath("/");
+    revalidatePath("/restaurant-pos-nepal");
 
     return NextResponse.json({ plan }, { status: 201 });
   } catch (err) {
