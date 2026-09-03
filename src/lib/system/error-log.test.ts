@@ -5,7 +5,12 @@
  * in-process rather than DB-backed.
  */
 import { describe, it, expect, beforeEach } from "vitest";
-import { recordSystemError, listRecentSystemErrors, _resetSystemErrorLogForTests } from "./error-log";
+import {
+  recordSystemError,
+  listRecentSystemErrors,
+  clearSystemErrors,
+  _resetSystemErrorLogForTests,
+} from "./error-log";
 
 describe("error-log", () => {
   beforeEach(() => {
@@ -45,5 +50,13 @@ describe("error-log", () => {
     expect(all.length).toBeLessThanOrEqual(200);
     // The newest entry is still there; the oldest ones were evicted.
     expect(all[0].message).toBe("err-249");
+  });
+
+  it("clearSystemErrors empties the list", () => {
+    recordSystemError(new Error("one"));
+    recordSystemError(new Error("two"));
+    expect(listRecentSystemErrors()).toHaveLength(2);
+    clearSystemErrors();
+    expect(listRecentSystemErrors()).toHaveLength(0);
   });
 });

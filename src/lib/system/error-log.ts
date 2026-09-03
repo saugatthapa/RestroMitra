@@ -66,6 +66,18 @@ export function listRecentSystemErrors(limit = 50): SystemErrorEntry[] {
   return entries.slice(Math.max(0, entries.length - limit)).reverse();
 }
 
+/**
+ * Dismisses the whole in-memory list from the admin "Recent alerts" panel.
+ * Distinct from `_resetSystemErrorLogForTests` (test-only, unexported from
+ * the public API surface this route calls) even though the body is
+ * identical — this one is a real, audited admin action (see
+ * /api/admin/alerts's DELETE handler), not test plumbing, and keeping them
+ * separate means a rename of either one doesn't silently affect the other.
+ */
+export function clearSystemErrors(): void {
+  entries = [];
+}
+
 /** Test-only reset — keeps tests in this file's own module scope from leaking state into each other or into unrelated test files that happen to run in the same process. */
 export function _resetSystemErrorLogForTests(): void {
   entries = [];

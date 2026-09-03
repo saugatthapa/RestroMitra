@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { apiGet, ApiError } from "@/lib/api-client";
+import { apiGet, apiDelete, ApiError } from "@/lib/api-client";
 
 type AiFailure = {
   id: string;
@@ -40,6 +40,8 @@ export function AlertsPanel() {
   const [data, setData] = useState<AlertsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
+  const [clearBusy, setClearBusy] = useState(false);
+  const [clearError, setClearError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +66,23 @@ export function AlertsPanel() {
       cancelled = true;
     };
   }, []);
+
+  async function clearSystemErrors() {
+    setClearBusy(true);
+    setClearError(null);
+    try {
+      await apiDelete("/api/admin/alerts");
+      // Dismiss instantly on the client rather than re-fetching — the
+      // server-side list is now empty, so an optimistic local clear and a
+      // round-trip refetch land on the same result; skipping the refetch
+      // just avoids a visible flash while it's in flight.
+      setData((prev) => (prev ? { ...prev, systemErrors: [] } : prev));
+    } catch (err) {
+      setClearError(err instanceof ApiError ? err.message : "Could not clear these.");
+    } finally {
+      setClearBusy(false);
+    }
+  }
 
   if (forbidden) return null;
   if (error) return <p className="mb-6 text-sm text-red-600">{error}</p>;
@@ -106,9 +125,22 @@ export function AlertsPanel() {
         </div>
 
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-800">
-            System errors
-          </h3>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+              System errors
+            </h3>
+            {data.systemErrors.length > 0 && (
+              <button
+                type="button"
+                onClick={clearSystemErrors}
+                disabled={clearBusy}
+                className="text-xs font-medium text-amber-800 underline decoration-amber-400 underline-offset-2 hover:text-amber-900 disabled:opacity-50"
+              >
+                {clearBusy ? "Clearing…" : "Clear"}
+              </button>
+            )}
+          </div>
+          {clearError && <p className="mb-2 text-xs text-red-600">{clearError}</p>}
           {data.systemErrors.length === 0 ? (
             <p className="text-xs text-amber-700">No recent unhandled system errors.</p>
           ) : (
