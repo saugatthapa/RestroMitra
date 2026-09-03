@@ -10,8 +10,13 @@ import { restaurantStartOfDay } from "@/lib/restaurant-date";
 // Orders in either of these statuses are done moving — never a transfer/
 // merge target, and excluded from "how many active orders does this table
 // have" everywhere in this file. Kept as one constant so transferOrderToTable
-// and mergeTables can't drift on the definition of "active".
-const INACTIVE_ORDER_STATUSES = ["cancelled", "completed"] as const;
+// and mergeTables can't drift on the definition of "active". Exported so
+// the orders-board GET route (orders/route.ts) can use the exact same
+// definition when deciding which old orders still deserve a spot on the
+// live board — see that route's own comment on why "old but still active"
+// must never silently expire out of it the way "old and already resolved"
+// correctly does.
+export const INACTIVE_ORDER_STATUSES = ["cancelled", "completed"] as const;
 
 export class TableError extends HttpError {
   constructor(message: string, status = 400) {

@@ -18,7 +18,7 @@ import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { requireBranchAccess, hasPermission } from "@/lib/rbac/guard";
 import { isUniqueViolation } from "@/lib/db-error";
-import { assertTableAcceptsOrders, syncTableStatusFromOrders } from "@/lib/tables";
+import { assertTableAcceptsOrders, syncTableStatusFromOrders, INACTIVE_ORDER_STATUSES } from "@/lib/tables";
 import { computeOrderTotals } from "@/lib/order-adjustments";
 import { resolveOrderAdjustmentsInput } from "@/lib/validation/order-adjustments";
 import { resolveLoyaltyRedemption } from "@/lib/loyalty-redemption";
@@ -33,6 +33,23 @@ const ORDER_LIST_LIMIT = 200;
  * board" feed, not a historical report (that's Phase 9). Any staff member
  * with restaurant access can view (same read/write split as menu GETs);
  * only status-changing actions are permission-gated.
+ *
+ * Bug found via live report — a table showed "2 active orders" (its own
+ * unwindowed query in tables/[tableId]/route.ts, which only ever filters
+ * by status) while both this board and the KDS board (which reads this
+ * same endpoint) showed nothing, because the orders were older than the
+ * 48h cutoff. Staff had no way to see or resolve them at all: "Open in
+ * POS" from the table only starts a NEW order, it doesn't reopen an old
+ * one, and there was no route to it anywhere else in the UI. Fix: the
+ * recency window still applies to already-resolved orders (so the board
+ * doesn't fill up with ancient completed/cancelled history), but an order
+ * that's still NOT in a terminal status (INACTIVE_ORDER_STATUSES, the
+ * exact same "active" definition tables.ts already uses for table
+ * occupancy) is never excluded just for being old — it stays visible,
+ * with its true age shown, until someone actually completes or cancels
+ * it. That keeps this endpoint and the table-detail endpoint's two
+ * different queries from ever disagreeing about whether an order still
+ * counts as active again.
  */
 export async function GET(
   request: Request,
@@ -64,10 +81,13 @@ export async function GET(
     const cutoff = new Date(Date.now() - ORDER_LIST_WINDOW_MS);
 
     const orders = await db.query.orders.findMany({
-      where: (o, { and, eq, gte }) =>
+      where: (o, { and, eq, gte, or, notInArray }) =>
         and(
           eq(o.restaurantId, restaurantId),
-          gte(o.placedAt, cutoff),
+          // Recent (any status) OR still unresolved (any age) — see this
+          // route's own doc comment for why an old-but-still-active order
+          // must never silently drop off the board.
+          or(gte(o.placedAt, cutoff), notInArray(o.status, [...INACTIVE_ORDER_STATUSES])),
           status ? eq(o.status, status) : undefined,
           effectiveBranchId ? eq(o.branchId, effectiveBranchId) : undefined,
         ),

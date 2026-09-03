@@ -242,3 +242,115 @@ describe.skipIf(!hasDb)("GET /api/restaurants/[slug]/orders branch visibility (K
     expect(body.orders.some((o: { orderNumber: string }) => o.orderNumber.startsWith("TEST-KDS-B-"))).toBe(false);
   });
 });
+
+/**
+ * Live-report bug fix: a table showed an order as "active" (tables/
+ * [tableId]/route.ts's own activeOrders query, which never time-windows —
+ * only status) that was invisible on this board and on KDS (both read this
+ * route, both bounded to a 48h recency window), because the order was
+ * placed days earlier and never got completed/cancelled. Staff had no way
+ * to see it, let alone resolve it — "Open in POS" from the table only
+ * starts a new order. Proves the fix: an old order that's still NOT in a
+ * terminal status stays on the board regardless of age; an old order that
+ * IS resolved (completed/cancelled) still correctly ages out, so this
+ * doesn't turn the board back into a full historical report.
+ */
+describe.skipIf(!hasDb)("GET /api/restaurants/[slug]/orders — old-but-unresolved orders never silently disappear", () => {
+  let db: typeof import("@/db").db;
+  let schema: typeof import("@/db/schema");
+
+  let restaurantId: string;
+  let slug: string;
+  let ownerId: string;
+  const orderIds: string[] = [];
+
+  const FAR_PAST = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000); // 10 days ago — well past the 48h window
+
+  beforeAll(async () => {
+    db = (await import("@/db")).db;
+    schema = await import("@/db/schema");
+
+    const suffix = Math.random().toString(36).slice(2, 8);
+    slug = `test-stale-orders-${suffix}`;
+
+    const [restaurant] = await db
+      .insert(schema.restaurants)
+      .values({ slug, name: "TEST Stale Orders Restaurant" })
+      .returning({ id: schema.restaurants.id });
+    restaurantId = restaurant.id;
+
+    const [branch] = await db
+      .insert(schema.branches)
+      .values({ restaurantId, name: "TEST Stale Orders Branch", isMain: true })
+      .returning({ id: schema.branches.id });
+
+    const [owner] = await db
+      .insert(schema.users)
+      .values({ fullName: "TEST Stale Orders Owner", phone: `9706${suffix.slice(0, 6)}`, passwordHash: "x" })
+      .returning({ id: schema.users.id });
+    ownerId = owner.id;
+
+    await db.insert(schema.userRoles).values([{ userId: ownerId, restaurantId, role: "owner" }]);
+
+    const [staleActive] = await db
+      .insert(schema.orders)
+      .values({
+        restaurantId,
+        branchId: branch.id,
+        orderNumber: `TEST-STALE-ACTIVE-${suffix}`,
+        source: "pos",
+        status: "served",
+        placedAt: FAR_PAST,
+        subtotalInPaisa: 500_00,
+        taxInPaisa: 0,
+        totalInPaisa: 500_00,
+      })
+      .returning({ id: schema.orders.id });
+
+    const [staleCompleted] = await db
+      .insert(schema.orders)
+      .values({
+        restaurantId,
+        branchId: branch.id,
+        orderNumber: `TEST-STALE-COMPLETED-${suffix}`,
+        source: "pos",
+        status: "completed",
+        placedAt: FAR_PAST,
+        subtotalInPaisa: 500_00,
+        taxInPaisa: 0,
+        totalInPaisa: 500_00,
+      })
+      .returning({ id: schema.orders.id });
+
+    orderIds.push(staleActive.id, staleCompleted.id);
+  });
+
+  afterAll(async () => {
+    for (const id of orderIds) {
+      await db.delete(schema.orders).where(eq(schema.orders.id, id));
+    }
+    await db.delete(schema.userRoles).where(eq(schema.userRoles.userId, ownerId));
+    await db.delete(schema.restaurants).where(eq(schema.restaurants.id, restaurantId));
+    await db.delete(schema.users).where(eq(schema.users.id, ownerId));
+  });
+
+  it("keeps a 10-day-old order that's still not completed/cancelled, but not one that already is", async () => {
+    resolveRestaurantContext.mockResolvedValue({
+      session: sessionFor(ownerId),
+      restaurantId,
+      role: "owner",
+      branchId: null,
+      timezone: "Asia/Kathmandu",
+    });
+    const { GET } = await import("./route");
+
+    const res = await GET(
+      new Request(`http://localhost:3100/api/restaurants/${slug}/orders`),
+      { params: Promise.resolve({ slug }) },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.orders.some((o: { orderNumber: string }) => o.orderNumber.startsWith("TEST-STALE-ACTIVE-"))).toBe(true);
+    expect(body.orders.some((o: { orderNumber: string }) => o.orderNumber.startsWith("TEST-STALE-COMPLETED-"))).toBe(false);
+  });
+});
