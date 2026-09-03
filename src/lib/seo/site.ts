@@ -18,6 +18,17 @@ import "server-only";
  * the documented production domain so a misconfigured prod deploy can
  * never ship a localhost canonical/OG URL — never guess or hardcode
  * localhost into anything user- or crawler-facing.
+ *
+ * Also tolerates the common misconfiguration of setting APP_URL to a bare
+ * domain with no scheme (e.g. "restrokendra.com" instead of
+ * "https://restrokendra.com") — the 8 pre-existing call sites that read
+ * process.env.APP_URL directly (password reset emails, table/website QR
+ * codes, payment gateway callbacks) never noticed this because they only
+ * ever string-concatenate it; `new URL(getSiteUrl())` in the root layout's
+ * metadataBase is the first caller that actually parses it, which is why
+ * a scheme-less APP_URL surfaces here as a hard build failure ("Invalid
+ * URL") instead of silently producing broken links like it always has
+ * elsewhere. Fixed at the source so every consumer gets a valid URL.
  */
 const PRODUCTION_FALLBACK = "https://restrokendra.com";
 
@@ -26,12 +37,15 @@ export function getSiteUrl(): string {
   const looksLikeRealDomain = !!raw && !/localhost|127\.0\.0\.1/.test(raw);
 
   if (looksLikeRealDomain) {
-    return raw!.replace(/\/+$/, "");
+    const withScheme = /^https?:\/\//.test(raw!) ? raw! : `https://${raw}`;
+    return withScheme.replace(/\/+$/, "");
   }
   if (process.env.NODE_ENV === "production") {
     return PRODUCTION_FALLBACK;
   }
-  return (raw || "http://localhost:3000").replace(/\/+$/, "");
+  const fallback = raw || "http://localhost:3000";
+  const withScheme = /^https?:\/\//.test(fallback) ? fallback : `http://${fallback}`;
+  return withScheme.replace(/\/+$/, "");
 }
 
 /** Resolves a root-relative path (or passes an already-absolute URL through) against the site URL. */
