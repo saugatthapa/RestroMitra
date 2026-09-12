@@ -150,11 +150,38 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
                     <p className="font-mono text-[11px] text-neutral-400">{e.featureKey}</p>
                   </td>
                   <td className="px-4 py-2.5">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        e.granted ? "bg-emerald-50 text-emerald-700" : "bg-neutral-100 text-neutral-500"
+                    {/* A real on/off switch reflecting the resolved `granted`
+                        state — replaces the old static "Granted"/"Denied"
+                        badge plus a separate "Override" text link with one
+                        directly-manipulable control. Flipping it still opens
+                        the reason-required modal below (same
+                        setOverrideKey/setOverrideGranted flow "Override"
+                        used to trigger) rather than writing immediately —
+                        every override stays accountable via a mandatory,
+                        audit-logged reason; only the affordance changed. */}
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={e.granted}
+                      aria-label={`${e.granted ? "Revoke" : "Grant"} ${FEATURE_DESCRIPTIONS[e.featureKey as keyof typeof FEATURE_DESCRIPTIONS] ?? e.featureKey}`}
+                      onClick={() => {
+                        setOverrideKey(e.featureKey);
+                        setOverrideGranted(!e.granted);
+                        setOverrideReason("");
+                        setOverrideExpiresAt("");
+                        setOverrideError(null);
+                      }}
+                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-1 ${
+                        e.granted ? "bg-emerald-500" : "bg-neutral-300"
                       }`}
                     >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                          e.granted ? "translate-x-[18px]" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                    <span className="ml-2 align-middle text-xs font-medium text-neutral-500">
                       {e.granted ? "Granted" : "Denied"}
                     </span>
                   </td>
@@ -167,7 +194,7 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
                     {e.source === "override" ? (e.expiresAt ? formatExpiryDate(e.expiresAt) : "No expiry") : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    {e.source === "override" ? (
+                    {e.source === "override" && (
                       <button
                         type="button"
                         disabled={clearingKey === e.featureKey}
@@ -175,20 +202,6 @@ export function EntitlementsPanel({ restaurantId }: { restaurantId: string }) {
                         className="text-xs font-medium text-neutral-500 hover:text-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Clear override
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOverrideKey(e.featureKey);
-                          setOverrideGranted(!e.granted);
-                          setOverrideReason("");
-                          setOverrideExpiresAt("");
-                          setOverrideError(null);
-                        }}
-                        className="text-xs font-medium text-orange-700 hover:text-orange-800"
-                      >
-                        Override
                       </button>
                     )}
                   </td>
