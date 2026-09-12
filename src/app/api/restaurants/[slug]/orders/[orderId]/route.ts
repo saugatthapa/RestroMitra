@@ -25,8 +25,23 @@ export async function GET(
         // Gap-audit P2 fix — the customer-facing bill (OrderBillView.tsx)
         // prints these alongside the order's own orderNumber/
         // fiscalInvoiceNumber; fetched here rather than a second request
-        // so the bill has everything it needs in one round-trip.
-        restaurant: { columns: { panNumber: true, vatNumber: true } },
+        // so the bill has everything it needs in one round-trip. name/
+        // phone/address/city/district added for the narrow thermal-receipt
+        // print page (/print/bill/[orderId]) — that page renders as a
+        // standalone receipt outside the dashboard shell, so it needs full
+        // business identification the same way a physical printed slip
+        // would carry it, not just the tax numbers OrderBillView shows.
+        restaurant: {
+          columns: {
+            name: true,
+            phone: true,
+            address: true,
+            city: true,
+            district: true,
+            panNumber: true,
+            vatNumber: true,
+          },
+        },
         table: { columns: { id: true, name: true } },
         customer: { columns: { id: true, fullName: true, phone: true, loyaltyPointsBalance: true } },
         items: { with: { addons: true } },

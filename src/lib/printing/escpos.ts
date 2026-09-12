@@ -137,10 +137,42 @@ export class EscPosBuilder {
   line(text: string = ""): this {
     const safe = sanitizeForPrinter(text);
     for (const wrapped of wrapText(safe, this.charWidth)) {
-      this.chunks.push(...Array.from(new TextEncoder().encode(wrapped)));
-      this.chunks.push(LF);
+      this.rawLine(wrapped);
     }
     return this;
+  }
+
+  /**
+   * Encodes exactly the given text plus LF, with no word-wrapping. `line()`
+   * can't be reused for pre-formatted content like `row()`'s padded
+   * columns below — its wordwrap splits on whitespace and rejoins with a
+   * single space, which would collapse the very padding that keeps a
+   * column aligned.
+   */
+  private rawLine(text: string): this {
+    const safe = sanitizeForPrinter(text);
+    this.chunks.push(...Array.from(new TextEncoder().encode(safe)));
+    this.chunks.push(LF);
+    return this;
+  }
+
+  /**
+   * One line with `left` flush to the left margin and `right` flush to the
+   * right margin — the standard "item name .. amount" / "Subtotal ..
+   * Rs. 450.00" receipt row (used by buildBillEscPos below). If the two
+   * don't fit together on one line, `left` wraps onto its own line(s) via
+   * the normal word-wrap and `right` still prints right-aligned, alone, on
+   * the final line — so a long item name never truncates or jams into the
+   * amount column.
+   */
+  row(left: string, right: string): this {
+    const safeRight = sanitizeForPrinter(right);
+    if (left.length + 1 + safeRight.length <= this.charWidth) {
+      const gap = this.charWidth - left.length - safeRight.length;
+      return this.rawLine(`${left}${" ".repeat(gap)}${safeRight}`);
+    }
+    this.line(left);
+    return this.rawLine(safeRight.padStart(this.charWidth));
   }
 
   /** A full-width dashed divider, sized to the current character width. */
@@ -226,6 +258,83 @@ export function buildKotTicketEscPos(
     b.divider();
     b.line(`Order notes: ${ticket.orderNotes}`);
   }
+
+  b.cut();
+  return b.build();
+}
+
+export type EscPosBillItem = {
+  quantity: number;
+  name: string;
+  variantName: string | null;
+  /** Pre-formatted (e.g. "Rs. 300.00") — the caller (BillReceiptView.tsx) already has formatNPR for this, so this module stays free of a money.ts dependency, same as its existing "plain, dependency-free" design. */
+  lineTotal: string;
+};
+
+export type EscPosBill = {
+  restaurantName: string;
+  /** Address/city-district/phone lines, pre-filtered to only the ones the restaurant actually has set — printed under the name, one per line. */
+  infoLines: string[];
+  panNumber: string | null;
+  vatNumber: string | null;
+  orderNumber: string;
+  fiscalInvoiceNumber: number | null;
+  tableOrTakeaway: string;
+  customerName: string | null;
+  placedAt: string;
+  items: EscPosBillItem[];
+  subtotal: string;
+  discount: { label: string; amount: string } | null;
+  serviceCharge: { label: string; amount: string } | null;
+  tax: string;
+  total: string;
+  paid: string;
+  tip: string | null;
+  remainingDue: string;
+};
+
+/**
+ * Builds the ESC/POS byte sequence for the customer-facing bill — the
+ * direct-thermal-print equivalent of BillReceiptView.tsx's on-screen
+ * receipt, itself a narrow-format mirror of OrderBillView.tsx's totals
+ * math (see that component for where subtotal/discount/tax/total/paid/
+ * remainingDue actually come from). Mirrors buildKotTicketEscPos's overall
+ * shape and reasoning above.
+ */
+export function buildBillEscPos(bill: EscPosBill, charWidth: number = DEFAULT_CHAR_WIDTH): Uint8Array {
+  const b = new EscPosBuilder(charWidth);
+
+  b.align("center").bold(true).line(bill.restaurantName.toUpperCase()).bold(false);
+  for (const info of bill.infoLines) b.line(info);
+  if (bill.panNumber || bill.vatNumber) {
+    const parts = [bill.panNumber ? `PAN: ${bill.panNumber}` : null, bill.vatNumber ? `VAT: ${bill.vatNumber}` : null];
+    b.line(parts.filter(Boolean).join("  "));
+  }
+  b.divider();
+
+  b.align("left");
+  b.line(`Order #${bill.orderNumber}`);
+  if (bill.fiscalInvoiceNumber !== null) b.line(`Fiscal Invoice #${bill.fiscalInvoiceNumber}`);
+  const tableLine = bill.customerName ? `${bill.tableOrTakeaway} - ${bill.customerName}` : bill.tableOrTakeaway;
+  b.line(tableLine);
+  b.line(bill.placedAt);
+  b.divider();
+
+  for (const item of bill.items) {
+    const variant = item.variantName ? ` (${item.variantName})` : "";
+    b.row(`${item.quantity} x ${item.name}${variant}`, item.lineTotal);
+  }
+  b.divider();
+
+  b.row("Subtotal", bill.subtotal);
+  if (bill.discount) b.row(bill.discount.label, `-${bill.discount.amount}`);
+  if (bill.serviceCharge) b.row(bill.serviceCharge.label, bill.serviceCharge.amount);
+  b.row("Tax", bill.tax);
+  b.divider();
+  b.bold(true).row("Total", bill.total).bold(false);
+  b.row("Paid", bill.paid);
+  if (bill.tip) b.row("Tip (not part of bill)", bill.tip);
+  b.bold(true).row("Remaining due", bill.remainingDue).bold(false);
 
   b.cut();
   return b.build();

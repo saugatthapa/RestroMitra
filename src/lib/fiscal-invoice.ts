@@ -34,11 +34,13 @@ export type FiscalInvoiceAssignment = {
  *     which is precisely the kind of gap a fiscal sequence exists to rule
  *     out.
  *   - NOT on print: printing is view-only (OrderBillView's "Print bill"
- *     button just calls window.print() against data already fetched — no
- *     server round-trip at all) and can happen any number of times before
- *     and after a bill is actually settled; assigning here would hand out
- *     a fresh number on every reprint instead of the one true number for
- *     that bill.
+ *     button opens the narrow thermal-receipt page — BillReceiptView.tsx —
+ *     which just re-fetches the same order data and either sends it to a
+ *     paired thermal printer or opens the browser print dialog; no server
+ *     round-trip that could assign anything) and can happen any number of
+ *     times before and after a bill is actually settled; assigning here
+ *     would hand out a fresh number on every reprint instead of the one
+ *     true number for that bill.
  *   - AT "served -> completed": the one state-machine transition where an
  *     order's numbers are truly final — see order-status.ts, `completed`
  *     is terminal and only reachable from `served`, so this is also,

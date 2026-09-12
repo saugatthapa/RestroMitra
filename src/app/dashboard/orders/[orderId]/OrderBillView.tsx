@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { apiGet, apiPatch, apiPost, apiPut, apiDelete, ApiError } from "@/lib/api-client";
 import { openKotTicket } from "@/lib/kot-print-client";
+import { openBillReceipt } from "@/lib/bill-print-client";
 import { formatNPR, rupeesToPaisa, paisaToRupees, basisPointsToPercent } from "@/lib/money";
 import { useDateSystem } from "@/lib/date-system";
 import { formatDate } from "@/lib/nepali-date";
@@ -279,7 +280,7 @@ export function OrderBillView({
               Reprint KOT #{order.kotSequence}
             </button>
           )}
-          <button onClick={() => window.print()} className="btn-secondary">
+          <button onClick={() => openBillReceipt(orderId)} className="btn-secondary">
             Print bill
           </button>
         </div>
