@@ -40,6 +40,18 @@ export const MAPPING_KEYS = {
   // their own, since nothing today reconciles or distinguishes between
   // them — easy to split apart once Phase 5 adds real Bank Accounts.
   BANK_DIGITAL_PAYMENTS: "control:bank_digital_payments",
+  // Phase 4, Slice 4f — a minimal single Bank Account, pulled forward from
+  // Phase 5 specifically to unblock this slice (per sign-off: rather than
+  // blocking all of Phase 4 on Phase 5, or skipping reconciliation posting
+  // indefinitely — see ACCOUNTING_PHASE_4_PLAN.md Part 5 #8). Represents
+  // "money actually confirmed in the bank" once a card/mobile_wallet/other
+  // payment is reconciled against a real bank/gateway statement — distinct
+  // from BANK_DIGITAL_PAYMENTS above, which is an outgoing clearing bucket
+  // for expense/payroll payouts, not an incoming settlement account. Phase 5
+  // proper replaces this one default account with real multi-bank-account
+  // support; nothing here needs to change for that migration except adding
+  // more mapping keys alongside this one.
+  BANK_ACCOUNT: "control:bank_account",
 } as const;
 
 export type MappingKey = (typeof MAPPING_KEYS)[keyof typeof MAPPING_KEYS];

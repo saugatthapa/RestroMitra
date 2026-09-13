@@ -5,6 +5,8 @@ import { orders, payments } from "@/db/schema";
 import { HttpError } from "@/lib/http-error";
 import { restaurantStartOfDay } from "@/lib/restaurant-date";
 import type { PaymentMethod } from "@/lib/payments";
+import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
+import { postReconciliationVoucher, reverseReconciliationVoucher } from "@/lib/accounting/integrations/reconciliation";
 
 export class FinancialReconciliationError extends HttpError {
   constructor(message: string, status = 400) {
@@ -213,14 +215,21 @@ export async function getReconciliationSummary(
   }));
 }
 
+// Accounting module Phase 4, Slice 4f — now also selects branchId (via the
+// same orders join every other reconciliation query already uses, since
+// payments has no branchId of its own) and amountInPaisa, both needed to
+// post/reverse the reconciliation voucher below.
 async function loadOwnedPayment(tx: Transaction, restaurantId: string, paymentId: string) {
   const [row] = await tx
     .select({
       id: payments.id,
       method: payments.method,
       reconciledAt: payments.reconciledAt,
+      amountInPaisa: payments.amountInPaisa,
+      branchId: orders.branchId,
     })
     .from(payments)
+    .innerJoin(orders, eq(payments.orderId, orders.id))
     .where(and(eq(payments.id, paymentId), eq(payments.restaurantId, restaurantId)))
     .limit(1);
   if (!row) {
@@ -238,7 +247,7 @@ async function loadOwnedPayment(tx: Transaction, restaurantId: string, paymentId
  */
 export async function markPaymentReconciled(
   tx: Transaction,
-  params: { restaurantId: string; paymentId: string; reconciledByUserId: string },
+  params: { restaurantId: string; paymentId: string; reconciledByUserId: string; timezone: string },
 ) {
   const existing = await loadOwnedPayment(tx, params.restaurantId, params.paymentId);
   assertReconcilableMethod(existing.method as PaymentMethod);
@@ -256,6 +265,22 @@ export async function markPaymentReconciled(
     // Lost the race between the read above and this UPDATE.
     throw new FinancialReconciliationError("This payment is already marked reconciled.", 409);
   }
+
+  // Accounting module Phase 4, Slice 4f — see postReconciliationVoucher's
+  // own doc comment for why this single call correctly handles both a
+  // brand-new mark and a re-mark after a prior unmark.
+  if (await isAutomaticPostingEnabled(tx, params.restaurantId)) {
+    await postReconciliationVoucher(tx, {
+      restaurantId: params.restaurantId,
+      branchId: existing.branchId,
+      paymentId: params.paymentId,
+      amountInPaisa: existing.amountInPaisa,
+      method: existing.method as PaymentMethod,
+      timezone: params.timezone,
+      createdByUserId: params.reconciledByUserId,
+    });
+  }
+
   return updated;
 }
 
@@ -268,7 +293,7 @@ export async function markPaymentReconciled(
  */
 export async function unmarkPaymentReconciled(
   tx: Transaction,
-  params: { restaurantId: string; paymentId: string },
+  params: { restaurantId: string; paymentId: string; reversedByUserId: string; timezone: string },
 ) {
   const existing = await loadOwnedPayment(tx, params.restaurantId, params.paymentId);
   if (!existing.reconciledAt) {
@@ -284,5 +309,17 @@ export async function unmarkPaymentReconciled(
   if (!updated) {
     throw new FinancialReconciliationError("This payment is not marked reconciled.", 409);
   }
+
+  // Accounting module Phase 4, Slice 4f — a no-op if this payment's mark
+  // was never posted in the first place (automatic posting wasn't on then).
+  if (await isAutomaticPostingEnabled(tx, params.restaurantId)) {
+    await reverseReconciliationVoucher(tx, {
+      restaurantId: params.restaurantId,
+      paymentId: params.paymentId,
+      reversedByUserId: params.reversedByUserId,
+      timezone: params.timezone,
+    });
+  }
+
   return updated;
 }

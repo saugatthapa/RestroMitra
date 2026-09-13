@@ -29,6 +29,7 @@ export async function POST(
       restaurantId,
       role,
       branchId: grantedBranchId,
+      timezone,
     } = await resolveRestaurantContext(slug, PERMISSIONS.MANAGE_ACCOUNT_BOOKS);
 
     // payments has no branchId of its own — resolve via its order, same
@@ -48,7 +49,7 @@ export async function POST(
     });
 
     const updated = await db.transaction((tx) =>
-      markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: session.user.id }),
+      markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: session.user.id, timezone }),
     );
 
     await recordAuditLog({

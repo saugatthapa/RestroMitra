@@ -39,6 +39,13 @@ const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   // comment: the shared account for expense payments made by bank
   // transfer, eSewa, Khalti, or mobile banking (never used by POS sales).
   { code: "1040", name: "Bank / Digital Payments", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.BANK_DIGITAL_PAYMENTS] },
+  // Phase 4, Slice 4f — see MAPPING_KEYS.BANK_ACCOUNT's own comment: a
+  // single default Bank Account, pulled forward from Phase 5, that
+  // reconciliation posts INTO once a card/mobile_wallet/other payment is
+  // confirmed against a real bank/gateway statement. Not the same account
+  // as 1040 above (that's an outgoing clearing bucket for expense/payroll
+  // payouts).
+  { code: "1045", name: "Bank Account", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.BANK_ACCOUNT] },
   { code: "1100", name: "Accounts Receivable", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.ACCOUNTS_RECEIVABLE] },
   { code: "1200", name: "Inventory", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.INVENTORY] },
   { code: "1900", name: "Fixed Assets", type: "asset", normalBalance: "debit" },

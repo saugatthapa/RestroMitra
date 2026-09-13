@@ -124,7 +124,7 @@ describe.skipIf(!hasDb)("Financial reconciliation (integration)", () => {
     expect(before.some((p) => p.id === paymentId)).toBe(true);
 
     const updated = await db.transaction((tx) =>
-      fr.markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: userId }),
+      fr.markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: userId, timezone: "Asia/Kathmandu" }),
     );
     expect(updated.reconciledAt).not.toBeNull();
     expect(updated.reconciledByUserId).toBe(userId);
@@ -138,9 +138,9 @@ describe.skipIf(!hasDb)("Financial reconciliation (integration)", () => {
 
   it("unmarkPaymentReconciled reverses a mark and puts the payment back in the unreconciled list", async () => {
     const { paymentId } = await createPayment({ restaurantId, targetBranchId: branchId, method: "mobile_wallet" });
-    await db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: userId }));
+    await db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: userId, timezone: "Asia/Kathmandu" }));
 
-    const reversed = await db.transaction((tx) => fr.unmarkPaymentReconciled(tx, { restaurantId, paymentId }));
+    const reversed = await db.transaction((tx) => fr.unmarkPaymentReconciled(tx, { restaurantId, paymentId, reversedByUserId: userId, timezone: "Asia/Kathmandu" }));
     expect(reversed.reconciledAt).toBeNull();
     expect(reversed.reconciledByUserId).toBeNull();
 
@@ -152,7 +152,7 @@ describe.skipIf(!hasDb)("Financial reconciliation (integration)", () => {
     const { paymentId } = await createPayment({ restaurantId, targetBranchId: branchId, method: "cash" });
 
     await expect(
-      db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: userId })),
+      db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: userId, timezone: "Asia/Kathmandu" })),
     ).rejects.toMatchObject({ status: 400 });
 
     const all = await fr.listPaymentsForReconciliation(restaurantId, { branchId }, "all");
@@ -176,7 +176,7 @@ describe.skipIf(!hasDb)("Financial reconciliation (integration)", () => {
     });
 
     await expect(
-      db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId: otherPaymentId, reconciledByUserId: userId })),
+      db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId: otherPaymentId, reconciledByUserId: userId, timezone: "Asia/Kathmandu" })),
     ).rejects.toMatchObject({ status: 404 });
 
     const list = await fr.listPaymentsForReconciliation(restaurantId, {}, "all");
@@ -184,7 +184,7 @@ describe.skipIf(!hasDb)("Financial reconciliation (integration)", () => {
 
     // But it's perfectly reconcilable in its OWN restaurant's scope.
     const ownMark = await db.transaction((tx) =>
-      fr.markPaymentReconciled(tx, { restaurantId: otherRestaurantId, paymentId: otherPaymentId, reconciledByUserId: userId }),
+      fr.markPaymentReconciled(tx, { restaurantId: otherRestaurantId, paymentId: otherPaymentId, reconciledByUserId: userId, timezone: "Asia/Kathmandu" }),
     );
     expect(ownMark.reconciledAt).not.toBeNull();
   });
@@ -204,17 +204,17 @@ describe.skipIf(!hasDb)("Financial reconciliation (integration)", () => {
 
   it("duplicate request: marking an already-reconciled payment again is rejected with a 409, not a silent no-op", async () => {
     const { paymentId } = await createPayment({ restaurantId, targetBranchId: branchId, method: "card" });
-    await db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: userId }));
+    await db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: userId, timezone: "Asia/Kathmandu" }));
 
     await expect(
-      db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: userId })),
+      db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: userId, timezone: "Asia/Kathmandu" })),
     ).rejects.toMatchObject({ status: 409 });
   });
 
   it("edge case: unmarking a payment that isn't reconciled is rejected with a 409", async () => {
     const { paymentId } = await createPayment({ restaurantId, targetBranchId: branchId, method: "card" });
     await expect(
-      db.transaction((tx) => fr.unmarkPaymentReconciled(tx, { restaurantId, paymentId })),
+      db.transaction((tx) => fr.unmarkPaymentReconciled(tx, { restaurantId, paymentId, reversedByUserId: userId, timezone: "Asia/Kathmandu" })),
     ).rejects.toMatchObject({ status: 409 });
   });
 
@@ -225,6 +225,7 @@ describe.skipIf(!hasDb)("Financial reconciliation (integration)", () => {
           restaurantId,
           paymentId: "00000000-0000-0000-0000-000000000000",
           reconciledByUserId: userId,
+          timezone: "Asia/Kathmandu",
         }),
       ),
     ).rejects.toMatchObject({ status: 404 });
@@ -235,7 +236,7 @@ describe.skipIf(!hasDb)("Financial reconciliation (integration)", () => {
 
     const attempt = () =>
       db
-        .transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: userId }))
+        .transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: userId, timezone: "Asia/Kathmandu" }))
         .then((r) => ({ ok: true as const, r }))
         .catch((err) => ({ ok: false as const, err }));
 
@@ -262,8 +263,8 @@ describe.skipIf(!hasDb)("Financial reconciliation (integration)", () => {
       amountInPaisa: -30_000,
     });
 
-    await db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId: chargeId, reconciledByUserId: userId }));
-    await db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId: refundId, reconciledByUserId: userId }));
+    await db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId: chargeId, reconciledByUserId: userId, timezone: "Asia/Kathmandu" }));
+    await db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId: refundId, reconciledByUserId: userId, timezone: "Asia/Kathmandu" }));
 
     const summary = await fr.getReconciliationSummary(restaurantId, { branchId });
     const otherRow = summary.find((s) => s.method === "other");
@@ -402,7 +403,7 @@ describe.skipIf(!hasDb)("Financial reconciliation (integration)", () => {
       method: "mobile_wallet",
       amountInPaisa: 25_000,
     });
-    await db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId: reconciledOne, reconciledByUserId: userId }));
+    await db.transaction((tx) => fr.markPaymentReconciled(tx, { restaurantId, paymentId: reconciledOne, reconciledByUserId: userId, timezone: "Asia/Kathmandu" }));
 
     const summary = await fr.getReconciliationSummary(restaurantId, { branchId: branchBId });
     const walletRow = summary.find((s) => s.method === "mobile_wallet");
