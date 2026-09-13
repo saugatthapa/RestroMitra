@@ -45,6 +45,20 @@ export const recordPaymentSchema = z.object({
   clientRequestId: z.string().trim().min(1).max(100).optional(),
 });
 
+// Combine bill — Commercial Launch follow-up. One payment applied across
+// every active order on a table (see recordCombinedPayment in
+// combined-billing.ts). clientRequestId is capped shorter than
+// recordPaymentSchema's own field: it gets namespaced per order
+// (`${clientRequestId}:${orderId}`) before hitting the payments table's
+// (orderId, clientRequestId) unique index, and a 36-char order uuid plus a
+// separator has to fit inside that column's 100-char limit alongside it.
+export const recordCombinedPaymentSchema = z.object({
+  amount: rupeeAmount,
+  method: z.enum(PAYMENT_METHODS),
+  note: z.string().trim().max(300).optional().or(z.literal("")),
+  clientRequestId: z.string().trim().min(1).max(60).optional(),
+});
+
 export const recordRefundSchema = z.object({
   amount: rupeeAmount,
   method: z.enum(PAYMENT_METHODS),

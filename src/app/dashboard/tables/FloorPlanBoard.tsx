@@ -9,6 +9,8 @@ import {
   manualNextStatuses,
   type TableStatus,
 } from "@/lib/table-status";
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/payments";
+import { formatNPR } from "@/lib/money";
 
 type FloorTable = {
   id: string;
@@ -52,6 +54,12 @@ type TableDetail = {
   upcomingReservations: UpcomingReservation[];
 };
 
+// Mirrors getCombinedBillForTable's return shape in combined-billing.ts.
+type CombinedBillSummary = {
+  orders: Array<{ orderId: string; orderNumber: string; totalInPaisa: number; remainingDueInPaisa: number }>;
+  combinedRemainingDueInPaisa: number;
+};
+
 function base(slug: string) {
   return `/api/restaurants/${slug}`;
 }
@@ -66,6 +74,11 @@ function rectsOverlap(
   b: { x: number; y: number; w: number; h: number },
 ) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+/** Plain decimal rupees for prefilling an amount input — formatNPR's "Rs"/comma formatting isn't right for an editable field. */
+function paisaToRupeesString(paisa: number): string {
+  return (paisa / 100).toFixed(2);
 }
 
 function nextOpenSpot(existing: FloorTable[]): { x: number; y: number } {
@@ -94,6 +107,17 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
   const [merging, setMerging] = useState(false);
   const [mergeSourceTableId, setMergeSourceTableId] = useState("");
   const [tableOpBusy, setTableOpBusy] = useState(false);
+  // Combine bill — Commercial Launch follow-up. Settles every active order
+  // on a table with one payment (see combined-billing.ts); a separate flow
+  // from Merge, which only reassigns which table an order sits on and
+  // never touches payment.
+  const [combinedBillOpen, setCombinedBillOpen] = useState(false);
+  const [combinedBillLoading, setCombinedBillLoading] = useState(false);
+  const [combinedBillSummary, setCombinedBillSummary] = useState<CombinedBillSummary | null>(null);
+  const [combinedBillError, setCombinedBillError] = useState<string | null>(null);
+  const [combinedAmount, setCombinedAmount] = useState("");
+  const [combinedMethod, setCombinedMethod] = useState<PaymentMethod>("cash");
+  const [combinedNote, setCombinedNote] = useState("");
 
   const dragState = useRef<{
     id: string;
@@ -158,6 +182,7 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
     setTransferTargetTableId("");
     setMerging(false);
     setMergeSourceTableId("");
+    closeCombinedBill();
   }
 
   async function changeStatus(tableId: string, status: TableStatus) {
@@ -221,6 +246,60 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
       await refreshDetail(detail.table.id);
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "Could not merge these tables.");
+    } finally {
+      setTableOpBusy(false);
+    }
+  }
+
+  async function openCombinedBill() {
+    if (!detail) return;
+    setCombinedBillOpen(true);
+    setCombinedBillError(null);
+    setCombinedBillLoading(true);
+    try {
+      const summary = await apiGet<CombinedBillSummary>(`${base(slug)}/tables/${detail.table.id}/combined-bill`);
+      setCombinedBillSummary(summary);
+      setCombinedAmount(paisaToRupeesString(summary.combinedRemainingDueInPaisa));
+    } catch (err) {
+      setCombinedBillError(err instanceof ApiError ? err.message : "Could not load this table's combined bill.");
+    } finally {
+      setCombinedBillLoading(false);
+    }
+  }
+
+  function closeCombinedBill() {
+    setCombinedBillOpen(false);
+    setCombinedBillSummary(null);
+    setCombinedBillError(null);
+    setCombinedAmount("");
+    setCombinedNote("");
+  }
+
+  async function submitCombinedPayment() {
+    if (!detail) return;
+    const amount = parseFloat(combinedAmount || "0");
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setCombinedBillError("Enter a valid amount.");
+      return;
+    }
+    setTableOpBusy(true);
+    setCombinedBillError(null);
+    try {
+      const summary = await apiPost<CombinedBillSummary>(`${base(slug)}/tables/${detail.table.id}/combined-bill`, {
+        amount,
+        method: combinedMethod,
+        note: combinedNote.trim() || undefined,
+      });
+      setCombinedBillSummary(summary);
+      setCombinedAmount(paisaToRupeesString(summary.combinedRemainingDueInPaisa));
+      setCombinedNote("");
+      await load();
+      await refreshDetail(detail.table.id);
+      if (summary.combinedRemainingDueInPaisa === 0) {
+        closeCombinedBill();
+      }
+    } catch (err) {
+      setCombinedBillError(err instanceof ApiError ? err.message : "Could not record this payment.");
     } finally {
       setTableOpBusy(false);
     }
@@ -611,6 +690,104 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
                     </button>
                   )}
                 </div>
+
+                {detail.activeOrders.length > 1 && (
+                  <div className="mb-4">
+                    {combinedBillOpen ? (
+                      <div className="rounded-lg bg-neutral-50 px-3 py-3">
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                            Combined bill — {detail.table.name}
+                          </p>
+                          <button
+                            onClick={closeCombinedBill}
+                            disabled={tableOpBusy}
+                            className="text-[10px] font-medium text-neutral-500 hover:text-neutral-700"
+                          >
+                            Close
+                          </button>
+                        </div>
+                        {combinedBillError && (
+                          <p className="mb-2 text-xs text-red-600">{combinedBillError}</p>
+                        )}
+                        {combinedBillLoading ? (
+                          <p className="text-xs text-neutral-400">Loading…</p>
+                        ) : combinedBillSummary ? (
+                          <>
+                            <ul className="mb-2 space-y-1 text-xs">
+                              {combinedBillSummary.orders.map((o) => (
+                                <li key={o.orderId} className="flex items-center justify-between">
+                                  <span>{o.orderNumber}</span>
+                                  <span className="tabular-nums">
+                                    {o.remainingDueInPaisa > 0
+                                      ? `${formatNPR(o.remainingDueInPaisa)} due`
+                                      : "Paid"}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                            <div className="mb-3 flex items-center justify-between border-t border-neutral-200 pt-1.5 text-xs font-semibold text-neutral-900">
+                              <span>Combined due</span>
+                              <span className="tabular-nums">
+                                {formatNPR(combinedBillSummary.combinedRemainingDueInPaisa)}
+                              </span>
+                            </div>
+                            {combinedBillSummary.combinedRemainingDueInPaisa > 0 && (
+                              <div className="space-y-2">
+                                <p className="text-[10px] text-neutral-500">
+                                  Pays off each order in full, oldest first — if the amount doesn&apos;t
+                                  cover everything, the last order(s) are left partially paid.
+                                </p>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    value={combinedAmount}
+                                    onChange={(e) => setCombinedAmount(e.target.value)}
+                                    className="input py-1 text-xs"
+                                    style={{ width: "7rem" }}
+                                  />
+                                  <select
+                                    value={combinedMethod}
+                                    onChange={(e) => setCombinedMethod(e.target.value as PaymentMethod)}
+                                    className="input py-1 text-xs"
+                                  >
+                                    {PAYMENT_METHODS.map((m) => (
+                                      <option key={m} value={m}>
+                                        {PAYMENT_METHOD_LABELS[m]}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <input
+                                    value={combinedNote}
+                                    onChange={(e) => setCombinedNote(e.target.value)}
+                                    placeholder="Note (optional)"
+                                    className="input py-1 text-xs"
+                                  />
+                                  <button
+                                    onClick={submitCombinedPayment}
+                                    disabled={tableOpBusy || !combinedAmount}
+                                    className="btn-primary px-2 py-1 text-[10px]"
+                                  >
+                                    Record payment
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={openCombinedBill}
+                        className="text-xs font-medium text-neutral-500 underline decoration-dotted hover:text-neutral-700"
+                      >
+                        Combine bill for these {detail.activeOrders.length} orders
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {detail.upcomingReservations.length > 0 && (
                   <div className="mb-4">
