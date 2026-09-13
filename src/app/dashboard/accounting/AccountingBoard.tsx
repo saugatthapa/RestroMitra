@@ -1142,7 +1142,31 @@ type BalanceSheetData = {
   isBalanced: boolean;
 };
 
-const REPORT_TABS = ["Trial Balance", "Profit & Loss", "Balance Sheet"] as const;
+// Phase 5, Slice 5a — AR/AP aging. Mirrors src/lib/accounting/aging.ts's
+// own AgingReport/AgingRow/AgingBucketKey types.
+type AgingBucketKey = "current" | "days1to30" | "days31to60" | "days61to90" | "over90";
+const AGING_BUCKETS: { key: AgingBucketKey; label: string }[] = [
+  { key: "current", label: "Current" },
+  { key: "days1to30", label: "1–30 days" },
+  { key: "days31to60", label: "31–60 days" },
+  { key: "days61to90", label: "61–90 days" },
+  { key: "over90", label: "90+ days" },
+];
+type AgingRow = {
+  partyId: string;
+  partyName: string;
+  outstandingInPaisa: number;
+  buckets: Record<AgingBucketKey, number>;
+  oldestChargeDate: string | null;
+};
+type AgingReportData = {
+  asOfDate: string;
+  controlAccountId: string;
+  rows: AgingRow[];
+  totalOutstandingInPaisa: number;
+};
+
+const REPORT_TABS = ["Trial Balance", "Profit & Loss", "Balance Sheet", "AR/AP Aging"] as const;
 type ReportTab = (typeof REPORT_TABS)[number];
 
 function todayIso() {
@@ -1177,6 +1201,7 @@ function ReportsTab({ slug, onDrillDown }: { slug: string; onDrillDown: (account
       {reportTab === "Trial Balance" && <TrialBalanceReport slug={slug} onDrillDown={onDrillDown} />}
       {reportTab === "Profit & Loss" && <ProfitAndLossReport slug={slug} onDrillDown={onDrillDown} />}
       {reportTab === "Balance Sheet" && <BalanceSheetReport slug={slug} onDrillDown={onDrillDown} />}
+      {reportTab === "AR/AP Aging" && <AgingReportTab slug={slug} />}
     </div>
   );
 }
@@ -1489,6 +1514,127 @@ function BalanceSheetReport({ slug, onDrillDown }: { slug: string; onDrillDown: 
               period-closing entries yet. This keeps the sheet balanced arithmetically, but it won&apos;t
               reflect every real-world balance (inventory, accrued liabilities, etc.) until Phase 4/5&apos;s
               automatic postings land.
+            </p>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+const AGING_SIDES = ["Payable", "Receivable"] as const;
+type AgingSide = (typeof AGING_SIDES)[number];
+
+/**
+ * Phase 5, Slice 5a — AR/AP aging. A restaurant can view this before ever
+ * enabling automatic posting; the API returns `{ report: null }` (not an
+ * error) when the relevant control account (Accounts Payable/Receivable)
+ * isn't mapped yet, which we render as a plain explanatory note rather than
+ * an error banner. No drill-down here — unlike the other reports, these
+ * rows are suppliers/customers, not chart-of-accounts entries.
+ */
+function AgingReportTab({ slug }: { slug: string }) {
+  const [side, setSide] = useState<AgingSide>("Payable");
+  const [asOfDate, setAsOfDate] = useState(todayIso());
+  const [data, setData] = useState<AgingReportData | null>(null);
+  const [notSetUp, setNotSetUp] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    const endpoint = side === "Payable" ? "ap-aging" : "ar-aging";
+    apiGet<{ report: AgingReportData | null }>(`${base(slug)}/accounting/reports/${endpoint}?asOfDate=${asOfDate}`)
+      .then((res) => {
+        setData(res.report);
+        setNotSetUp(res.report === null);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load the aging report."))
+      .finally(() => setLoading(false));
+  }, [slug, side, asOfDate]);
+
+  const partyLabel = side === "Payable" ? "Supplier" : "Customer";
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex gap-2">
+          {AGING_SIDES.map((s) => (
+            <button
+              key={s}
+              onClick={() => setSide(s)}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                side === s
+                  ? "bg-orange-100 text-orange-800"
+                  : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+              }`}
+            >
+              Accounts {s}
+            </button>
+          ))}
+        </div>
+        <label className="block max-w-xs text-sm">
+          <span className="mb-1 block text-neutral-600">As of</span>
+          <input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="input" />
+        </label>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : notSetUp ? (
+        <p className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-6 text-center text-sm text-neutral-500">
+          Accounts {side} isn&apos;t set up for this restaurant yet — this report will populate once automatic
+          posting is enabled and at least one {partyLabel.toLowerCase()} transaction has been posted through it.
+        </p>
+      ) : (
+        data && (
+          <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
+                  <th className="px-3 py-2">{partyLabel}</th>
+                  {AGING_BUCKETS.map((b) => (
+                    <th key={b.key} className="px-3 py-2 text-right">
+                      {b.label}
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((r) => (
+                  <tr key={r.partyId} className="border-b border-neutral-100 last:border-0">
+                    <td className="px-3 py-2">{r.partyName}</td>
+                    {AGING_BUCKETS.map((b) => (
+                      <td key={b.key} className="px-3 py-2 text-right">
+                        {r.buckets[b.key] !== 0 ? formatNPR(r.buckets[b.key]) : "—"}
+                      </td>
+                    ))}
+                    <td className="px-3 py-2 text-right font-medium">{formatNPR(r.outstandingInPaisa)}</td>
+                  </tr>
+                ))}
+                {data.rows.length === 0 && (
+                  <tr>
+                    <td colSpan={AGING_BUCKETS.length + 2} className="px-3 py-6 text-center text-sm text-neutral-400">
+                      Nothing outstanding as of this date.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-neutral-300 font-semibold text-neutral-900">
+                  <td className="px-3 py-2" colSpan={AGING_BUCKETS.length + 1}>
+                    Total
+                  </td>
+                  <td className="px-3 py-2 text-right">{formatNPR(data.totalOutstandingInPaisa)}</td>
+                </tr>
+              </tfoot>
+            </table>
+            <p className="border-t border-neutral-200 px-4 py-2 text-xs text-neutral-400">
+              A negative figure means a running credit balance (an overpayment) rather than an amount owed.
             </p>
           </div>
         )
