@@ -14,6 +14,7 @@ const AUDIT_ACTION_BY_TYPE: Record<string, string> = {
   addition: "cash.added",
   drop: "cash.dropped",
   payout: "cash.payout",
+  refund: "cash.refunded",
 };
 
 export async function POST(

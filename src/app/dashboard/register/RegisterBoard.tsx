@@ -21,7 +21,7 @@ type RegisterShift = {
 
 type CashMovement = {
   id: string;
-  type: "addition" | "drop" | "payout";
+  type: "addition" | "drop" | "payout" | "refund";
   amountInPaisa: number;
   reason: string | null;
   createdAt: string;
@@ -68,6 +68,7 @@ const MOVEMENT_LABEL: Record<CashMovement["type"], string> = {
   addition: "Cash added",
   drop: "Cash dropped",
   payout: "Cash payout",
+  refund: "Cash refund",
 };
 
 /**
@@ -344,8 +345,9 @@ export function RegisterBoard({ slug }: { slug: string }) {
                   {shift.registerName} — open since {new Date(shift.openedAt).toLocaleString()}
                 </h2>
                 <p className="mt-1 text-xs text-neutral-500">
-                  Everything below except Cash-in/Cash-out updates itself automatically from POS sales,
-                  refunds, and expenses — nothing here needs re-entering by hand.
+                  Cash sales and cash expenses update themselves automatically from POS — nothing there
+                  needs re-entering by hand. Cash refunds, cash-in, and cash-out are recorded manually
+                  below, at the moment the cash actually changes hands.
                 </p>
               </div>
               <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
@@ -359,8 +361,8 @@ export function RegisterBoard({ slug }: { slug: string }) {
             <form onSubmit={handleMovement} className="rounded-lg border border-neutral-200 bg-white p-5">
               <h3 className="text-sm font-semibold text-neutral-900">Record a cash movement</h3>
               <p className="mt-1 text-xs text-neutral-500">
-                Only for cash the system can&apos;t see on its own — topping up change, pulling cash to
-                the safe, or a quick till payout.
+                Only for cash the system can&apos;t see on its own — a refund handed back to a customer,
+                topping up change, pulling cash to the safe, or a quick till payout.
               </p>
               <div className="mt-3 space-y-3">
                 <label className="block text-sm">
@@ -373,6 +375,7 @@ export function RegisterBoard({ slug }: { slug: string }) {
                     <option value="addition">Addition (cash in)</option>
                     <option value="drop">Drop (to safe)</option>
                     <option value="payout">Payout (spent from till)</option>
+                    <option value="refund">Refund (cash handed back)</option>
                   </select>
                 </label>
                 <label className="block text-sm">

@@ -15,7 +15,7 @@ export const closeRegisterShiftSchema = z.object({
 });
 
 export const recordCashMovementSchema = z.object({
-  type: z.enum(["addition", "drop", "payout"]),
+  type: z.enum(["addition", "drop", "payout", "refund"]),
   amountInPaisa: z.number().int().min(1).max(100_000_000_00),
   reason: z.string().trim().max(300).optional(),
 });

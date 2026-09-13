@@ -568,6 +568,13 @@
       "when": 1788432573488,
       "tag": "0080_add_restaurant_verification",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1789288841082,
+      "tag": "0081_manual_cash_register_refunds",
+      "breakpoints": true
     }
   ]
 }

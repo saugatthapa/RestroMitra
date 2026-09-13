@@ -1,0 +1,1 @@
+ALTER TYPE "public"."register_cash_movement_type" ADD VALUE 'refund';

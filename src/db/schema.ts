@@ -3741,11 +3741,19 @@ export const expenses = pgTable(
 // for "expected cash," never the UI: expected cash is DERIVED at read time
 // from data that already exists elsewhere rather than duplicated —
 //   + opening float          -> registerShifts.openingCashInPaisa
-//   + net cash sales/refunds -> SUM(payments.amountInPaisa) WHERE method
-//                                = 'cash' for orders at this branch, in
-//                                [openedAt, now/closedAt) — already signed
-//                                (refunds are negative rows), so one SUM
-//                                nets both without a second query
+//   + cash sales             -> SUM(payments.amountInPaisa) WHERE method
+//                                = 'cash' AND amount > 0, for orders at
+//                                this branch, in [openedAt, now/closedAt)
+//   - cash refunds           -> SUM from registerCashMovements type='refund'
+//                                — deliberately MANUAL, not derived from
+//                                payments' own negative-amount refund rows:
+//                                the cash physically leaves the till at
+//                                whatever moment the cashier hands it back
+//                                (which can lag the system-side refund
+//                                record), so a cashier logs it here the same
+//                                way as an addition/drop/payout, and the
+//                                payments row stays purely an order-accounting
+//                                fact rather than double-counted till math.
 //   + cash additions         -> SUM from registerCashMovements type='addition'
 //   - cash drops             -> SUM from registerCashMovements type='drop'
 //   - cash payouts           -> SUM from registerCashMovements type='payout'
@@ -3780,6 +3788,10 @@ export const registerCashMovementTypeEnum = pgEnum("register_cash_movement_type"
   // the "till source of truth," Expenses can separately record the same
   // spend for categorized reporting if staff choose to.
   "payout",
+  // Cash physically handed back to a customer for a refund. Deliberately
+  // manual, not derived from the payments table's own negative-amount
+  // refund rows — see the block comment above registerShifts.
+  "refund",
 ]);
 
 export const registerShifts = pgTable(

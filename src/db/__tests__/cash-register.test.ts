@@ -238,7 +238,7 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
   });
 
   describe("expected cash computation + close", () => {
-    it("computes expected cash as opening + net cash sales - cash expenses + additions - drops - payouts", async () => {
+    it("computes expected cash as opening + cash sales - cash refunds - cash expenses + additions - drops - payouts", async () => {
       const openedAt = new Date("2024-01-01T08:00:00Z");
       const shift = await db.transaction((tx) =>
         cashRegister.openRegisterShift(tx, {
@@ -261,8 +261,6 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
       // A card payment must NOT affect cash expected total.
       const cardOrder = await makeOrder(new Date("2024-01-01T09:05:00Z"));
       await makePayment(cardOrder, 15_000, "card", new Date("2024-01-01T09:05:00Z"));
-      // A cash refund nets down the cash total.
-      await makePayment(cashOrder, -5_000, "cash", new Date("2024-01-01T09:10:00Z"));
       // A cash expense reduces expected cash.
       await makeCashExpense(3_000, new Date("2024-01-01T09:15:00Z"));
 
@@ -290,9 +288,20 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
           recordedByUserId: cashierAId, timezone: "Asia/Kathmandu",
         }),
       );
+      // A cash refund — manually recorded, the way a cashier logs handing
+      // cash back to a customer; NOT derived from a negative-amount
+      // payments row (see the cash-register.ts / schema.ts comments).
+      await db.transaction((tx) =>
+        cashRegister.recordCashMovement(tx, {
+          shiftId: shift.id,
+          type: "refund",
+          amountInPaisa: 5_000,
+          recordedByUserId: cashierAId, timezone: "Asia/Kathmandu",
+        }),
+      );
 
-      // opening 10_000 + net cash sales (20_000 - 5_000) - cash expenses
-      // 3_000 + addition 2_000 - drop 1_000 - payout 500 = 22_500.
+      // opening 10_000 + cash sales 20_000 - cash refunds 5_000 - cash
+      // expenses 3_000 + addition 2_000 - drop 1_000 - payout 500 = 22_500.
       // asOf = "now" (not a fixed past date) since the cash-movement rows
       // above were inserted with their real defaultNow() createdAt, same
       // as closeRegisterShift will use moments later below — both must
@@ -338,7 +347,6 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
 
       const order = await makeOrder(new Date("2024-02-01T09:00:00Z"));
       await makePayment(order, 20_000, "cash", new Date("2024-02-01T09:00:00Z"));
-      await makePayment(order, -1_000, "cash", new Date("2024-02-01T09:05:00Z"));
       await makeCashExpense(2_000, new Date("2024-02-01T09:10:00Z"));
       await db.transaction((tx) =>
         cashRegister.recordCashMovement(tx, {
@@ -354,6 +362,17 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
           shiftId: shift.id,
           type: "drop",
           amountInPaisa: 300,
+          recordedByUserId: cashierAId,
+          timezone: "Asia/Kathmandu",
+        }),
+      );
+      // Manually recorded refund — the way a cashier logs handing cash
+      // back to a customer; NOT a negative-amount payments row.
+      await db.transaction((tx) =>
+        cashRegister.recordCashMovement(tx, {
+          shiftId: shift.id,
+          type: "refund",
+          amountInPaisa: 1_000,
           recordedByUserId: cashierAId,
           timezone: "Asia/Kathmandu",
         }),

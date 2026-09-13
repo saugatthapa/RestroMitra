@@ -20,13 +20,13 @@ export class CashRegisterError extends HttpError {
   }
 }
 
-export type RegisterCashMovementType = "addition" | "drop" | "payout";
+export type RegisterCashMovementType = "addition" | "drop" | "payout" | "refund";
 
 export type CashRegisterBreakdown = {
   openingCashInPaisa: number;
-  /** Gross cash sales in the window — positive-amount cash payment rows only, before refunds. */
+  /** Gross cash sales in the window — positive-amount cash payment rows only. */
   cashSalesInPaisa: number;
-  /** Cash refunds in the window, as a positive magnitude (the underlying rows are negative — see the payments table's own sign convention). */
+  /** Cash refunds in the window — manually recorded via registerCashMovements type='refund', NOT derived from the payments table's own negative-amount refund rows (see the block comment above registerShifts in schema.ts for why). */
   cashRefundsInPaisa: number;
   cashExpensesInPaisa: number;
   additionsInPaisa: number;
@@ -45,7 +45,11 @@ export type CashRegisterBreakdown = {
  *
  * Every term is read from data that already exists elsewhere (payments,
  * expenses, this shift's own cash movements); nothing is duplicated or
- * ever trusted from the client.
+ * ever trusted from the client. Cash refunds are the one exception to
+ * "derived automatically": they come from this shift's own manually
+ * recorded registerCashMovements rows (type='refund'), the same as
+ * additions/drops/payouts — never from the payments table's negative-amount
+ * refund rows, which stay purely an order-accounting fact.
  *
  * Returns the full line-item breakdown, not just the total — the Cash
  * Register screen shows "Cash sales / Cash refunds / Cash expenses /
@@ -71,14 +75,14 @@ export async function computeCashRegisterBreakdown(
 ): Promise<CashRegisterBreakdown> {
   const { shiftId, branchId, openingCashInPaisa, openedAt, asOf } = params;
 
-  // Cash sales and cash refunds, split apart in one query rather than one
-  // SUM of the signed total (payments.amountInPaisa: positive = payment,
-  // negative = refund) — the UI needs both figures shown separately, not
-  // just their net.
+  // Gross cash sales — positive-amount cash payment rows only. Cash refunds
+  // are NOT read from this table's own negative-amount rows (see the
+  // block comment above computeCashRegisterBreakdown / registerShifts in
+  // schema.ts) — they're a manual registerCashMovements entry, folded into
+  // the movement-type loop below alongside additions/drops/payouts.
   const [cashPaymentsRow] = await tx
     .select({
       sales: sql<string>`coalesce(sum(case when ${payments.amountInPaisa} > 0 then ${payments.amountInPaisa} else 0 end), 0)`,
-      refunds: sql<string>`coalesce(sum(case when ${payments.amountInPaisa} < 0 then -${payments.amountInPaisa} else 0 end), 0)`,
     })
     .from(payments)
     .innerJoin(orders, eq(payments.orderId, orders.id))
@@ -91,7 +95,6 @@ export async function computeCashRegisterBreakdown(
       ),
     );
   const cashSalesInPaisa = Number(cashPaymentsRow?.sales ?? 0);
-  const cashRefundsInPaisa = Number(cashPaymentsRow?.refunds ?? 0);
 
   // Cash expenses paid out of this branch's till during the shift. Voided
   // expenses never actually paid out, so they're excluded regardless of
@@ -111,7 +114,8 @@ export async function computeCashRegisterBreakdown(
     );
   const cashExpensesInPaisa = Number(cashExpensesRow?.total ?? 0);
 
-  // This shift's own manual cash movements, grouped by type.
+  // This shift's own manual cash movements, grouped by type — refunds
+  // included, same as additions/drops/payouts (see comment above).
   const movementRows = await tx
     .select({
       type: registerCashMovements.type,
@@ -124,11 +128,13 @@ export async function computeCashRegisterBreakdown(
   let additionsInPaisa = 0;
   let dropsInPaisa = 0;
   let payoutsInPaisa = 0;
+  let cashRefundsInPaisa = 0;
   for (const row of movementRows) {
     const amount = Number(row.total);
     if (row.type === "addition") additionsInPaisa = amount;
     else if (row.type === "drop") dropsInPaisa = amount;
     else if (row.type === "payout") payoutsInPaisa = amount;
+    else if (row.type === "refund") cashRefundsInPaisa = amount;
   }
 
   const expectedCashInPaisa =
@@ -269,7 +275,7 @@ export async function openRegisterShift(
   }
 }
 
-/** Records a manual cash movement (addition/drop/payout) against an OPEN shift. */
+/** Records a manual cash movement (addition/drop/payout/refund) against an OPEN shift. */
 export async function recordCashMovement(
   tx: Transaction,
   params: {
