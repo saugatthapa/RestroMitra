@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { suppliers } from "@/db/schema";
+import { branches, suppliers } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { recordSupplierPaymentSchema } from "@/lib/validation/supplier-statement";
 import { recordSupplierPayment } from "@/lib/ledger";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
+import { postSupplierPaymentVoucher } from "@/lib/accounting/integrations/purchases";
 
 /**
  * Records a lump-sum payment against a supplier's outstanding credit-
@@ -51,16 +53,46 @@ export async function POST(
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
 
-    const result = await db.transaction((tx) =>
-      recordSupplierPayment(tx, {
+    const result = await db.transaction(async (tx) => {
+      const payment = await recordSupplierPayment(tx, {
         restaurantId,
         supplierId,
         amountInPaisa: data.amount,
         note: data.note || null,
         timezone,
         recordedByUserId: session.user.id,
-      }),
-    );
+      });
+
+      // Accounting module Phase 4, Slice 4c — one voucher for the total
+      // amount actually applied, per ACCOUNTING_PHASE_4_PLAN.md's own note
+      // (this can settle several purchases' Accounts Payable in a single
+      // call). This lump-sum payment isn't scoped to one purchase's branch
+      // — it can pay down dues from purchases recorded at different
+      // branches — so it's tagged to the restaurant's main branch, the same
+      // pragmatic default every other restaurant-wide automatic posting in
+      // this phase falls back to when the data model has no single "right"
+      // branch to pick.
+      if (await isAutomaticPostingEnabled(tx, restaurantId) && payment.settlements.length > 0) {
+        const [mainBranch] = await tx
+          .select({ id: branches.id })
+          .from(branches)
+          .where(and(eq(branches.restaurantId, restaurantId), eq(branches.isMain, true)))
+          .limit(1);
+        if (mainBranch) {
+          await postSupplierPaymentVoucher(tx, {
+            restaurantId,
+            branchId: mainBranch.id,
+            supplierId,
+            firstSettlementEntryId: payment.settlements[0].settlementEntry.id,
+            appliedInPaisa: payment.appliedInPaisa,
+            timezone,
+            createdByUserId: session.user.id,
+          });
+        }
+      }
+
+      return payment;
+    });
 
     await recordAuditLog({
       restaurantId,

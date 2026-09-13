@@ -9,6 +9,8 @@ import { voidPurchaseSchema } from "@/lib/validation/inventory";
 import { voidPurchase } from "@/lib/supplier-dues";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
+import { reversePurchaseVoucher } from "@/lib/accounting/integrations/purchases";
 
 /**
  * Voids a purchase — see voidPurchase's own doc comment in supplier-dues.ts
@@ -51,16 +53,35 @@ export async function POST(
       branchId: grantedBranchId,
     });
 
-    const result = await db.transaction((tx) =>
-      voidPurchase(tx, {
+    const result = await db.transaction(async (tx) => {
+      const voided = await voidPurchase(tx, {
         restaurantId,
         purchaseId,
         voidedByUserId: session.user.id,
         reason: parsed.data.reason,
         timezone,
         role,
-      }),
-    );
+      });
+
+      // Accounting module Phase 4, Slice 4c — voidPurchase() above already
+      // reverses the stock movement and the linked Account Books ledger due;
+      // this reverses the Purchase Voucher the same way, so Inventory and
+      // Accounts Payable/Cash don't stay permanently overstated by a voided
+      // purchase. See reversePurchaseVoucher's own doc comment for why this
+      // is always a full, safe reversal (voidPurchase already refuses to
+      // void once any payment has been recorded against it).
+      if (await isAutomaticPostingEnabled(tx, restaurantId)) {
+        await reversePurchaseVoucher(tx, {
+          restaurantId,
+          purchaseId,
+          reason: parsed.data.reason,
+          reversedByUserId: session.user.id,
+          timezone,
+        });
+      }
+
+      return voided;
+    });
 
     await recordAuditLog({
       restaurantId,

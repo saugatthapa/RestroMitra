@@ -12,6 +12,8 @@ import { recordPurchaseLedgerEntry } from "@/lib/ledger";
 import { requireBranchAccess } from "@/lib/rbac/guard";
 import { restaurantDate } from "@/lib/restaurant-date";
 import { assertBusinessDayWritable } from "@/lib/daily-closing";
+import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
+import { postPurchaseVoucher } from "@/lib/accounting/integrations/purchases";
 
 export async function GET(
   _request: Request,
@@ -238,6 +240,22 @@ export async function POST(
         recordedByUserId: session.user.id,
         supplierId: data.supplierId ?? null,
       });
+
+      // Accounting module Phase 4, Slice 4c — see
+      // ACCOUNTING_POLICY_AND_POSTING_MATRIX.md §4. Additive alongside the
+      // recordPurchaseLedgerEntry call above, same transaction.
+      if (await isAutomaticPostingEnabled(tx, restaurantId)) {
+        await postPurchaseVoucher(tx, {
+          restaurantId,
+          branchId: data.branchId,
+          purchaseId: purchase.id,
+          totalInPaisa,
+          isCredit: data.isCredit,
+          supplierId: data.supplierId ?? null,
+          timezone,
+          createdByUserId: session.user.id,
+        });
+      }
 
       return { purchase, items: insertedItems, ledgerEntry };
     });

@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { customers } from "@/db/schema";
+import { branches, customers } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { settleCustomerCreditSchema } from "@/lib/validation/customers";
 import { settleCustomerCredit } from "@/lib/ledger";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
+import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
+import { postCustomerCreditSettlementVoucher } from "@/lib/accounting/integrations/purchases";
 
 /**
  * Commercial Launch Phase B.5 — Customer Credit. Records a lump-sum
@@ -52,16 +54,40 @@ export async function POST(
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
 
-    const result = await db.transaction((tx) =>
-      settleCustomerCredit(tx, {
+    const result = await db.transaction(async (tx) => {
+      const settlement = await settleCustomerCredit(tx, {
         restaurantId,
         customerId,
         amountInPaisa: data.amount,
         note: data.note || null,
         timezone,
         recordedByUserId: session.user.id,
-      }),
-    );
+      });
+
+      // Accounting module Phase 4, Slice 4c — AR mirror of the supplier
+      // lump-sum payment above; same "one voucher for the total applied,
+      // tagged to the main branch" reasoning.
+      if (await isAutomaticPostingEnabled(tx, restaurantId) && settlement.settlements.length > 0) {
+        const [mainBranch] = await tx
+          .select({ id: branches.id })
+          .from(branches)
+          .where(and(eq(branches.restaurantId, restaurantId), eq(branches.isMain, true)))
+          .limit(1);
+        if (mainBranch) {
+          await postCustomerCreditSettlementVoucher(tx, {
+            restaurantId,
+            branchId: mainBranch.id,
+            customerId,
+            firstSettlementEntryId: settlement.settlements[0].settlementEntry.id,
+            appliedInPaisa: settlement.appliedInPaisa,
+            timezone,
+            createdByUserId: session.user.id,
+          });
+        }
+      }
+
+      return settlement;
+    });
 
     await recordAuditLog({
       restaurantId,
