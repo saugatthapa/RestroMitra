@@ -642,6 +642,18 @@ function DashboardShellContent({
           permission: PERMISSIONS.MANAGE_ACCOUNT_BOOKS,
         },
         {
+          // Phase 2 of the double-entry accounting module
+          // (ACCOUNTING_MODULE_PLAN.md) — deliberately a SEPARATE nav item
+          // from Account Books, not a replacement: Account Books stays
+          // fully reachable until Phase 4 proves the new module has
+          // equivalent operational data, per the plan's own Part 4.
+          label: t("nav.accounting"),
+          href: "/dashboard/accounting",
+          enabled: true,
+          icon: <NavIcon.Accounting />,
+          permission: PERMISSIONS.MANAGE_ACCOUNTING,
+        },
+        {
           label: t("nav.website"),
           href: "/dashboard/website",
           enabled: true,

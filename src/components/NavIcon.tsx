@@ -122,6 +122,18 @@ export const NavIcon = {
       <path d="M9 11h7" />
     </svg>
   ),
+  // Double-entry Accounting module (Phase 2) — a balance scale, distinct
+  // from AccountBooks' ledger-book glyph, so the two nav items read as
+  // related-but-different at a glance.
+  Accounting: () => (
+    <svg {...iconProps}>
+      <path d="M12 3v18" />
+      <path d="M5 7h14" />
+      <path d="M5 7 2 13a3 3 0 0 0 6 0L5 7Z" />
+      <path d="M19 7l-3 6a3 3 0 0 0 6 0l-3-6Z" />
+      <path d="M9 21h6" />
+    </svg>
+  ),
   Branches: () => (
     <svg {...iconProps}>
       <rect x="5" y="3" width="14" height="18" rx="1" />

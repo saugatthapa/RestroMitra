@@ -37,6 +37,7 @@ const DICTIONARY = {
   "nav.coupons": { en: "Coupons", ne: "कूपनहरू" },
   "nav.expenses": { en: "Expenses", ne: "खर्चहरू" },
   "nav.accountBooks": { en: "Account Books", ne: "खाता बही" },
+  "nav.accounting": { en: "Accounting", ne: "लेखा" },
   "nav.website": { en: "Website", ne: "वेबसाइट" },
   "nav.auditLog": { en: "Activity Log", ne: "गतिविधि लग" },
   "nav.register": { en: "Cash Register", ne: "नगद रजिस्टर" },
