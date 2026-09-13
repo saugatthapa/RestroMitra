@@ -83,3 +83,9 @@ export const reopenAccountingPeriodSchema = z.object({
 });
 
 export const accountingVoucherTypeSchema = z.enum(VOUCHER_TYPES);
+
+// A plain "YYYY-MM-DD" check for report query params (?asOfDate=, ?fromDate=,
+// ?toDate=) — stricter than the voucher-input date refine above (which just
+// needs something `new Date()` can parse) since these come from a raw query
+// string rather than a date-picker payload.
+export const reportDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD.");

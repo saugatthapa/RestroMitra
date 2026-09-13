@@ -102,6 +102,7 @@ const ALL_TABS = [
   "Journal Vouchers",
   "Day Book",
   "Ledger Accounts",
+  "Reports",
   "Periods",
 ] as const;
 type Tab = (typeof ALL_TABS)[number];
@@ -132,6 +133,16 @@ const STATUS_BADGE: Record<Voucher["status"], string> = {
 
 export function AccountingBoard({ slug, canReopenPeriod }: { slug: string; canReopenPeriod: boolean }) {
   const [tab, setTab] = useState<Tab>("Overview");
+  // Set when a Reports row is clicked ("drill down") so Ledger Accounts opens
+  // with that account already selected. Cleared once Ledger Accounts reads
+  // it (each tab switch remounts the destination tab, so a plain useState
+  // initializer there is enough — see LedgerAccountsTab).
+  const [ledgerDrillDownAccountId, setLedgerDrillDownAccountId] = useState<string | null>(null);
+
+  function goToLedger(accountId: string) {
+    setLedgerDrillDownAccountId(accountId);
+    setTab("Ledger Accounts");
+  }
 
   return (
     <div className="space-y-4">
@@ -155,7 +166,10 @@ export function AccountingBoard({ slug, canReopenPeriod }: { slug: string; canRe
       {tab === "Chart of Accounts" && <ChartOfAccountsTab slug={slug} />}
       {tab === "Journal Vouchers" && <VouchersTab slug={slug} typeFilter="journal" />}
       {tab === "Day Book" && <VouchersTab slug={slug} typeFilter={null} />}
-      {tab === "Ledger Accounts" && <LedgerAccountsTab slug={slug} />}
+      {tab === "Ledger Accounts" && (
+        <LedgerAccountsTab slug={slug} initialAccountId={ledgerDrillDownAccountId} />
+      )}
+      {tab === "Reports" && <ReportsTab slug={slug} onDrillDown={goToLedger} />}
       {tab === "Periods" && <PeriodsTab slug={slug} canReopenPeriod={canReopenPeriod} />}
     </div>
   );
@@ -924,10 +938,19 @@ function NewJournalVoucherForm({ slug, onPosted }: { slug: string; onPosted: () 
 // Ledger Accounts
 // ---------------------------------------------------------------------------
 
-function LedgerAccountsTab({ slug }: { slug: string }) {
+function LedgerAccountsTab({
+  slug,
+  initialAccountId,
+}: {
+  slug: string;
+  // Set by a Reports-tab drill-down click (see AccountingBoard.goToLedger).
+  // A plain useState initializer is enough because switching to this tab
+  // always remounts it fresh — there's no stale-prop case to guard against.
+  initialAccountId?: string | null;
+}) {
   const dateSystem = useDateSystem();
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [accountId, setAccountId] = useState("");
+  const [accountId, setAccountId] = useState(initialAccountId ?? "");
   const [account, setAccount] = useState<AccountBalance | null>(null);
   const [lines, setLines] = useState<LedgerLine[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1026,6 +1049,407 @@ function LedgerAccountsTab({ slug }: { slug: string }) {
             </tbody>
           </table>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reports — Trial Balance, Profit & Loss, Balance Sheet (Phase 3). Cash Flow
+// is deliberately not here — see ACCOUNTING_MODULE_PLAN.md's review
+// correction #5 (relocated to Phase 5, once Phase 4's automatic postings
+// give it real operating/investing/financing activity to reconcile
+// against). Clicking any account name drills into Ledger Accounts.
+// ---------------------------------------------------------------------------
+
+type TrialBalanceRow = {
+  accountId: string;
+  code: string;
+  name: string;
+  type: AccountType;
+  debitInPaisa: number;
+  creditInPaisa: number;
+};
+type TrialBalanceData = {
+  asOfDate: string | null;
+  rows: TrialBalanceRow[];
+  totalDebitInPaisa: number;
+  totalCreditInPaisa: number;
+  isBalanced: boolean;
+};
+
+type StatementLine = { accountId: string; code: string; name: string; amountInPaisa: number };
+type ProfitAndLossData = {
+  fromDate: string | null;
+  toDate: string | null;
+  income: StatementLine[];
+  expenses: StatementLine[];
+  totalIncomeInPaisa: number;
+  totalExpenseInPaisa: number;
+  netIncomeInPaisa: number;
+};
+type BalanceSheetData = {
+  asOfDate: string | null;
+  assets: StatementLine[];
+  liabilities: StatementLine[];
+  equity: StatementLine[];
+  currentPeriodEarningsInPaisa: number;
+  totalAssetsInPaisa: number;
+  totalLiabilitiesInPaisa: number;
+  totalEquityInPaisa: number;
+  isBalanced: boolean;
+};
+
+const REPORT_TABS = ["Trial Balance", "Profit & Loss", "Balance Sheet"] as const;
+type ReportTab = (typeof REPORT_TABS)[number];
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+function firstOfMonthIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function ReportsTab({ slug, onDrillDown }: { slug: string; onDrillDown: (accountId: string) => void }) {
+  const [reportTab, setReportTab] = useState<ReportTab>("Trial Balance");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {REPORT_TABS.map((t) => (
+          <button
+            key={t}
+            onClick={() => setReportTab(t)}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${
+              reportTab === t
+                ? "bg-orange-100 text-orange-800"
+                : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {reportTab === "Trial Balance" && <TrialBalanceReport slug={slug} onDrillDown={onDrillDown} />}
+      {reportTab === "Profit & Loss" && <ProfitAndLossReport slug={slug} onDrillDown={onDrillDown} />}
+      {reportTab === "Balance Sheet" && <BalanceSheetReport slug={slug} onDrillDown={onDrillDown} />}
+    </div>
+  );
+}
+
+function AccountLink({ name, onClick }: { name: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="text-left text-neutral-900 hover:text-orange-700 hover:underline">
+      {name}
+    </button>
+  );
+}
+
+function TrialBalanceReport({ slug, onDrillDown }: { slug: string; onDrillDown: (accountId: string) => void }) {
+  const [asOfDate, setAsOfDate] = useState(todayIso());
+  const [data, setData] = useState<TrialBalanceData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    apiGet<TrialBalanceData>(`${base(slug)}/accounting/reports/trial-balance?asOfDate=${asOfDate}`)
+      .then((res) => {
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load the Trial Balance."))
+      .finally(() => setLoading(false));
+  }, [slug, asOfDate]);
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <label className="block max-w-xs text-sm">
+        <span className="mb-1 block text-neutral-600">As of</span>
+        <input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="input" />
+      </label>
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : (
+        data && (
+          <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
+                  <th className="px-3 py-2">Code</th>
+                  <th className="px-3 py-2">Account</th>
+                  <th className="px-3 py-2 text-right">Debit</th>
+                  <th className="px-3 py-2 text-right">Credit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((r) => (
+                  <tr key={r.accountId} className="border-b border-neutral-100 last:border-0">
+                    <td className="px-3 py-2 font-mono text-xs text-neutral-500">{r.code}</td>
+                    <td className="px-3 py-2">
+                      <AccountLink name={r.name} onClick={() => onDrillDown(r.accountId)} />
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {r.debitInPaisa > 0 ? formatNPR(r.debitInPaisa) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {r.creditInPaisa > 0 ? formatNPR(r.creditInPaisa) : "—"}
+                    </td>
+                  </tr>
+                ))}
+                {data.rows.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-6 text-center text-sm text-neutral-400">
+                      No activity as of this date.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-neutral-300 font-semibold text-neutral-900">
+                  <td className="px-3 py-2" colSpan={2}>
+                    Total
+                  </td>
+                  <td className="px-3 py-2 text-right">{formatNPR(data.totalDebitInPaisa)}</td>
+                  <td className="px-3 py-2 text-right">{formatNPR(data.totalCreditInPaisa)}</td>
+                </tr>
+              </tfoot>
+            </table>
+            <div
+              className={`border-t border-neutral-200 px-4 py-2 text-xs ${
+                data.isBalanced ? "text-green-700" : "text-red-700"
+              }`}
+            >
+              {data.isBalanced
+                ? "Debit and credit totals match."
+                : "Debit and credit totals do NOT match — that points to a data problem, since postVoucher() never allows an unbalanced posting."}
+            </div>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+function ProfitAndLossReport({ slug, onDrillDown }: { slug: string; onDrillDown: (accountId: string) => void }) {
+  const [fromDate, setFromDate] = useState(firstOfMonthIso());
+  const [toDate, setToDate] = useState(todayIso());
+  const [data, setData] = useState<ProfitAndLossData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    apiGet<ProfitAndLossData>(
+      `${base(slug)}/accounting/reports/profit-and-loss?fromDate=${fromDate}&toDate=${toDate}`,
+    )
+      .then((res) => {
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load Profit & Loss."))
+      .finally(() => setLoading(false));
+  }, [slug, fromDate, toDate]);
+
+  function Section({ title, lines, total }: { title: string; lines: StatementLine[]; total: number }) {
+    return (
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+        <div className="border-b border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-900">{title}</div>
+        <table className="w-full text-sm">
+          <tbody>
+            {lines.map((l) => (
+              <tr key={l.accountId} className="border-b border-neutral-100 last:border-0">
+                <td className="px-4 py-2 font-mono text-xs text-neutral-500">{l.code}</td>
+                <td className="px-3 py-2">
+                  <AccountLink name={l.name} onClick={() => onDrillDown(l.accountId)} />
+                </td>
+                <td className="px-3 py-2 text-right">{formatNPR(l.amountInPaisa)}</td>
+              </tr>
+            ))}
+            {lines.length === 0 && (
+              <tr>
+                <td colSpan={3} className="px-4 py-4 text-center text-sm text-neutral-400">
+                  No activity in this period.
+                </td>
+              </tr>
+            )}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-neutral-300 font-semibold text-neutral-900">
+              <td className="px-4 py-2" colSpan={2}>
+                Total {title}
+              </td>
+              <td className="px-3 py-2 text-right">{formatNPR(total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="grid max-w-md gap-3 sm:grid-cols-2">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">From</span>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">To</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
+        </label>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : (
+        data && (
+          <div className="space-y-4">
+            <Section title="Income" lines={data.income} total={data.totalIncomeInPaisa} />
+            <Section title="Expenses" lines={data.expenses} total={data.totalExpenseInPaisa} />
+            <div className="flex items-center justify-between rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
+              <span className="text-sm font-medium text-neutral-900">Net Income</span>
+              <span
+                className={`text-sm font-semibold ${
+                  data.netIncomeInPaisa >= 0 ? "text-green-700" : "text-red-700"
+                }`}
+              >
+                {formatNPR(data.netIncomeInPaisa)}
+              </span>
+            </div>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+function BalanceSheetReport({ slug, onDrillDown }: { slug: string; onDrillDown: (accountId: string) => void }) {
+  const [asOfDate, setAsOfDate] = useState(todayIso());
+  const [data, setData] = useState<BalanceSheetData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    apiGet<BalanceSheetData>(`${base(slug)}/accounting/reports/balance-sheet?asOfDate=${asOfDate}`)
+      .then((res) => {
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load the Balance Sheet."))
+      .finally(() => setLoading(false));
+  }, [slug, asOfDate]);
+
+  function Section({ title, lines, total }: { title: string; lines: StatementLine[]; total: number }) {
+    return (
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+        <div className="border-b border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-900">{title}</div>
+        <table className="w-full text-sm">
+          <tbody>
+            {lines.map((l) => (
+              <tr key={l.accountId} className="border-b border-neutral-100 last:border-0">
+                <td className="px-4 py-2 font-mono text-xs text-neutral-500">{l.code}</td>
+                <td className="px-3 py-2">
+                  <AccountLink name={l.name} onClick={() => onDrillDown(l.accountId)} />
+                </td>
+                <td className="px-3 py-2 text-right">{formatNPR(l.amountInPaisa)}</td>
+              </tr>
+            ))}
+            {lines.length === 0 && (
+              <tr>
+                <td colSpan={3} className="px-4 py-4 text-center text-sm text-neutral-400">
+                  No balance in this section.
+                </td>
+              </tr>
+            )}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-neutral-300 font-semibold text-neutral-900">
+              <td className="px-4 py-2" colSpan={2}>
+                Total {title}
+              </td>
+              <td className="px-3 py-2 text-right">{formatNPR(total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <label className="block max-w-xs text-sm">
+        <span className="mb-1 block text-neutral-600">As of</span>
+        <input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="input" />
+      </label>
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : (
+        data && (
+          <div className="space-y-4">
+            <Section title="Assets" lines={data.assets} total={data.totalAssetsInPaisa} />
+            <Section title="Liabilities" lines={data.liabilities} total={data.totalLiabilitiesInPaisa} />
+            <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+              <div className="border-b border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-900">
+                Equity
+              </div>
+              <table className="w-full text-sm">
+                <tbody>
+                  {data.equity.map((l) => (
+                    <tr key={l.accountId} className="border-b border-neutral-100 last:border-0">
+                      <td className="px-4 py-2 font-mono text-xs text-neutral-500">{l.code}</td>
+                      <td className="px-3 py-2">
+                        <AccountLink name={l.name} onClick={() => onDrillDown(l.accountId)} />
+                      </td>
+                      <td className="px-3 py-2 text-right">{formatNPR(l.amountInPaisa)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-b border-neutral-100 last:border-0">
+                    <td className="px-4 py-2" />
+                    <td className="px-3 py-2 text-neutral-600">
+                      Current Period Earnings
+                      <span className="ml-1 text-xs text-neutral-400">(net income to date)</span>
+                    </td>
+                    <td className="px-3 py-2 text-right">{formatNPR(data.currentPeriodEarningsInPaisa)}</td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-neutral-300 font-semibold text-neutral-900">
+                    <td className="px-4 py-2" colSpan={2}>
+                      Total Equity
+                    </td>
+                    <td className="px-3 py-2 text-right">{formatNPR(data.totalEquityInPaisa)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <div
+              className={`rounded-2xl border px-4 py-2 text-xs ${
+                data.isBalanced
+                  ? "border-green-200 bg-green-50 text-green-700"
+                  : "border-red-200 bg-red-50 text-red-700"
+              }`}
+            >
+              {data.isBalanced
+                ? "Assets = Liabilities + Equity (including Current Period Earnings)."
+                : "Assets do NOT equal Liabilities + Equity — that points to a data problem."}
+            </div>
+            <p className="text-xs text-neutral-400">
+              Current Period Earnings folds in net income since inception because there are no
+              period-closing entries yet. This keeps the sheet balanced arithmetically, but it won&apos;t
+              reflect every real-world balance (inventory, accrued liabilities, etc.) until Phase 4/5&apos;s
+              automatic postings land.
+            </p>
+          </div>
+        )
       )}
     </div>
   );

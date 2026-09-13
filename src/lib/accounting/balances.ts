@@ -1,5 +1,5 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { and, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { accountingVoucherLines, accountingVouchers, chartOfAccounts } from "@/db/schema";
 
@@ -39,7 +39,13 @@ export type AccountBalance = {
   balanceInPaisa: number;
 };
 
-export async function getAccountBalances(params: { restaurantId: string }): Promise<{
+export async function getAccountBalances(params: {
+  restaurantId: string;
+  /** Inclusive. Omit for "since inception" (Phase 2's Overview/Chart of Accounts use). */
+  fromDate?: string;
+  /** Inclusive. Omit for "as of now". Financial statements (Phase 3) pass this. */
+  toDate?: string;
+}): Promise<{
   accounts: AccountBalance[];
   totalsByType: Record<AccountBalance["type"], number>;
 }> {
@@ -47,6 +53,11 @@ export async function getAccountBalances(params: { restaurantId: string }): Prom
     .select()
     .from(chartOfAccounts)
     .where(eq(chartOfAccounts.restaurantId, params.restaurantId));
+
+  const dateConditions = [
+    params.fromDate ? gte(accountingVouchers.voucherDate, params.fromDate) : undefined,
+    params.toDate ? lte(accountingVouchers.voucherDate, params.toDate) : undefined,
+  ].filter((c): c is NonNullable<typeof c> => c !== undefined);
 
   const lines = await db
     .select({
@@ -56,7 +67,7 @@ export async function getAccountBalances(params: { restaurantId: string }): Prom
     })
     .from(accountingVoucherLines)
     .innerJoin(accountingVouchers, eq(accountingVouchers.id, accountingVoucherLines.voucherId))
-    .where(eq(accountingVouchers.restaurantId, params.restaurantId));
+    .where(and(eq(accountingVouchers.restaurantId, params.restaurantId), ...dateConditions));
 
   const totalsByAccount = new Map<string, { debit: number; credit: number }>();
   for (const line of lines) {
