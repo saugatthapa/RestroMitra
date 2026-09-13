@@ -12,6 +12,8 @@ import { HttpError } from "@/lib/http-error";
 import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
 import { assertBusinessDayWritable } from "@/lib/daily-closing";
 import { resolveExpenseDailyCloseCheckDates } from "@/lib/expenses";
+import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
+import { reverseOrRestoreExpenseVoucher } from "@/lib/accounting/integrations/expenses";
 
 async function getOwnedExpense(restaurantId: string, expenseId: string) {
   const rows = await db
@@ -191,6 +193,22 @@ export async function PATCH(
             expenseDate: row.expenseDate,
             timezone,
             recordedByUserId: session.user.id,
+          });
+        }
+
+        // Accounting module Phase 4, Slice 4d — see
+        // reverseOrRestoreExpenseVoucher's own comment for why BOTH void
+        // and un-void call the exact same function (each is just "reverse
+        // whichever voucher in this expense's chain is currently active").
+        // A no-op if this expense's original "paid" voucher was never
+        // posted in the first place (automatic posting wasn't on then).
+        if (await isAutomaticPostingEnabled(tx, restaurantId)) {
+          await reverseOrRestoreExpenseVoucher(tx, {
+            restaurantId,
+            expenseId: row.id,
+            reason: data.isVoided ? "Expense voided" : "Expense un-voided",
+            reversedByUserId: session.user.id,
+            timezone,
           });
         }
       }

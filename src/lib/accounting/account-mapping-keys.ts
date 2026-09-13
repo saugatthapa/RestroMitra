@@ -28,6 +28,18 @@ export const MAPPING_KEYS = {
   SALARY_EXPENSE: "control:salary_expense",
   SALARY_PAYABLE: "control:salary_payable",
   OPENING_BALANCE_EQUITY: "control:opening_balance_equity",
+  // Phase 4, Slice 4d — expense payments only, never a POS sales payment
+  // method. EXPENSE_PAYMENT_METHODS (finance/expense-payment-methods.ts)
+  // has six values (cash, bank_transfer, esewa, khalti, mobile_banking,
+  // other) that don't line up 1:1 with the four PAYMENT_METHOD_* keys
+  // above (those are POS-sales-shaped: cash/card/mobile_wallet/other, and
+  // "card" doesn't even apply to money going OUT). Per sign-off: cash and
+  // "other" reuse PAYMENT_METHOD_CASH/PAYMENT_METHOD_OTHER (same physical
+  // till/bucket either flow uses); bank_transfer, esewa, khalti, and
+  // mobile_banking all share this one account instead of getting four of
+  // their own, since nothing today reconciles or distinguishes between
+  // them — easy to split apart once Phase 5 adds real Bank Accounts.
+  BANK_DIGITAL_PAYMENTS: "control:bank_digital_payments",
 } as const;
 
 export type MappingKey = (typeof MAPPING_KEYS)[keyof typeof MAPPING_KEYS];

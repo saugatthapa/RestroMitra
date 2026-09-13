@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { expenses, expenseCategories } from "@/db/schema";
+import { expenses, expenseCategories, branches } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { payExpenseSchema } from "@/lib/validation/expenses";
@@ -12,6 +12,8 @@ import { recordExpenseLedgerEntry } from "@/lib/ledger";
 import { HttpError } from "@/lib/http-error";
 import { assertBusinessDayWritable } from "@/lib/daily-closing";
 import { assertRegisterOpenForCashPayment } from "@/lib/cash-register";
+import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
+import { postExpenseVoucher, type AutoProvisionedAccount } from "@/lib/accounting/integrations/expenses";
 
 /**
  * approved -> paid. This is the ONLY place a non-owner/accountant flow's
@@ -53,7 +55,7 @@ export async function POST(
       where: eq(expenseCategories.id, existing.categoryId),
     });
 
-    const updated = await db.transaction(async (tx) => {
+    const txResult = await db.transaction(async (tx) => {
       // QA hardening pass (Phase 5 / centralized daily-close lock) — THIS
       // is the moment an expense actually becomes a real cash-out (see the
       // create route's own comment on why pending_approval/approved has no
@@ -119,12 +121,44 @@ export async function POST(
         recordedByUserId: session.user.id,
       });
 
-      return row;
+      // Accounting module Phase 4, Slice 4d — see the create route's own
+      // comment on the restaurant-wide-expense branch fallback (identical
+      // reasoning here).
+      let autoProvisioned: AutoProvisionedAccount | null = null;
+      if (await isAutomaticPostingEnabled(tx, restaurantId)) {
+        const voucherBranchId =
+          row.branchId ??
+          (
+            await tx
+              .select({ id: branches.id })
+              .from(branches)
+              .where(and(eq(branches.restaurantId, restaurantId), eq(branches.isMain, true)))
+              .limit(1)
+          )[0]?.id;
+        if (voucherBranchId) {
+          const posted = await postExpenseVoucher(tx, {
+            restaurantId,
+            branchId: voucherBranchId,
+            expenseId: row.id,
+            categoryId: row.categoryId,
+            categoryName: category?.name ?? "Expense",
+            amountInPaisa: row.amountInPaisa,
+            paymentMethod: parsed.data.paymentMethod,
+            timezone,
+            createdByUserId: session.user.id,
+          });
+          autoProvisioned = posted.autoProvisionedAccount;
+        }
+      }
+
+      return { row, autoProvisioned };
     });
 
-    if (!updated) {
+    if (!txResult) {
       throw new HttpError("This expense was just updated by someone else. Please refresh.", 409);
     }
+    const updated = txResult.row;
+    const autoProvisionedAccount = txResult.autoProvisioned;
 
     await recordAuditLog({
       restaurantId,
@@ -135,6 +169,18 @@ export async function POST(
       ipAddress: getClientIp(request),
       metadata: { paymentMethod: parsed.data.paymentMethod, amountInPaisa: updated.amountInPaisa },
     });
+
+    if (autoProvisionedAccount) {
+      await recordAuditLog({
+        restaurantId,
+        userId: session.user.id,
+        action: "accounting.account_auto_created",
+        resourceType: "chart_of_accounts",
+        resourceId: autoProvisionedAccount.id,
+        ipAddress: getClientIp(request),
+        metadata: { code: autoProvisionedAccount.code, name: autoProvisionedAccount.name, reason: "expense_category_first_use" },
+      });
+    }
 
     return NextResponse.json({ expense: updated });
   } catch (err) {

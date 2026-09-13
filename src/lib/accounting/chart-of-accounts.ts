@@ -35,6 +35,10 @@ const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   { code: "1010", name: "Card Clearing", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.PAYMENT_METHOD_CARD] },
   { code: "1020", name: "Mobile Wallet Clearing", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.PAYMENT_METHOD_MOBILE_WALLET] },
   { code: "1030", name: "Other Clearing", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.PAYMENT_METHOD_OTHER] },
+  // Phase 4, Slice 4d — see MAPPING_KEYS.BANK_DIGITAL_PAYMENTS' own
+  // comment: the shared account for expense payments made by bank
+  // transfer, eSewa, Khalti, or mobile banking (never used by POS sales).
+  { code: "1040", name: "Bank / Digital Payments", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.BANK_DIGITAL_PAYMENTS] },
   { code: "1100", name: "Accounts Receivable", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.ACCOUNTS_RECEIVABLE] },
   { code: "1200", name: "Inventory", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.INVENTORY] },
   { code: "1900", name: "Fixed Assets", type: "asset", normalBalance: "debit" },

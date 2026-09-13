@@ -15,6 +15,8 @@ import { HttpError } from "@/lib/http-error";
 import { restaurantDate } from "@/lib/restaurant-date";
 import { isUniqueViolation } from "@/lib/db-error";
 import { assertBusinessDayWritable } from "@/lib/daily-closing";
+import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
+import { postExpenseVoucher, type AutoProvisionedAccount } from "@/lib/accounting/integrations/expenses";
 
 const EXPENSE_LIST_LIMIT = 500;
 
@@ -197,8 +199,9 @@ export async function POST(
     // matching Account Books entry once paid, or vice versa (same "one
     // write, two rows, one transaction" shape as order completion).
     let expense;
+    let autoProvisionedAccount: AutoProvisionedAccount | null = null;
     try {
-      expense = await db.transaction(async (tx) => {
+      const txResult = await db.transaction(async (tx) => {
         // QA hardening pass (Phase 5 / centralized daily-close lock) — an
         // expense only actually affects a business day's numbers once it's
         // PAID (getTotalExpensesInPaisa/Daily Closing both filter on
@@ -247,6 +250,7 @@ export async function POST(
           })
           .returning();
 
+        let autoProvisioned: AutoProvisionedAccount | null = null;
         if (status === "paid") {
           await recordExpenseLedgerEntry(tx, {
             restaurantId,
@@ -258,10 +262,45 @@ export async function POST(
             timezone,
             recordedByUserId: session.user.id,
           });
+
+          // Accounting module Phase 4, Slice 4d — see
+          // ACCOUNTING_POLICY_AND_POSTING_MATRIX.md §5. A restaurant-wide
+          // expense (branchId null) has no branch of its own to tag the
+          // voucher with — postVoucher() always requires one (see its own
+          // schema comment) — so it falls back to the restaurant's main
+          // branch, same pragmatic default Slice 4c's lump-sum settlements
+          // already use for the same reason.
+          if (await isAutomaticPostingEnabled(tx, restaurantId)) {
+            const voucherBranchId =
+              branchId ??
+              (
+                await tx
+                  .select({ id: branches.id })
+                  .from(branches)
+                  .where(and(eq(branches.restaurantId, restaurantId), eq(branches.isMain, true)))
+                  .limit(1)
+              )[0]?.id;
+            if (voucherBranchId) {
+              const posted = await postExpenseVoucher(tx, {
+                restaurantId,
+                branchId: voucherBranchId,
+                expenseId: row.id,
+                categoryId: row.categoryId,
+                categoryName: category.name,
+                amountInPaisa: row.amountInPaisa,
+                paymentMethod: data.paymentMethod!,
+                timezone,
+                createdByUserId: session.user.id,
+              });
+              autoProvisioned = posted.autoProvisionedAccount;
+            }
+          }
         }
 
-        return row;
+        return { row, autoProvisioned };
       });
+      expense = txResult.row;
+      autoProvisionedAccount = txResult.autoProvisioned;
     } catch (err) {
       // A concurrent duplicate submission of the SAME retry raced us past
       // the pre-check above and lost the unique-index collision — recover
@@ -294,6 +333,22 @@ export async function POST(
       ipAddress: getClientIp(request),
       metadata: { categoryId: expense.categoryId, amountInPaisa: expense.amountInPaisa, status },
     });
+
+    // Accounting module Phase 4 plan, Part 2.5 — logged only after the
+    // transaction that created it has actually committed (recordAuditLog
+    // always writes through the top-level db handle, never `tx` — see
+    // postExpenseVoucher's own comment on why).
+    if (autoProvisionedAccount) {
+      await recordAuditLog({
+        restaurantId,
+        userId: session.user.id,
+        action: "accounting.account_auto_created",
+        resourceType: "chart_of_accounts",
+        resourceId: autoProvisionedAccount.id,
+        ipAddress: getClientIp(request),
+        metadata: { code: autoProvisionedAccount.code, name: autoProvisionedAccount.name, reason: "expense_category_first_use" },
+      });
+    }
 
     return NextResponse.json({ expense: { ...expense, categoryName: category.name } }, { status: 201 });
   } catch (err) {
