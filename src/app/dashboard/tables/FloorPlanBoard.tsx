@@ -313,8 +313,17 @@ export function FloorPlanBoard({ slug }: { slug: string }) {
       state.moved = true;
     }
     if (!state.moved) return;
-    const nextX = Math.max(0, state.origX + dx);
-    const nextY = Math.max(0, state.origY + dy);
+    // e.clientX/clientY are fractional pixels (sub-pixel pointer
+    // coordinates are routine on high-DPI displays or a zoomed-in
+    // browser), so dx/dy — and therefore nextX/nextY — can come out
+    // non-integer. posX/posY are validated as integers server-side
+    // (updateTableSchema), so an un-rounded drag silently failed to save
+    // with a generic "Invalid input" alert and snapped the table back.
+    // Round here, at the one place these coordinates are produced, so
+    // every downstream read (the collision check, the PATCH body) is
+    // already a whole number.
+    const nextX = Math.round(Math.max(0, state.origX + dx));
+    const nextY = Math.round(Math.max(0, state.origY + dy));
     setTables((prev) => prev.map((t) => (t.id === state.id ? { ...t, posX: nextX, posY: nextY } : t)));
   };
 
