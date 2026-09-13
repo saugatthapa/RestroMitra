@@ -11,6 +11,8 @@ import { HttpError } from "@/lib/http-error";
 import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
 import { restaurantDate } from "@/lib/restaurant-date";
 import { assertBusinessDayWritable } from "@/lib/daily-closing";
+import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
+import { reversePayrollVoucher } from "@/lib/accounting/integrations/payroll";
 
 /**
  * Voids a payroll payment — recorded to the wrong person, wrong amount,
@@ -107,6 +109,19 @@ export async function PATCH(
         timezone,
         recordedByUserId: session.user.id,
       });
+
+      // Accounting module Phase 4, Slice 4e — a no-op if this payment was
+      // never posted in the first place (automatic posting wasn't on when
+      // it was originally paid).
+      if (await isAutomaticPostingEnabled(tx, restaurantId)) {
+        await reversePayrollVoucher(tx, {
+          restaurantId,
+          payrollPaymentId: row.id,
+          reason: "Payroll payment voided",
+          reversedByUserId: session.user.id,
+          timezone,
+        });
+      }
 
       return row;
     });

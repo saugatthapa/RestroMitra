@@ -9,8 +9,12 @@ import { restaurantDate } from "@/lib/restaurant-date";
 import type { ExpensePaymentMethod } from "@/lib/finance/expense-payment-methods";
 
 // See MAPPING_KEYS.BANK_DIGITAL_PAYMENTS' own comment for why four of these
-// six methods collapse onto one shared account.
-const EXPENSE_PAYMENT_METHOD_MAPPING_KEYS: Record<ExpensePaymentMethod, MappingKey> = {
+// six methods collapse onto one shared account. Exported because payroll
+// payouts (Slice 4e) use the exact same six-value method set — see
+// expense-payment-methods.ts's own doc comment on why the two share one
+// underlying catalog (payout-methods.ts) — and get the identical treatment,
+// not a second copy of this table that could drift from this one.
+export const PAYOUT_METHOD_MAPPING_KEYS: Record<ExpensePaymentMethod, MappingKey> = {
   cash: MAPPING_KEYS.PAYMENT_METHOD_CASH,
   bank_transfer: MAPPING_KEYS.BANK_DIGITAL_PAYMENTS,
   esewa: MAPPING_KEYS.BANK_DIGITAL_PAYMENTS,
@@ -61,7 +65,7 @@ export async function postExpenseVoucher(
     categoryName: params.categoryName,
   });
 
-  const clearingKey = EXPENSE_PAYMENT_METHOD_MAPPING_KEYS[params.paymentMethod];
+  const clearingKey = PAYOUT_METHOD_MAPPING_KEYS[params.paymentMethod];
   const clearingAccounts = await resolveAccountMappings(tx, {
     restaurantId: params.restaurantId,
     keys: [clearingKey],

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
-import { payrollPayments, userRoles, users } from "@/db/schema";
+import { payrollPayments, userRoles, users, branches } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { createPayrollPaymentSchema } from "@/lib/validation/payroll";
@@ -13,6 +13,8 @@ import { getPayrollComputation } from "@/lib/payroll";
 import { requireBranchAccessForNullableTarget } from "@/lib/rbac/guard";
 import { isUniqueViolation } from "@/lib/db-error";
 import { assertBusinessDayWritable } from "@/lib/daily-closing";
+import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
+import { postPayrollVoucher } from "@/lib/accounting/integrations/payroll";
 
 const PAYROLL_LIST_LIMIT = 500;
 
@@ -200,6 +202,34 @@ export async function POST(
           timezone,
           recordedByUserId: session.user.id,
         });
+
+        // Accounting module Phase 4, Slice 4e — see the expenses create
+        // route's own comment for why a branchless (restaurant-wide) staff
+        // member's voucher still needs exactly one branch tag, defaulted to
+        // the restaurant's main branch.
+        if (await isAutomaticPostingEnabled(tx, restaurantId)) {
+          const voucherBranchId =
+            staff.branchId ??
+            (
+              await tx
+                .select({ id: branches.id })
+                .from(branches)
+                .where(and(eq(branches.restaurantId, restaurantId), eq(branches.isMain, true)))
+                .limit(1)
+            )[0]?.id;
+          if (voucherBranchId) {
+            await postPayrollVoucher(tx, {
+              restaurantId,
+              branchId: voucherBranchId,
+              payrollPaymentId: row.id,
+              amountInPaisa: row.amountInPaisa,
+              payPeriodLabel: row.payPeriodLabel,
+              paymentMethod: row.paymentMethod,
+              timezone,
+              createdByUserId: session.user.id,
+            });
+          }
+        }
 
         return row;
       });
