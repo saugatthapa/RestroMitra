@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { chartOfAccounts } from "@/db/schema";
+import { accountMappings, chartOfAccounts } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { updateAccountSchema } from "@/lib/validation/accounting";
@@ -45,6 +45,30 @@ export async function PATCH(
       .limit(1);
     if (!existing) {
       return NextResponse.json({ error: "Account not found." }, { status: 404 });
+    }
+
+    // Phase 4 hardening (ACCOUNTING_PHASE_4_PLAN.md 2.3) — once automatic
+    // posting depends on account_mappings resolving to an ACTIVE account
+    // (see resolveAccountMappings), deactivating a mapped account here
+    // would silently start throwing on every future automatic posting that
+    // needs it (a cash payment, a sale, ...). This account is not itself
+    // aware of whether it's "load-bearing" — the mapping is what makes it
+    // so — so the check has to happen here, at the one place an account
+    // can be deactivated.
+    if (data.isActive === false && existing.isActive) {
+      const [activeMapping] = await db
+        .select({ mappingKey: accountMappings.mappingKey })
+        .from(accountMappings)
+        .where(and(eq(accountMappings.restaurantId, restaurantId), eq(accountMappings.accountId, accountId)))
+        .limit(1);
+      if (activeMapping) {
+        return NextResponse.json(
+          {
+            error: `This account is mapped to "${activeMapping.mappingKey}" and used by automatic posting — remap that first from the Chart of Accounts before deactivating it.`,
+          },
+          { status: 400 },
+        );
+      }
     }
 
     const [updated] = await db

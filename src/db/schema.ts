@@ -557,6 +557,21 @@ export const restaurants = pgTable(
     // restaurant into the pending state.
     verifiedAt: timestamp("verified_at", { withTimezone: true }).defaultNow(),
     verifiedByUserId: uuid("verified_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    // Accounting module Phase 4 — automatic integrations. NULL (the
+    // default, and the value for every restaurant that existed before this
+    // column shipped) means Phase 4's postVoucher() calls at order
+    // completion/payments/expenses/etc. are all no-ops for this restaurant
+    // — deliberately separate from merely seeding a chart of accounts
+    // (Phase 1/2's "Set up Chart of Accounts" action), since exploring the
+    // new Accounting tab shouldn't silently change how the POS itself
+    // behaves. Set once, via the Accounting Overview tab's own "Enable
+    // automatic posting" action (MANAGE_ACCOUNTING-gated, shown only once a
+    // chart of accounts exists) — see ACCOUNTING_PHASE_4_PLAN.md Part 1.
+    // Never cleared back to null by this codebase once set (no "disable"
+    // action exists — turning automatic posting back off mid-flight would
+    // leave some events posted and others not, a worse state than either
+    // extreme).
+    automaticPostingEnabledAt: timestamp("automatic_posting_enabled_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

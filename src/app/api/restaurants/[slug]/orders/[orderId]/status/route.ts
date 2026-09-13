@@ -13,6 +13,8 @@ import { recordOrderCompletionLoyalty } from "@/lib/loyalty";
 import { assignKotSequence } from "@/lib/kot";
 import { assignFiscalInvoiceNumber } from "@/lib/fiscal-invoice";
 import { recordSalesLedgerEntry } from "@/lib/ledger";
+import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
+import { postSaleAndCogsVouchers } from "@/lib/accounting/integrations/order-completion";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { syncTableStatusFromOrders } from "@/lib/tables";
@@ -237,6 +239,33 @@ export async function PATCH(
           // that customer's own tab (see ledger.ts's Customer Credit
           // section), no extra staff action required.
           customerId: row.customerId,
+        });
+      }
+
+      // Accounting module Phase 4, Slice 4a — the same completion moment
+      // also posts a Sales Voucher (and, if this order has recipe-costed
+      // items, a matching Cost of Goods Sold voucher) into the new
+      // double-entry ledger, per ACCOUNTING_POLICY_AND_POSTING_MATRIX.md
+      // §1/§6. Entirely additive alongside recordSalesLedgerEntry above —
+      // Account Books keeps writing exactly as before. Gated on this
+      // restaurant having explicitly enabled automatic posting (see
+      // ACCOUNTING_PHASE_4_PLAN.md Part 1) — a no-op read for every
+      // restaurant that hasn't, which is every restaurant that existed
+      // before this shipped.
+      if (targetStatus === "completed" && (await isAutomaticPostingEnabled(tx, restaurantId))) {
+        await postSaleAndCogsVouchers(tx, {
+          restaurantId,
+          branchId: row.branchId,
+          orderId,
+          orderNumber: row.orderNumber,
+          subtotalInPaisa: row.subtotalInPaisa,
+          discountInPaisa: row.discountInPaisa,
+          serviceChargeInPaisa: row.serviceChargeInPaisa,
+          taxInPaisa: row.taxInPaisa,
+          totalInPaisa: row.totalInPaisa,
+          customerId: row.customerId,
+          timezone,
+          createdByUserId: session.user.id,
         });
       }
 

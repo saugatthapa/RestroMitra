@@ -192,21 +192,26 @@ function OverviewTab({ slug }: { slug: string }) {
   const [accounts, setAccounts] = useState<AccountBalance[] | null>(null);
   const [totalsByType, setTotalsByType] = useState<Record<AccountType, number> | null>(null);
   const [openingBalancePosted, setOpeningBalancePosted] = useState<boolean | null>(null);
+  const [automaticPostingEnabledAt, setAutomaticPostingEnabledAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
+  const [enabling, setEnabling] = useState(false);
 
   async function load() {
     setLoading(true);
     try {
       const [overview, vouchers] = await Promise.all([
-        apiGet<{ accounts: AccountBalance[]; totalsByType: Record<AccountType, number> }>(
-          `${base(slug)}/accounting/overview`,
-        ),
+        apiGet<{
+          accounts: AccountBalance[];
+          totalsByType: Record<AccountType, number>;
+          automaticPostingEnabledAt: string | null;
+        }>(`${base(slug)}/accounting/overview`),
         apiGet<{ vouchers: Voucher[] }>(`${base(slug)}/accounting/vouchers?type=opening_balance`),
       ]);
       setAccounts(overview.accounts);
       setTotalsByType(overview.totalsByType);
+      setAutomaticPostingEnabledAt(overview.automaticPostingEnabledAt);
       setOpeningBalancePosted(vouchers.vouchers.length > 0);
       setError(null);
     } catch (err) {
@@ -234,6 +239,19 @@ function OverviewTab({ slug }: { slug: string }) {
     }
   }
 
+  async function enableAutomaticPosting() {
+    setEnabling(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/accounting/enable-automatic-posting`, {});
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not enable automatic posting.");
+    } finally {
+      setEnabling(false);
+    }
+  }
+
   if (loading) return <p className="text-sm text-neutral-500">Loading…</p>;
 
   const hasAccounts = (accounts?.length ?? 0) > 0;
@@ -251,6 +269,30 @@ function OverviewTab({ slug }: { slug: string }) {
           <button disabled={seeding} onClick={setUpChartOfAccounts} className="btn-primary mt-3">
             {seeding ? "Setting up…" : "Set up Chart of Accounts"}
           </button>
+        </div>
+      )}
+
+      {hasAccounts && !automaticPostingEnabledAt && (
+        <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+          <p className="text-sm font-medium text-neutral-900">Automatic posting is off</p>
+          <p className="mt-1 text-sm text-neutral-600">
+            Right now, only manual journal vouchers and the opening balance land in these books.
+            Enabling automatic posting starts booking a Sales Voucher (and its matching cost-of-goods
+            entry) every time an order completes — a real, permanent change to what gets posted from
+            that point forward. There&apos;s no way to turn it back off once enabled.
+          </p>
+          <button disabled={enabling} onClick={enableAutomaticPosting} className="btn-primary mt-3">
+            {enabling ? "Enabling…" : "Enable automatic posting"}
+          </button>
+        </div>
+      )}
+
+      {hasAccounts && automaticPostingEnabledAt && (
+        <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+          Automatic posting has been on since{" "}
+          {new Date(automaticPostingEnabledAt).toLocaleString()}. Completed orders post a Sales
+          Voucher automatically; other flows (expenses, purchases, payroll) are still manual-only
+          until their own integrations land.
         </div>
       )}
 
@@ -277,9 +319,9 @@ function OverviewTab({ slug }: { slug: string }) {
       )}
 
       <p className="text-xs text-neutral-400">
-        These balances only reflect vouchers posted so far — manual journal vouchers and any opening
-        balance voucher. Automatic posting from orders, expenses, purchases, and payroll is a later
-        phase, so Assets won&apos;t yet equal Liabilities + Equity until that lands.
+        {automaticPostingEnabledAt
+          ? "These balances include automatic Sales Vouchers from completed orders. Expenses, purchases, and payroll still only post when entered manually, so Assets won't fully equal Liabilities + Equity until those integrations land too."
+          : "These balances only reflect vouchers posted so far — manual journal vouchers and any opening balance voucher. Automatic posting from orders, expenses, purchases, and payroll is a later phase, so Assets won't yet equal Liabilities + Equity until that lands."}
       </p>
     </div>
   );

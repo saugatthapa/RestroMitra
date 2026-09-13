@@ -1,0 +1,1 @@
+ALTER TABLE "restaurants" ADD COLUMN "automatic_posting_enabled_at" timestamp with time zone;

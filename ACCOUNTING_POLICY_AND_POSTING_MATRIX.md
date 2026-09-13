@@ -83,8 +83,8 @@ The order's own stored fields already give every number needed —
 
 | Line | Account | Amount |
 |---|---|---|
-| Dr | Cash on Hand / Card Clearing / Mobile Wallet Clearing / Other Clearing *(one line per payment method already recorded against this order as of the completion moment, grouped by method)* | sum of those payments' `amountInPaisa` |
-| Dr | Accounts Receivable *(tagged `customer_id` if linked, otherwise left untagged for a walk-in)* | `totalInPaisa` − sum of payments recorded so far |
+| Dr | Cash on Hand / Card Clearing / Mobile Wallet Clearing / Other Clearing *(one line per payment method already recorded against this order as of the completion moment, grouped by method)* | sum of those payments' `amountInPaisa` **plus** `tipInPaisa` *(corrected during Phase 4 implementation — see note below the table)* |
+| Dr | Accounts Receivable *(tagged `customer_id` if linked, otherwise left untagged for a walk-in)* | `totalInPaisa` − sum of payments' `amountInPaisa` recorded so far *(tips excluded — see note)* |
 | Dr | Discounts & Allowances | `discountInPaisa` |
 | Cr | Sales Revenue | `subtotalInPaisa` *(gross — this already includes the discount, per decision #2)* |
 | Cr | Service Charge Revenue | `serviceChargeInPaisa` |
@@ -92,6 +92,18 @@ The order's own stored fields already give every number needed —
 | Cr | Tips Payable | sum of `tipInPaisa` on those same payments, §10 |
 
 This balances by construction: `total(Dr cash/clearing lines) + AR + discount = subtotal + serviceCharge + tax + tips`, and `subtotal − discount + serviceCharge + tax = total` is already a DB-enforced invariant (`orders.totalInPaisa`'s own check constraint), so the two sides are always equal.
+
+**Correction found during Phase 4 implementation (Slice 4a):** this
+section originally said the Dr clearing-account lines were "sum of those
+payments' `amountInPaisa`" — but `amountInPaisa` deliberately excludes the
+tip portion (see the `payments.tipInPaisa` column's own comment), while
+the money that physically lands in the till/gateway includes it. A Rs 500
+cash payment against a Rs 450 bill (Rs 50 tip) puts the full Rs 500 in the
+drawer, not Rs 450. The balancing equation directly above already assumed
+tips were folded into the Dr clearing total — the table cell just hadn't
+been updated to match. Fixed to say what the proof already required;
+`src/lib/accounting/integrations/order-completion.ts` implements the
+corrected version, verified in `accounting-integration-sales.test.ts`.
 
 If the order has zero payments at completion (fully on credit), the single Dr line is the full amount to Accounts Receivable — no clearing-account line at all.
 
