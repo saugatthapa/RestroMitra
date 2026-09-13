@@ -361,8 +361,8 @@ export function RegisterBoard({ slug }: { slug: string }) {
             <form onSubmit={handleMovement} className="rounded-lg border border-neutral-200 bg-white p-5">
               <h3 className="text-sm font-semibold text-neutral-900">Record a cash movement</h3>
               <p className="mt-1 text-xs text-neutral-500">
-                Only for cash the system can&apos;t see on its own — a refund handed back to a customer,
-                topping up change, pulling cash to the safe, or a quick till payout.
+                Only for cash the system can&apos;t see on its own — topping up change, pulling cash to
+                the safe, a quick till payout, or money handed back for a returned/cancelled order.
               </p>
               <div className="mt-3 space-y-3">
                 <label className="block text-sm">
@@ -375,8 +375,15 @@ export function RegisterBoard({ slug }: { slug: string }) {
                     <option value="addition">Addition (cash in)</option>
                     <option value="drop">Drop (to safe)</option>
                     <option value="payout">Payout (spent from till)</option>
-                    <option value="refund">Refund (cash handed back)</option>
+                    <option value="refund">Refund (returned/cancelled order)</option>
                   </select>
+                  {movementType === "refund" && (
+                    <span className="mt-1 block text-xs text-amber-700">
+                      Only for money handed back on a returned or cancelled order. NOT for ordinary
+                      change — if a customer pays Rs 150 for a Rs 120 item, the Rs 30 change is already
+                      handled automatically and needs no entry here.
+                    </span>
+                  )}
                 </label>
                 <label className="block text-sm">
                   <span className="mb-1 block text-neutral-700">Amount (Rs)</span>
