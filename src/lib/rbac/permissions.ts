@@ -89,6 +89,20 @@ export const PERMISSIONS = {
   VIEW_PAYROLL: "view_payroll",
   MANAGE_PAYROLL: "manage_payroll",
 
+  // Double-entry Accounting module (Phase 1 — see ACCOUNTING_MODULE_PLAN.md).
+  // Deliberately separate from MANAGE_ACCOUNT_BOOKS: Account Books stays a
+  // simpler, still-fully-functional single-sided ledger that most staff
+  // with financial access already use; the formal accounting module (chart
+  // of accounts, journal vouchers, financial statements) is a specialized
+  // layer above it, gated to the same trust tier as payroll — see
+  // accountant's role grant below. Split the same way MANAGE_CASH_REGISTER/
+  // CORRECT_CASH_REGISTER is split: day-to-day (create accounts, post a
+  // manual journal voucher) is a lower trust tier than reopening a period
+  // that was already closed, which lets someone rewrite what was meant to
+  // be a locked financial record.
+  MANAGE_ACCOUNTING: "manage_accounting",
+  REOPEN_ACCOUNTING_PERIOD: "reopen_accounting_period",
+
   // Reports
   VIEW_REPORTS: "view_reports",
 
@@ -134,6 +148,9 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PERMISSIONS.CORRECT_CASH_REGISTER]: "Reopen or correct a closed cash register shift",
   [PERMISSIONS.MANAGE_DAILY_CLOSING]:
     "Close a business day's books and act on financial records from an already-closed day",
+  [PERMISSIONS.MANAGE_ACCOUNTING]:
+    "Manage the Chart of Accounts and post manual journal vouchers in the double-entry Accounting module",
+  [PERMISSIONS.REOPEN_ACCOUNTING_PERIOD]: "Reopen a closed accounting period, or post into one",
   [PERMISSIONS.VIEW_PAYROLL]: "View payroll and salary information",
   [PERMISSIONS.MANAGE_PAYROLL]: "Calculate, approve, and pay employee payroll",
   [PERMISSIONS.VIEW_REPORTS]: "View analytics and reports",
@@ -269,6 +286,14 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     // A financial-oversight role, not the one doing the physical count —
     // same segregation-of-duties reasoning as manager's grant above.
     PERMISSIONS.APPROVE_STOCK_COUNT,
+    // Phase 1 accounting module — this is the role the pasted spec itself
+    // scopes it to ("ACCOUNTANT: Financial management"), same tier as
+    // MANAGE_PAYROLL just above. Manager/cashier/owner-only-otherwise: a
+    // manager keeps MANAGE_ACCOUNT_BOOKS but not this more specialized
+    // layer, matching the trust split already documented on the
+    // permission's own definition.
+    PERMISSIONS.MANAGE_ACCOUNTING,
+    PERMISSIONS.REOPEN_ACCOUNTING_PERIOD,
   ],
 };
 

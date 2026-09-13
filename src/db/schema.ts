@@ -16,6 +16,7 @@ import {
   check,
   unique,
   foreignKey,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -5746,5 +5747,400 @@ export const pushSubscriptionsRelations = relations(pushSubscriptions, ({ one })
   user: one(users, {
     fields: [pushSubscriptions.userId],
     references: [users.id],
+  }),
+}));
+
+// ---------------------------------------------------------------------------
+// Double-entry Accounting module — Phase 1 (foundation only).
+//
+// See ACCOUNTING_MODULE_PLAN.md and ACCOUNTING_POLICY_AND_POSTING_MATRIX.md
+// at the repo root for the full inspection report, architecture, and the
+// approved debit/credit answer for every business event. Phase 1 is
+// deliberately additive-only: these tables exist alongside `ledger_entries`
+// (Account Books), which stays exactly as-is and permanently readable —
+// nothing here is wired into any existing operational code path yet. That
+// wiring is Phase 4, one integration at a time, per the plan.
+//
+// Two structural decisions worth calling out here since they shape every
+// column below (full reasoning in the plan's "Voucher numbering" /
+// "Account scoping" / "Idempotency" sections):
+//   - Every voucher and voucher line always carries a branchId, even though
+//     an *account* may be restaurant-wide (chart_of_accounts.branchId null)
+//     or branch-specific — so branch reporting always works off the
+//     transaction, never depends on the account being split per branch.
+//   - An automatically-posted voucher (Phase 4+) carries sourceType/
+//     sourceId/postingEvent, uniquely indexed, so a retried request can
+//     never double-post the same real-world event. A manual journal
+//     voucher simply leaves all three null.
+// ---------------------------------------------------------------------------
+
+export const accountTypeEnum = pgEnum("account_type", [
+  "asset",
+  "liability",
+  "equity",
+  "income",
+  "expense",
+]);
+
+// Deliberately its own column, not derived from `type` — a contra account
+// (Discounts & Allowances, Accumulated Depreciation, Owner Drawings, Sales
+// Returns & Refunds — see the posting matrix's chart of accounts) has the
+// OPPOSITE normal balance from its type's usual one. Set explicitly at
+// creation time (the seed script gets every one of these right, per the
+// posting matrix) rather than inferred, since inferring it would silently
+// get every contra account wrong.
+export const accountNormalBalanceEnum = pgEnum("account_normal_balance", ["debit", "credit"]);
+
+export const chartOfAccounts = pgTable(
+  "chart_of_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    // Nullable = restaurant-wide (the default for almost every account — one
+    // Sales Revenue account, one Accounts Payable account, shared across
+    // every branch). Set only when a restaurant opts a specific account
+    // into per-branch tracking (most commonly Cash on Hand, mirroring the
+    // fact that Cash Register shifts are already tracked per branch) — see
+    // the plan's "Account scoping" section for the full reasoning.
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
+    code: varchar("code", { length: 20 }).notNull(),
+    name: varchar("name", { length: 150 }).notNull(),
+    type: accountTypeEnum("type").notNull(),
+    normalBalance: accountNormalBalanceEnum("normal_balance").notNull(),
+    // Self-reference for the account hierarchy (e.g. "5200 Expenses" as a
+    // parent of "5210 Rent", "5220 Utilities"). AnyPgColumn + a lazy
+    // arrow is drizzle's documented pattern for a same-table FK — this
+    // schema has no prior self-referencing table, so this is the first.
+    parentAccountId: uuid("parent_account_id").references((): AnyPgColumn => chartOfAccounts.id, {
+      onDelete: "restrict",
+    }),
+    // Seeded accounts (the posting matrix's own chart) are protected from
+    // deletion in application code by this flag — a restaurant can still
+    // add its own accounts freely, but can't delete one the posting engine
+    // itself depends on.
+    isSystemAccount: boolean("is_system_account").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    description: text("description"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("chart_of_accounts_restaurant_id_idx").on(table.restaurantId),
+    index("chart_of_accounts_parent_account_id_idx").on(table.parentAccountId),
+    index("chart_of_accounts_branch_id_idx").on(table.branchId),
+    uniqueIndex("chart_of_accounts_restaurant_code_unique").on(table.restaurantId, table.code),
+  ],
+);
+
+export const accountingPeriodStatusEnum = pgEnum("accounting_period_status", [
+  "open",
+  "closed",
+  "reopened",
+]);
+
+export const accountingPeriods = pgTable(
+  "accounting_periods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    // Nullable = restaurant-wide, the normal case (a fiscal calendar is
+    // usually company-level, not per-branch). Left as an option, not
+    // removed, in case a multi-branch restaurant genuinely needs one
+    // branch's books closed independently of another's.
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+    status: accountingPeriodStatusEnum("status").notNull().default("open"),
+    closedByUserId: uuid("closed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    reopenedByUserId: uuid("reopened_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reopenedAt: timestamp("reopened_at", { withTimezone: true }),
+    reopenReason: text("reopen_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("accounting_periods_restaurant_id_idx").on(table.restaurantId),
+    index("accounting_periods_range_idx").on(table.restaurantId, table.periodStart, table.periodEnd),
+    check("accounting_periods_range_valid", sql`${table.periodEnd} >= ${table.periodStart}`),
+  ],
+);
+
+// Matches the posting matrix's own voucher-type list (§6 of the pasted
+// spec). "opening_balance" is the one-time cutover voucher (plan Part 3/§12
+// of the posting matrix); everything else corresponds to one section of the
+// posting matrix and gets its own numbering prefix (see
+// src/lib/accounting/post-voucher.ts's VOUCHER_TYPE_PREFIXES).
+export const accountingVoucherTypeEnum = pgEnum("accounting_voucher_type", [
+  "journal",
+  "sales",
+  "purchase",
+  "payment",
+  "expense",
+  "refund",
+  "contra",
+  "payroll",
+  "opening_balance",
+]);
+
+// "draft"/"approved"/"cancelled" are reserved for the Phase 2 UI's own
+// review workflow (a manual journal voucher saved before it's posted) —
+// Phase 1's own code only ever produces "posted" or "reversed", but the
+// enum is defined with its full eventual range now so it never needs a
+// value added under load later.
+export const accountingVoucherStatusEnum = pgEnum("accounting_voucher_status", [
+  "draft",
+  "approved",
+  "posted",
+  "reversed",
+  "cancelled",
+]);
+
+export const accountingVouchers = pgTable(
+  "accounting_vouchers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    // Always set, even for a restaurant-wide account's posting — see this
+    // section's own top-of-file comment on why branch tagging never
+    // depends on whether the accounts touched are branch-specific.
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    voucherType: accountingVoucherTypeEnum("voucher_type").notNull(),
+    // Human-traceable, e.g. "SV-000123" — type-prefixed, sequenced per
+    // restaurant+type via accounting_voucher_counters (mirrors
+    // fiscalInvoiceCounters' own onConflictDoUpdate pattern). Never reused
+    // or renumbered, even on reversal — see reversalOfVoucherId below.
+    voucherNumber: varchar("voucher_number", { length: 30 }).notNull(),
+    voucherDate: date("voucher_date").notNull().defaultNow(),
+    // Free-text external reference (a supplier invoice number, a bank
+    // statement line, ...) — optional, purely for a human's own trail.
+    reference: varchar("reference", { length: 100 }),
+    narration: text("narration"),
+    status: accountingVoucherStatusEnum("status").notNull().default("posted"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    postedByUserId: uuid("posted_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    postedAt: timestamp("posted_at", { withTimezone: true }),
+    // Points a reversal voucher back at the original it reverses. The
+    // original is never edited or deleted — same "append a correction,
+    // never rewrite" discipline as register_shift_corrections — so the
+    // reverse direction ("was this voucher itself reversed?") is just a
+    // query on this same indexed column, not a second pointer column.
+    reversalOfVoucherId: uuid("reversal_of_voucher_id").references(
+      (): AnyPgColumn => accountingVouchers.id,
+      { onDelete: "restrict" },
+    ),
+    // Idempotency key for an AUTOMATIC posting (Phase 4+) — see this
+    // section's top-of-file comment. All three are null for a manual
+    // journal voucher, which isn't subject to the uniqueness constraint
+    // below (a NULL sourceType makes the partial index not apply at all).
+    sourceType: varchar("source_type", { length: 60 }),
+    sourceId: uuid("source_id"),
+    postingEvent: varchar("posting_event", { length: 60 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("accounting_vouchers_restaurant_id_idx").on(table.restaurantId),
+    index("accounting_vouchers_branch_id_idx").on(table.branchId),
+    index("accounting_vouchers_voucher_date_idx").on(table.voucherDate),
+    index("accounting_vouchers_reversal_of_voucher_id_idx").on(table.reversalOfVoucherId),
+    uniqueIndex("accounting_vouchers_restaurant_voucher_number_unique").on(
+      table.restaurantId,
+      table.voucherNumber,
+    ),
+    // The idempotency key itself. Partial: only automatic postings set
+    // sourceType, so this never constrains manual journal vouchers.
+    uniqueIndex("accounting_vouchers_source_unique")
+      .on(table.restaurantId, table.sourceType, table.sourceId, table.postingEvent)
+      .where(sql`${table.sourceType} IS NOT NULL`),
+    // The idempotency triple is all-or-nothing — a voucher with only two of
+    // the three set could never be found by a replay's own lookup anyway,
+    // so this catches that mistake at insert time instead of silently
+    // producing an un-deduplicatable "automatic" voucher.
+    check(
+      "accounting_vouchers_source_triple_consistent",
+      sql`(${table.sourceType} IS NULL AND ${table.sourceId} IS NULL AND ${table.postingEvent} IS NULL)
+          OR (${table.sourceType} IS NOT NULL AND ${table.sourceId} IS NOT NULL AND ${table.postingEvent} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const accountingVoucherLines = pgTable(
+  "accounting_voucher_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    voucherId: uuid("voucher_id")
+      .notNull()
+      .references(() => accountingVouchers.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => chartOfAccounts.id, { onDelete: "restrict" }),
+    // Exactly one of these is > 0, the other is 0 — enforced by the check
+    // constraint below, not just convention. Debit=credit balance across
+    // an entire voucher's lines is enforced in postVoucher() (the
+    // application layer), not here — a cross-row aggregate isn't
+    // expressible as a single-row CHECK constraint in Postgres.
+    debitInPaisa: integer("debit_in_paisa").notNull().default(0),
+    creditInPaisa: integer("credit_in_paisa").notNull().default(0),
+    description: varchar("description", { length: 300 }),
+    // Sub-ledger tags for drill-down/aging off the two control accounts
+    // (Accounts Receivable / Accounts Payable) — same pattern as
+    // ledger_entries.customerId/supplierId, just living on the line
+    // instead of a single-sided entry. orderId lets a sale's voucher line
+    // link back to the order that produced it.
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
+    orderId: uuid("order_id").references(() => orders.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("accounting_voucher_lines_voucher_id_idx").on(table.voucherId),
+    index("accounting_voucher_lines_account_id_idx").on(table.accountId),
+    index("accounting_voucher_lines_customer_id_idx").on(table.customerId),
+    index("accounting_voucher_lines_supplier_id_idx").on(table.supplierId),
+    index("accounting_voucher_lines_order_id_idx").on(table.orderId),
+    check(
+      "accounting_voucher_lines_one_sided",
+      sql`(${table.debitInPaisa} > 0 AND ${table.creditInPaisa} = 0) OR (${table.creditInPaisa} > 0 AND ${table.debitInPaisa} = 0)`,
+    ),
+  ],
+);
+
+// Makes account selection configurable instead of hard-coded (per the
+// plan's own §42/§43 reference) — e.g. mappingKey "payment_method:cash" ->
+// the restaurant's actual Cash on Hand account id, "expense_category:<id>"
+// -> that category's mapped expense account. Phase 4's integrations read
+// through this table rather than assuming a fixed account code exists.
+export const accountMappings = pgTable(
+  "account_mappings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    mappingKey: varchar("mapping_key", { length: 100 }).notNull(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => chartOfAccounts.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("account_mappings_restaurant_id_idx").on(table.restaurantId),
+    uniqueIndex("account_mappings_restaurant_key_unique").on(table.restaurantId, table.mappingKey),
+  ],
+);
+
+// Atomic per-restaurant-per-voucher-type sequence, same onConflictDoUpdate
+// pattern as fiscalInvoiceCounters (see assignFiscalInvoiceNumber in
+// fiscal-invoice.ts) — avoids a race between two vouchers of the same type
+// grabbing the same number without needing a row lock.
+export const accountingVoucherCounters = pgTable(
+  "accounting_voucher_counters",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    voucherType: accountingVoucherTypeEnum("voucher_type").notNull(),
+    lastNumber: integer("last_number").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("accounting_voucher_counters_restaurant_type_unique").on(
+      table.restaurantId,
+      table.voucherType,
+    ),
+  ],
+);
+
+export const chartOfAccountsRelations = relations(chartOfAccounts, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [chartOfAccounts.restaurantId],
+    references: [restaurants.id],
+  }),
+  branch: one(branches, {
+    fields: [chartOfAccounts.branchId],
+    references: [branches.id],
+  }),
+  parentAccount: one(chartOfAccounts, {
+    fields: [chartOfAccounts.parentAccountId],
+    references: [chartOfAccounts.id],
+    relationName: "chartOfAccountsParent",
+  }),
+  childAccounts: many(chartOfAccounts, { relationName: "chartOfAccountsParent" }),
+  voucherLines: many(accountingVoucherLines),
+}));
+
+export const accountingPeriodsRelations = relations(accountingPeriods, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [accountingPeriods.restaurantId],
+    references: [restaurants.id],
+  }),
+  branch: one(branches, {
+    fields: [accountingPeriods.branchId],
+    references: [branches.id],
+  }),
+}));
+
+export const accountingVouchersRelations = relations(accountingVouchers, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [accountingVouchers.restaurantId],
+    references: [restaurants.id],
+  }),
+  branch: one(branches, {
+    fields: [accountingVouchers.branchId],
+    references: [branches.id],
+  }),
+  lines: many(accountingVoucherLines),
+  reversalOf: one(accountingVouchers, {
+    fields: [accountingVouchers.reversalOfVoucherId],
+    references: [accountingVouchers.id],
+    relationName: "accountingVoucherReversal",
+  }),
+}));
+
+export const accountingVoucherLinesRelations = relations(accountingVoucherLines, ({ one }) => ({
+  voucher: one(accountingVouchers, {
+    fields: [accountingVoucherLines.voucherId],
+    references: [accountingVouchers.id],
+  }),
+  account: one(chartOfAccounts, {
+    fields: [accountingVoucherLines.accountId],
+    references: [chartOfAccounts.id],
+  }),
+  customer: one(customers, {
+    fields: [accountingVoucherLines.customerId],
+    references: [customers.id],
+  }),
+  supplier: one(suppliers, {
+    fields: [accountingVoucherLines.supplierId],
+    references: [suppliers.id],
+  }),
+  order: one(orders, {
+    fields: [accountingVoucherLines.orderId],
+    references: [orders.id],
+  }),
+}));
+
+export const accountMappingsRelations = relations(accountMappings, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [accountMappings.restaurantId],
+    references: [restaurants.id],
+  }),
+  account: one(chartOfAccounts, {
+    fields: [accountMappings.accountId],
+    references: [chartOfAccounts.id],
   }),
 }));
