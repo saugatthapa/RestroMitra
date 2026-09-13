@@ -22,22 +22,44 @@ export class CashRegisterError extends HttpError {
 
 export type RegisterCashMovementType = "addition" | "drop" | "payout";
 
+export type CashRegisterBreakdown = {
+  openingCashInPaisa: number;
+  /** Gross cash sales in the window — positive-amount cash payment rows only, before refunds. */
+  cashSalesInPaisa: number;
+  /** Cash refunds in the window, as a positive magnitude (the underlying rows are negative — see the payments table's own sign convention). */
+  cashRefundsInPaisa: number;
+  cashExpensesInPaisa: number;
+  additionsInPaisa: number;
+  dropsInPaisa: number;
+  payoutsInPaisa: number;
+  /** openingCashInPaisa + cashSalesInPaisa - cashRefundsInPaisa - cashExpensesInPaisa + additionsInPaisa - dropsInPaisa - payoutsInPaisa. */
+  expectedCashInPaisa: number;
+};
+
 /**
  * The one place the "expected cash" formula lives — see the block comment
  * above `registerShifts` in schema.ts for the full derivation:
  *
- *   opening cash + net cash sales/refunds - cash expenses
+ *   opening cash + cash sales - cash refunds - cash expenses
  *   + cash additions - cash drops - cash payouts
  *
  * Every term is read from data that already exists elsewhere (payments,
  * expenses, this shift's own cash movements); nothing is duplicated or
  * ever trusted from the client.
  *
+ * Returns the full line-item breakdown, not just the total — the Cash
+ * Register screen shows "Cash sales / Cash refunds / Cash expenses /
+ * Cash-in / Cash-out" as separate figures (spec requirement), and those
+ * numbers must be the exact terms this formula sums, never a second,
+ * independently-computed set that could drift from the frozen total.
+ * `computeExpectedCashInPaisa` below is a thin wrapper over this for the
+ * many callers that only need the single total.
+ *
  * `asOf` is an exclusive upper bound: pass `new Date()` for a live
  * in-progress shift, or the exact close timestamp when freezing the
  * snapshot at close time.
  */
-export async function computeExpectedCashInPaisa(
+export async function computeCashRegisterBreakdown(
   tx: Transaction,
   params: {
     shiftId: string;
@@ -46,13 +68,18 @@ export async function computeExpectedCashInPaisa(
     openedAt: Date;
     asOf: Date;
   },
-): Promise<number> {
+): Promise<CashRegisterBreakdown> {
   const { shiftId, branchId, openingCashInPaisa, openedAt, asOf } = params;
 
-  // Net cash sales/refunds — payments.amountInPaisa is already signed
-  // (positive = payment, negative = refund), so one SUM nets both.
+  // Cash sales and cash refunds, split apart in one query rather than one
+  // SUM of the signed total (payments.amountInPaisa: positive = payment,
+  // negative = refund) — the UI needs both figures shown separately, not
+  // just their net.
   const [cashPaymentsRow] = await tx
-    .select({ total: sql<string>`coalesce(sum(${payments.amountInPaisa}), 0)` })
+    .select({
+      sales: sql<string>`coalesce(sum(case when ${payments.amountInPaisa} > 0 then ${payments.amountInPaisa} else 0 end), 0)`,
+      refunds: sql<string>`coalesce(sum(case when ${payments.amountInPaisa} < 0 then -${payments.amountInPaisa} else 0 end), 0)`,
+    })
     .from(payments)
     .innerJoin(orders, eq(payments.orderId, orders.id))
     .where(
@@ -63,7 +90,8 @@ export async function computeExpectedCashInPaisa(
         lt(payments.createdAt, asOf),
       ),
     );
-  const netCashSalesInPaisa = Number(cashPaymentsRow?.total ?? 0);
+  const cashSalesInPaisa = Number(cashPaymentsRow?.sales ?? 0);
+  const cashRefundsInPaisa = Number(cashPaymentsRow?.refunds ?? 0);
 
   // Cash expenses paid out of this branch's till during the shift. Voided
   // expenses never actually paid out, so they're excluded regardless of
@@ -103,14 +131,39 @@ export async function computeExpectedCashInPaisa(
     else if (row.type === "payout") payoutsInPaisa = amount;
   }
 
-  return (
+  const expectedCashInPaisa =
     openingCashInPaisa +
-    netCashSalesInPaisa -
+    cashSalesInPaisa -
+    cashRefundsInPaisa -
     cashExpensesInPaisa +
     additionsInPaisa -
     dropsInPaisa -
-    payoutsInPaisa
-  );
+    payoutsInPaisa;
+
+  return {
+    openingCashInPaisa,
+    cashSalesInPaisa,
+    cashRefundsInPaisa,
+    cashExpensesInPaisa,
+    additionsInPaisa,
+    dropsInPaisa,
+    payoutsInPaisa,
+    expectedCashInPaisa,
+  };
+}
+
+/** The single total, for the many callers (close/correct, the live-summary routes) that don't need the line-item breakdown. See computeCashRegisterBreakdown above — the actual formula lives there, this is a thin accessor. */
+export async function computeExpectedCashInPaisa(
+  tx: Transaction,
+  params: {
+    shiftId: string;
+    branchId: string;
+    openingCashInPaisa: number;
+    openedAt: Date;
+    asOf: Date;
+  },
+): Promise<number> {
+  return (await computeCashRegisterBreakdown(tx, params)).expectedCashInPaisa;
 }
 
 /**

@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { registerShifts } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
-import { computeExpectedCashInPaisa } from "@/lib/cash-register";
+import { computeCashRegisterBreakdown } from "@/lib/cash-register";
 
 /**
  * Returns the CALLING USER's own open shift, if any — what a POS/cashier
@@ -38,8 +38,13 @@ export async function GET(_request: Request, ctx: { params: Promise<{ slug: stri
       return NextResponse.json({ shift: null });
     }
 
-    const liveExpectedCashInPaisa = await db.transaction((tx) =>
-      computeExpectedCashInPaisa(tx, {
+    // Full line-item breakdown (opening/cash sales/cash refunds/cash
+    // expenses/cash-in/cash-out/expected), not just the total — the Cash
+    // Register screen shows each of these as its own figure (see
+    // RegisterBoard.tsx), all derived live from the same one formula in
+    // computeCashRegisterBreakdown rather than re-summed separately here.
+    const liveBreakdown = await db.transaction((tx) =>
+      computeCashRegisterBreakdown(tx, {
         shiftId: shift.id,
         branchId: shift.branchId,
         openingCashInPaisa: shift.openingCashInPaisa,
@@ -48,7 +53,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ slug: stri
       }),
     );
 
-    return NextResponse.json({ shift, liveExpectedCashInPaisa });
+    return NextResponse.json({ shift, liveBreakdown });
   } catch (err) {
     return toErrorResponse(err);
   }

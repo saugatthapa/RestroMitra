@@ -11,6 +11,7 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { recordExpenseLedgerEntry } from "@/lib/ledger";
 import { HttpError } from "@/lib/http-error";
 import { assertBusinessDayWritable } from "@/lib/daily-closing";
+import { assertRegisterOpenForCashPayment } from "@/lib/cash-register";
 
 /**
  * approved -> paid. This is the ONLY place a non-owner/accountant flow's
@@ -72,6 +73,19 @@ export async function POST(
           },
           tx,
         );
+
+        // Same guard as the orders payments/refunds routes (Phase 6 /
+        // master prompt section 9) — paying an expense in cash is a cash-out
+        // of the till exactly like a cash refund, so it needs the same
+        // "some register is actually open at this branch" precondition
+        // before this money is treated as having left a real, tracked
+        // drawer. See assertRegisterOpenForCashPayment's own doc comment in
+        // cash-register.ts. Scoped to `existing.branchId` being set for the
+        // same documented reason the daily-close lock above is: a
+        // restaurant-wide expense (no specific branch) has no till to check.
+        if (parsed.data.paymentMethod === "cash") {
+          await assertRegisterOpenForCashPayment(tx, { restaurantId, branchId: existing.branchId });
+        }
       }
 
       const [row] = await tx

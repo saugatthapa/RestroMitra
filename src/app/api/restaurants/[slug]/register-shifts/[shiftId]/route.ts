@@ -5,7 +5,7 @@ import { registerShifts, registerCashMovements, registerShiftCorrections } from 
 import { PERMISSIONS } from "@/lib/rbac/permissions";
 import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
 import { requireBranchAccess } from "@/lib/rbac/guard";
-import { computeExpectedCashInPaisa } from "@/lib/cash-register";
+import { computeCashRegisterBreakdown } from "@/lib/cash-register";
 
 /** Detail view: the shift itself plus its full cash-movement and correction history. */
 export async function GET(
@@ -47,20 +47,28 @@ export async function GET(
         .orderBy(asc(registerShiftCorrections.createdAt)),
     ]);
 
-    let liveExpectedCashInPaisa: number | null = null;
-    if (shift.status === "open") {
-      liveExpectedCashInPaisa = await db.transaction((tx) =>
-        computeExpectedCashInPaisa(tx, {
-          shiftId: shift.id,
-          branchId: shift.branchId,
-          openingCashInPaisa: shift.openingCashInPaisa,
-          openedAt: shift.openedAt,
-          asOf: new Date(),
-        }),
-      );
-    }
+    // For an OPEN shift this is the live, still-moving breakdown (asOf =
+    // now). For a CLOSED shift, expectedCashInPaisa/actualCashInPaisa/
+    // varianceInPaisa are already frozen on the row itself (see the block
+    // comment above `registerShifts` in schema.ts) — recomputing the
+    // breakdown here just re-derives the LINE ITEMS behind that frozen
+    // total (asOf = the shift's own closedAt), purely for display on the
+    // shift-history detail view. This never overwrites the frozen columns;
+    // payments/expenses in a closed window are immutable (a closed
+    // business day can't take new backdated rows — see daily-closing.ts),
+    // so recomputing it is safe and always reproduces the same total that
+    // was frozen at close time.
+    const breakdown = await db.transaction((tx) =>
+      computeCashRegisterBreakdown(tx, {
+        shiftId: shift.id,
+        branchId: shift.branchId,
+        openingCashInPaisa: shift.openingCashInPaisa,
+        openedAt: shift.openedAt,
+        asOf: shift.status === "open" ? new Date() : shift.closedAt!,
+      }),
+    );
 
-    return NextResponse.json({ shift, movements, corrections, liveExpectedCashInPaisa });
+    return NextResponse.json({ shift, movements, corrections, breakdown });
   } catch (err) {
     return toErrorResponse(err);
   }

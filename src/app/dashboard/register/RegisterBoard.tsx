@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Fragment, useEffect, useState, useCallback } from "react";
 import { apiGet, apiPost, ApiError } from "@/lib/api-client";
 
 type RegisterShift = {
@@ -27,6 +27,30 @@ type CashMovement = {
   createdAt: string;
 };
 
+type ShiftCorrection = {
+  id: string;
+  previousActualCashInPaisa: number;
+  newActualCashInPaisa: number;
+  previousVarianceInPaisa: number;
+  newVarianceInPaisa: number;
+  reason: string;
+  createdAt: string;
+};
+
+// Mirrors CashRegisterBreakdown in src/lib/cash-register.ts — every field
+// here is one term of that one formula, never a separately-computed number,
+// so this can never drift from what the backend actually froze/will freeze.
+type CashBreakdown = {
+  openingCashInPaisa: number;
+  cashSalesInPaisa: number;
+  cashRefundsInPaisa: number;
+  cashExpensesInPaisa: number;
+  additionsInPaisa: number;
+  dropsInPaisa: number;
+  payoutsInPaisa: number;
+  expectedCashInPaisa: number;
+};
+
 function base(slug: string) {
   return `/api/restaurants/${slug}`;
 }
@@ -35,15 +59,56 @@ function formatRupees(paisa: number) {
   return `Rs ${(paisa / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 }
 
+function formatSignedRupees(paisa: number) {
+  const sign = paisa > 0 ? "+" : paisa < 0 ? "−" : "";
+  return `${sign}${formatRupees(Math.abs(paisa))}`;
+}
+
 const MOVEMENT_LABEL: Record<CashMovement["type"], string> = {
   addition: "Cash added",
   drop: "Cash dropped",
   payout: "Cash payout",
 };
 
+/**
+ * The line-item breakdown card — same shape whether it's the LIVE numbers
+ * for the open shift or the (recomputed, but never re-frozen) numbers
+ * behind a closed shift's snapshot. Keeping this as one shared component
+ * is what guarantees the open and closed views can never show the terms in
+ * a different order or with different labels.
+ */
+function BreakdownList({ breakdown }: { breakdown: CashBreakdown }) {
+  const cashOutInPaisa = breakdown.dropsInPaisa + breakdown.payoutsInPaisa;
+  const rows: { label: string; value: number; emphasize?: boolean }[] = [
+    { label: "Opening cash", value: breakdown.openingCashInPaisa },
+    { label: "Cash sales", value: breakdown.cashSalesInPaisa },
+    { label: "Cash refunds", value: -breakdown.cashRefundsInPaisa },
+    { label: "Cash expenses", value: -breakdown.cashExpensesInPaisa },
+    { label: "Cash-in (manual)", value: breakdown.additionsInPaisa },
+    { label: "Cash-out (manual)", value: -cashOutInPaisa },
+  ];
+  return (
+    <dl className="mt-3 space-y-1.5 text-sm">
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-center justify-between">
+          <dt className="text-neutral-500">{row.label}</dt>
+          <dd className="tabular-nums text-neutral-800">
+            {row.value < 0 ? "−" : ""}
+            {formatRupees(Math.abs(row.value))}
+          </dd>
+        </div>
+      ))}
+      <div className="flex items-center justify-between border-t border-neutral-200 pt-1.5 font-semibold text-neutral-900">
+        <dt>Expected cash</dt>
+        <dd className="tabular-nums">{formatRupees(breakdown.expectedCashInPaisa)}</dd>
+      </div>
+    </dl>
+  );
+}
+
 export function RegisterBoard({ slug }: { slug: string }) {
   const [shift, setShift] = useState<RegisterShift | null | undefined>(undefined);
-  const [liveExpected, setLiveExpected] = useState<number | null>(null);
+  const [breakdown, setBreakdown] = useState<CashBreakdown | null>(null);
   const [movements, setMovements] = useState<CashMovement[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -60,13 +125,27 @@ export function RegisterBoard({ slug }: { slug: string }) {
   const [closingNotes, setClosingNotes] = useState("");
   const [showCloseForm, setShowCloseForm] = useState(false);
 
+  // Register / shift history — a flat list of past shifts (any status,
+  // this branch's own access scope enforced server-side same as everywhere
+  // else), each expandable into its own breakdown + movements + corrections
+  // via the same detail route the live view already uses.
+  const [history, setHistory] = useState<RegisterShift[] | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [expandedShiftId, setExpandedShiftId] = useState<string | null>(null);
+  const [expandedDetail, setExpandedDetail] = useState<{
+    breakdown: CashBreakdown;
+    movements: CashMovement[];
+    corrections: ShiftCorrection[];
+  } | null>(null);
+  const [expandedLoading, setExpandedLoading] = useState(false);
+
   const refresh = useCallback(async () => {
     try {
-      const res = await apiGet<{ shift: RegisterShift | null; liveExpectedCashInPaisa?: number }>(
+      const res = await apiGet<{ shift: RegisterShift | null; liveBreakdown?: CashBreakdown }>(
         `${base(slug)}/register-shifts/current`,
       );
       setShift(res.shift);
-      setLiveExpected(res.liveExpectedCashInPaisa ?? null);
+      setBreakdown(res.liveBreakdown ?? null);
       if (res.shift) {
         const detail = await apiGet<{ movements: CashMovement[] }>(
           `${base(slug)}/register-shifts/${res.shift.id}`,
@@ -80,9 +159,43 @@ export function RegisterBoard({ slug }: { slug: string }) {
     }
   }, [slug]);
 
+  const refreshHistory = useCallback(async () => {
+    try {
+      const res = await apiGet<{ shifts: RegisterShift[] }>(`${base(slug)}/register-shifts`);
+      setHistory(res.shifts);
+      setHistoryError(null);
+    } catch (err) {
+      setHistoryError(err instanceof ApiError ? err.message : "Could not load register history.");
+    }
+  }, [slug]);
+
   useEffect(() => {
     refresh();
-  }, [refresh]);
+    refreshHistory();
+  }, [refresh, refreshHistory]);
+
+  async function toggleExpanded(shiftId: string) {
+    if (expandedShiftId === shiftId) {
+      setExpandedShiftId(null);
+      setExpandedDetail(null);
+      return;
+    }
+    setExpandedShiftId(shiftId);
+    setExpandedDetail(null);
+    setExpandedLoading(true);
+    try {
+      const detail = await apiGet<{
+        breakdown: CashBreakdown;
+        movements: CashMovement[];
+        corrections: ShiftCorrection[];
+      }>(`${base(slug)}/register-shifts/${shiftId}`);
+      setExpandedDetail(detail);
+    } catch (err) {
+      setHistoryError(err instanceof ApiError ? err.message : "Could not load this shift's detail.");
+    } finally {
+      setExpandedLoading(false);
+    }
+  }
 
   async function handleOpen(e: React.FormEvent) {
     e.preventDefault();
@@ -101,7 +214,7 @@ export function RegisterBoard({ slug }: { slug: string }) {
       });
       setOpeningCash("");
       setOpeningNotes("");
-      await refresh();
+      await Promise.all([refresh(), refreshHistory()]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not open the register.");
     } finally {
@@ -154,7 +267,7 @@ export function RegisterBoard({ slug }: { slug: string }) {
       setActualCash("");
       setClosingNotes("");
       setShowCloseForm(false);
-      await refresh();
+      await Promise.all([refresh(), refreshHistory()]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not close the register.");
     } finally {
@@ -165,6 +278,12 @@ export function RegisterBoard({ slug }: { slug: string }) {
   if (shift === undefined) {
     return <p className="text-sm text-neutral-400">Loading…</p>;
   }
+
+  const projectedActual = Math.round(parseFloat(actualCash || "0") * 100);
+  const projectedDifference =
+    breakdown && actualCash.trim() !== "" && Number.isFinite(projectedActual)
+      ? projectedActual - breakdown.expectedCashInPaisa
+      : null;
 
   return (
     <div className="space-y-6">
@@ -224,23 +343,25 @@ export function RegisterBoard({ slug }: { slug: string }) {
                 <h2 className="text-sm font-semibold text-neutral-900">
                   {shift.registerName} — open since {new Date(shift.openedAt).toLocaleString()}
                 </h2>
-                <p className="mt-1 text-xs text-neutral-500">Opening cash: {formatRupees(shift.openingCashInPaisa)}</p>
+                <p className="mt-1 text-xs text-neutral-500">
+                  Everything below except Cash-in/Cash-out updates itself automatically from POS sales,
+                  refunds, and expenses — nothing here needs re-entering by hand.
+                </p>
               </div>
               <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                 Open
               </span>
             </div>
-            {liveExpected !== null && (
-              <p className="mt-3 text-2xl font-semibold text-neutral-900">
-                {formatRupees(liveExpected)}
-                <span className="ml-2 text-sm font-normal text-neutral-500">expected cash right now</span>
-              </p>
-            )}
+            {breakdown && <BreakdownList breakdown={breakdown} />}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <form onSubmit={handleMovement} className="rounded-lg border border-neutral-200 bg-white p-5">
               <h3 className="text-sm font-semibold text-neutral-900">Record a cash movement</h3>
+              <p className="mt-1 text-xs text-neutral-500">
+                Only for cash the system can&apos;t see on its own — topping up change, pulling cash to
+                the safe, or a quick till payout.
+              </p>
               <div className="mt-3 space-y-3">
                 <label className="block text-sm">
                   <span className="mb-1 block text-neutral-700">Type</span>
@@ -285,7 +406,7 @@ export function RegisterBoard({ slug }: { slug: string }) {
             </form>
 
             <div className="rounded-lg border border-neutral-200 bg-white p-5">
-              <h3 className="text-sm font-semibold text-neutral-900">This shift&apos;s movements</h3>
+              <h3 className="text-sm font-semibold text-neutral-900">This shift&apos;s manual movements</h3>
               {movements.length === 0 ? (
                 <p className="mt-2 text-sm text-neutral-400">No cash movements recorded yet.</p>
               ) : (
@@ -319,6 +440,12 @@ export function RegisterBoard({ slug }: { slug: string }) {
                 <p className="mt-1 text-xs text-neutral-500">
                   Count the physical cash in the drawer and enter it below. This locks the shift.
                 </p>
+                {breakdown && (
+                  <p className="mt-2 text-sm text-neutral-700">
+                    Expected cash right now:{" "}
+                    <span className="font-semibold tabular-nums">{formatRupees(breakdown.expectedCashInPaisa)}</span>
+                  </p>
+                )}
                 <div className="mt-3 space-y-3">
                   <label className="block text-sm">
                     <span className="mb-1 block text-neutral-700">Actual cash counted (Rs)</span>
@@ -332,6 +459,19 @@ export function RegisterBoard({ slug }: { slug: string }) {
                       className="w-full rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
                     />
                   </label>
+                  {projectedDifference !== null && (
+                    <p
+                      className={`text-sm font-medium ${
+                        projectedDifference === 0
+                          ? "text-emerald-700"
+                          : projectedDifference > 0
+                            ? "text-blue-700"
+                            : "text-red-700"
+                      }`}
+                    >
+                      Difference: {formatSignedRupees(projectedDifference)}
+                    </p>
+                  )}
                   <label className="block text-sm">
                     <span className="mb-1 block text-neutral-700">Closing notes (optional)</span>
                     <input
@@ -363,6 +503,139 @@ export function RegisterBoard({ slug }: { slug: string }) {
         </>
       )}
 
+      <div className="rounded-lg border border-neutral-200 bg-white p-5">
+        <h3 className="text-sm font-semibold text-neutral-900">Register / shift history</h3>
+        {historyError && <p className="mt-2 text-sm text-red-600">{historyError}</p>}
+        {history === null ? (
+          <p className="mt-2 text-sm text-neutral-400">Loading…</p>
+        ) : history.length === 0 ? (
+          <p className="mt-2 text-sm text-neutral-400">No register shifts yet.</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-left text-xs text-neutral-500">
+                  <th className="py-1.5 pr-3 font-medium">Register</th>
+                  <th className="py-1.5 pr-3 font-medium">Opened</th>
+                  <th className="py-1.5 pr-3 font-medium">Closed</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Opening</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Expected</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Actual</th>
+                  <th className="py-1.5 text-right font-medium">Difference</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((row) => (
+                  <Fragment key={row.id}>
+                    <tr
+                      onClick={() => toggleExpanded(row.id)}
+                      className="cursor-pointer border-b border-neutral-100 hover:bg-neutral-50"
+                    >
+                      <td className="py-2 pr-3">
+                        {row.registerName}
+                        {row.status === "open" && (
+                          <span className="ml-1.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
+                            Open
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 pr-3 text-neutral-500">{new Date(row.openedAt).toLocaleString()}</td>
+                      <td className="py-2 pr-3 text-neutral-500">
+                        {row.closedAt ? new Date(row.closedAt).toLocaleString() : "—"}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{formatRupees(row.openingCashInPaisa)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {row.expectedCashInPaisa !== null ? formatRupees(row.expectedCashInPaisa) : "—"}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {row.actualCashInPaisa !== null ? formatRupees(row.actualCashInPaisa) : "—"}
+                      </td>
+                      <td
+                        className={`py-2 text-right font-medium tabular-nums ${
+                          row.varianceInPaisa === null
+                            ? "text-neutral-400"
+                            : row.varianceInPaisa === 0
+                              ? "text-emerald-700"
+                              : row.varianceInPaisa > 0
+                                ? "text-blue-700"
+                                : "text-red-700"
+                        }`}
+                      >
+                        {row.varianceInPaisa !== null ? formatSignedRupees(row.varianceInPaisa) : "—"}
+                      </td>
+                    </tr>
+                    {expandedShiftId === row.id && (
+                      <tr key={`${row.id}-detail`} className="border-b border-neutral-100 bg-neutral-50">
+                        <td colSpan={7} className="p-4">
+                          {expandedLoading ? (
+                            <p className="text-sm text-neutral-400">Loading…</p>
+                          ) : expandedDetail ? (
+                            <div className="grid gap-4 sm:grid-cols-2">
+                              <div>
+                                <BreakdownList breakdown={expandedDetail.breakdown} />
+                              </div>
+                              <div className="space-y-3">
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                                    Manual movements
+                                  </p>
+                                  {expandedDetail.movements.length === 0 ? (
+                                    <p className="mt-1 text-sm text-neutral-400">None recorded.</p>
+                                  ) : (
+                                    <ul className="mt-1 space-y-1 text-sm">
+                                      {expandedDetail.movements.map((m) => (
+                                        <li key={m.id} className="flex items-center justify-between">
+                                          <span>
+                                            {MOVEMENT_LABEL[m.type]}
+                                            {m.reason ? ` — ${m.reason}` : ""}
+                                          </span>
+                                          <span className="tabular-nums">{formatRupees(m.amountInPaisa)}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                                {expandedDetail.corrections.length > 0 && (
+                                  <div>
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                                      Corrections
+                                    </p>
+                                    <ul className="mt-1 space-y-1 text-sm">
+                                      {expandedDetail.corrections.map((c) => (
+                                        <li key={c.id}>
+                                          <span className="text-neutral-700">
+                                            {formatRupees(c.previousActualCashInPaisa)} →{" "}
+                                            {formatRupees(c.newActualCashInPaisa)}
+                                          </span>
+                                          <span className="ml-2 text-neutral-400">— {c.reason}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                                {row.closingNotes && (
+                                  <div>
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                                      Closing notes
+                                    </p>
+                                    <p className="mt-1 text-sm text-neutral-700">{row.closingNotes}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-neutral-400">Could not load this shift&apos;s detail.</p>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

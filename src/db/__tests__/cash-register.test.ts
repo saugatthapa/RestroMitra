@@ -320,6 +320,87 @@ describe.skipIf(!hasDb)("Cash register shifts (integration)", () => {
       expect(closed.varianceInPaisa).toBe(-500);
     });
 
+    it("computeCashRegisterBreakdown splits cash sales/refunds apart and still sums to the same total computeExpectedCashInPaisa returns", async () => {
+      // The exact worked example from the Cash Register spec: opening
+      // 5,000 + cash sales 20,000 - cash refunds 1,000 - cash expenses
+      // 2,000 + manual cash-in 500 - manual cash-out 300 = 22,200.
+      const openedAt = new Date("2024-02-01T08:00:00Z");
+      const shift = await db.transaction((tx) =>
+        cashRegister.openRegisterShift(tx, {
+          restaurantId,
+          branchId,
+          registerName: "TEST Register Breakdown",
+          openedByUserId: cashierAId,
+          openingCashInPaisa: 5_000,
+        }),
+      );
+      await db.update(schema.registerShifts).set({ openedAt }).where(eq(schema.registerShifts.id, shift.id));
+
+      const order = await makeOrder(new Date("2024-02-01T09:00:00Z"));
+      await makePayment(order, 20_000, "cash", new Date("2024-02-01T09:00:00Z"));
+      await makePayment(order, -1_000, "cash", new Date("2024-02-01T09:05:00Z"));
+      await makeCashExpense(2_000, new Date("2024-02-01T09:10:00Z"));
+      await db.transaction((tx) =>
+        cashRegister.recordCashMovement(tx, {
+          shiftId: shift.id,
+          type: "addition",
+          amountInPaisa: 500,
+          recordedByUserId: cashierAId,
+          timezone: "Asia/Kathmandu",
+        }),
+      );
+      await db.transaction((tx) =>
+        cashRegister.recordCashMovement(tx, {
+          shiftId: shift.id,
+          type: "drop",
+          amountInPaisa: 300,
+          recordedByUserId: cashierAId,
+          timezone: "Asia/Kathmandu",
+        }),
+      );
+
+      const asOf = new Date();
+      const breakdown = await db.transaction((tx) =>
+        cashRegister.computeCashRegisterBreakdown(tx, {
+          shiftId: shift.id,
+          branchId,
+          openingCashInPaisa: 5_000,
+          openedAt,
+          asOf,
+        }),
+      );
+      expect(breakdown.openingCashInPaisa).toBe(5_000);
+      expect(breakdown.cashSalesInPaisa).toBe(20_000);
+      expect(breakdown.cashRefundsInPaisa).toBe(1_000);
+      expect(breakdown.cashExpensesInPaisa).toBe(2_000);
+      expect(breakdown.additionsInPaisa).toBe(500);
+      expect(breakdown.dropsInPaisa).toBe(300);
+      expect(breakdown.payoutsInPaisa).toBe(0);
+      expect(breakdown.expectedCashInPaisa).toBe(22_200);
+
+      // Must always agree with the single-total accessor — there is only
+      // one place this arithmetic is allowed to happen.
+      const total = await db.transaction((tx) =>
+        cashRegister.computeExpectedCashInPaisa(tx, {
+          shiftId: shift.id,
+          branchId,
+          openingCashInPaisa: 5_000,
+          openedAt,
+          asOf,
+        }),
+      );
+      expect(total).toBe(breakdown.expectedCashInPaisa);
+
+      await db.transaction((tx) =>
+        cashRegister.closeRegisterShift(tx, {
+          shiftId: shift.id,
+          actualCashInPaisa: 22_200,
+          closedByUserId: cashierAId,
+          timezone: "Asia/Kathmandu",
+        }),
+      );
+    });
+
     it("prevents closing the same shift twice concurrently (CAS)", async () => {
       const shift = await db.transaction((tx) =>
         cashRegister.openRegisterShift(tx, {

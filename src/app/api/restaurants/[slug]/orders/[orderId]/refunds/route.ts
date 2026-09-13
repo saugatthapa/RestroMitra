@@ -15,6 +15,7 @@ import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { requireBranchAccess } from "@/lib/rbac/guard";
 import { restaurantDate } from "@/lib/restaurant-date";
 import { assertBusinessDayWritable } from "@/lib/daily-closing";
+import { assertRegisterOpenForCashPayment } from "@/lib/cash-register";
 import { rateLimit } from "@/lib/rate-limit";
 
 /**
@@ -155,6 +156,17 @@ export async function POST(
           );
           return { refund: fullExisting, order, billing, idempotentReplay: true } as const;
         }
+      }
+
+      // Same guard as the payments route (Phase 6 / master prompt section
+      // 9), applied to the other direction of cash movement it missed: a
+      // cash refund takes money OUT of the till exactly as physically as a
+      // cash payment puts it in, so it needs the same "some register is
+      // actually open at this branch" precondition — see
+      // assertRegisterOpenForCashPayment's own doc comment in
+      // cash-register.ts. Non-cash refund methods are unaffected.
+      if (body.method === "cash") {
+        await assertRegisterOpenForCashPayment(tx, { restaurantId, branchId: order.branchId });
       }
 
       const netPaidSoFar = computeNetPaid(existingPayments.map((p) => p.amountInPaisa));
