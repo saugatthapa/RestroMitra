@@ -17,6 +17,8 @@ import { restaurantDate } from "@/lib/restaurant-date";
 import { assertBusinessDayWritable } from "@/lib/daily-closing";
 import { assertRegisterOpenForCashPayment } from "@/lib/cash-register";
 import { rateLimit } from "@/lib/rate-limit";
+import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
+import { postRefundVoucher } from "@/lib/accounting/integrations/payment-settlement";
 
 /**
  * Records a refund against an order, stored as a negative-amount row in the
@@ -208,6 +210,26 @@ export async function POST(
         .set({ paymentStatus: after.paymentStatus, updatedAt: new Date() })
         .where(and(eq(orders.id, orderId), eq(orders.restaurantId, restaurantId)))
         .returning();
+
+      // Accounting module Phase 4, Slice 4b — a refund always posts,
+      // regardless of the order's current status (unlike the payments
+      // route's settlement check above) — reversing revenue that was
+      // already recognized can legitimately happen well after an order
+      // completed. Books the full amount to Sales Returns & Refunds; see
+      // postRefundVoucher's own comment for why the tip portion isn't
+      // split out separately (ACCOUNTING_PHASE_4_PLAN.md Slice 4b).
+      if (await isAutomaticPostingEnabled(tx, restaurantId)) {
+        await postRefundVoucher(tx, {
+          restaurantId,
+          branchId: order.branchId,
+          orderId,
+          refundPaymentId: refund.id,
+          method: refund.method,
+          amountInPaisa: body.amount,
+          timezone,
+          createdByUserId: session.user.id,
+        });
+      }
 
       return { refund, order: updatedOrder, billing: after, idempotentReplay: false } as const;
     });

@@ -18,6 +18,8 @@ import { rupeesToPaisa } from "@/lib/money";
 import { restaurantDate } from "@/lib/restaurant-date";
 import { assertBusinessDayWritable } from "@/lib/daily-closing";
 import { assertRegisterOpenForCashPayment } from "@/lib/cash-register";
+import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
+import { postPaymentSettlementVoucher } from "@/lib/accounting/integrations/payment-settlement";
 
 /**
  * Records a payment against an order — the primary write path for cash-out
@@ -201,6 +203,32 @@ export async function POST(
         .set({ paymentStatus: after.paymentStatus, updatedAt: new Date() })
         .where(and(eq(orders.id, orderId), eq(orders.restaurantId, restaurantId)))
         .returning();
+
+      // Accounting module Phase 4, Slice 4b — a payment recorded against an
+      // order that's ALREADY completed is settling Accounts Receivable, not
+      // new revenue (Slice 4a's Sales Voucher already recognized this
+      // order's full total at completion) — see
+      // ACCOUNTING_POLICY_AND_POSTING_MATRIX.md §2. Checked against
+      // `order.status` (the pre-payment snapshot this transaction already
+      // holds a FOR UPDATE lock on) rather than `updatedOrder.status`,
+      // since this route never changes status itself — both would read the
+      // same value, but this makes the intent explicit. A payment recorded
+      // BEFORE completion posts nothing here; it's simply one of the rows
+      // Slice 4a's own Sales Voucher sums up once the order completes.
+      if (order.status === "completed" && (await isAutomaticPostingEnabled(tx, restaurantId))) {
+        await postPaymentSettlementVoucher(tx, {
+          restaurantId,
+          branchId: order.branchId,
+          orderId,
+          paymentId: payment.id,
+          method: payment.method,
+          amountInPaisa: payment.amountInPaisa,
+          tipInPaisa: payment.tipInPaisa,
+          customerId: order.customerId,
+          timezone,
+          createdByUserId: session.user.id,
+        });
+      }
 
       return { payment, order: updatedOrder, billing: after, idempotentReplay: false } as const;
     });
