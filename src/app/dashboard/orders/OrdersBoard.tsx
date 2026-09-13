@@ -11,6 +11,7 @@ import {
   type OrderStatus,
 } from "@/lib/order-status";
 import { openKotTicket } from "@/lib/kot-print-client";
+import { openBillReceipt } from "@/lib/bill-print-client";
 import { PAYMENT_STATUS_LABELS, type PaymentStatus } from "@/lib/payments";
 import { OrderPaymentModal } from "./OrderPaymentModal";
 import { useOnlineStatus } from "@/lib/use-online-status";
@@ -426,8 +427,19 @@ export function OrdersBoard({
                         )}
                       </div>
 
-                      {(forward && canEdit) || (canCancelThis && canCancel) || (isUnpaid && canEdit) ? (
+                      {(forward && canEdit) ||
+                      (canCancelThis && canCancel) ||
+                      (isUnpaid && canEdit) ||
+                      order.status === "served" ? (
                         <div className="mt-2 flex flex-wrap gap-2">
+                          {order.status === "served" && (
+                            <button
+                              onClick={() => openBillReceipt(order.id)}
+                              className="rounded-full border border-neutral-300 px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:bg-neutral-100"
+                            >
+                              Print bill
+                            </button>
+                          )}
                           {forward && canEdit && (
                             <button
                               disabled={busy}
