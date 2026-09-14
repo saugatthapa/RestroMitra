@@ -1192,6 +1192,7 @@ const REPORT_TABS = [
   "VAT Return",
   "Tax Depreciation",
   "Branch Profitability",
+  "Health Check",
 ] as const;
 type ReportTab = (typeof REPORT_TABS)[number];
 
@@ -1250,6 +1251,7 @@ function ReportsTab({ slug, onDrillDown }: { slug: string; onDrillDown: (account
       {reportTab === "VAT Return" && <VatReturnReport slug={slug} />}
       {reportTab === "Tax Depreciation" && <TaxDepreciationReportTab slug={slug} />}
       {reportTab === "Branch Profitability" && <BranchProfitabilityReport slug={slug} />}
+      {reportTab === "Health Check" && <AccountingHealthCheckTab slug={slug} />}
     </div>
   );
 }
@@ -2445,6 +2447,123 @@ function InventoryValuationReportTab({ slug }: { slug: string }) {
             </table>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+type HealthCheckSeverity = "pass" | "info" | "attention";
+type HealthCheckIssue = { message: string };
+type HealthCheckData = {
+  id: string;
+  label: string;
+  description: string;
+  severity: HealthCheckSeverity;
+  issues: HealthCheckIssue[];
+};
+type AccountingHealthReportData = {
+  asOfDate: string;
+  generatedAt: string;
+  overallSeverity: HealthCheckSeverity;
+  checks: HealthCheckData[];
+};
+
+const HEALTH_SEVERITY_BADGE: Record<HealthCheckSeverity, string> = {
+  pass: "bg-green-100 text-green-800",
+  info: "bg-blue-100 text-blue-800",
+  attention: "bg-amber-100 text-amber-800",
+};
+const HEALTH_SEVERITY_LABEL: Record<HealthCheckSeverity, string> = {
+  pass: "Pass",
+  info: "Info",
+  attention: "Needs attention",
+};
+
+/**
+ * Phase 7, Slice 7e — the Accounting Health validator. Read-only
+ * diagnostics only — see health-check.ts's own top-of-file comment for why
+ * this never offers an "auto-fix" action. Restaurant-wide, as of today; not
+ * a period report, so no date range and no branch scope.
+ */
+function AccountingHealthCheckTab({ slug }: { slug: string }) {
+  const [report, setReport] = useState<AccountingHealthReportData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    setLoading(true);
+    apiGet<{ report: AccountingHealthReportData }>(`${base(slug)}/accounting/reports/health`)
+      .then((res) => {
+        setReport(res.report);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not run the Accounting Health check."))
+      .finally(() => setLoading(false));
+  }, [slug, refreshKey]);
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-neutral-400">
+          {report ? `As of ${report.asOfDate} — checked ${new Date(report.generatedAt).toLocaleString()}` : ""}
+        </p>
+        <button
+          onClick={() => setRefreshKey((k) => k + 1)}
+          disabled={loading}
+          className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-200 disabled:opacity-50"
+        >
+          {loading ? "Checking…" : "Re-run checks"}
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Running diagnostics…</p>
+      ) : (
+        report && (
+          <div className="space-y-3">
+            <div
+              className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
+                report.overallSeverity === "pass"
+                  ? "border-green-200 bg-green-50 text-green-800"
+                  : report.overallSeverity === "info"
+                    ? "border-blue-200 bg-blue-50 text-blue-800"
+                    : "border-amber-200 bg-amber-50 text-amber-800"
+              }`}
+            >
+              {report.overallSeverity === "pass"
+                ? "All checks passed — no issues found."
+                : report.overallSeverity === "info"
+                  ? "All checks passed, with informational notes below."
+                  : "One or more checks need attention — see below."}
+            </div>
+
+            {report.checks.map((check) => (
+              <div key={check.id} className="rounded-2xl border border-neutral-200 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium text-neutral-900">{check.label}</p>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${HEALTH_SEVERITY_BADGE[check.severity]}`}
+                  >
+                    {HEALTH_SEVERITY_LABEL[check.severity]}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-neutral-500">{check.description}</p>
+                {check.issues.length > 0 && (
+                  <ul className="mt-3 space-y-1.5 border-t border-neutral-100 pt-3">
+                    {check.issues.map((issue, i) => (
+                      <li key={i} className="text-sm text-neutral-700">
+                        {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        )
       )}
     </div>
   );
