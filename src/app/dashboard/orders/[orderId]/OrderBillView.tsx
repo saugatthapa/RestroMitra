@@ -45,6 +45,10 @@ type Payment = {
   refundOfPaymentId: string | null;
   note: string | null;
   createdAt: string;
+  // Phase 6, Slice 6d — assigned only on a refund of a taxed order (see
+  // assignFiscalCreditNoteNumber's own comment); null for an ordinary
+  // payment, and null for a refund on a tax-free order.
+  fiscalCreditNoteNumber: number | null;
   // Commercial Launch Phase B.9 — Split Bill. Which share (if any) this
   // payment was tagged as covering — see the payments.splitId column
   // comment in schema.ts.
@@ -491,6 +495,7 @@ export function OrderBillView({
                       {p.splitId ? ` · ${splits.find((s) => s.id === p.splitId)?.label ?? "a share"}` : ""}
                       {p.note ? ` · ${p.note}` : ""}
                       {p.tipInPaisa > 0 ? ` · tip ${formatNPR(p.tipInPaisa)}` : ""}
+                      {p.fiscalCreditNoteNumber !== null ? ` · Credit Note #${p.fiscalCreditNoteNumber}` : ""}
                     </p>
                   </div>
                   <span className={p.amountInPaisa < 0 ? "font-semibold text-red-600" : "font-semibold text-neutral-900"}>

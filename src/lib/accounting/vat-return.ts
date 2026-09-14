@@ -21,17 +21,17 @@ import { accountingVoucherLines, accountingVouchers, chartOfAccounts } from "@/d
  * designed to net against, matching the Phase 6 plan's own VAT-focused
  * scope — see that plan's Part 0 caveats).
  *
- * KNOWN LIMITATION, inherited from Phase 4 and NOT fixed by this slice: a
- * sales refund (`postRefundVoucher`, integrations/payment-settlement.ts)
- * books its full amount to "4910 Sales Returns & Refunds" only — it never
- * reduces "2100 Tax Payable," a documented Phase 4 simplification (the
- * payments/refund schema has no field recording how much of a refund was
- * ever tax). So this report's Output VAT figure does NOT subtract tax on
- * refunded sales; a restaurant with meaningful refund volume will see this
- * report overstate its true net Output VAT for the period. Flagged here
- * rather than silently accepted, since a VAT-focused report is exactly
- * where that gap matters most — fixing it would mean reworking Phase 4's
- * own refund posting, out of scope for this slice.
+ * UPDATE, Phase 6 Slice 6d: the limitation this comment used to describe in
+ * full (a sales refund never reducing "2100 Tax Payable" at all) is now
+ * only PARTIAL. `postRefundVoucher` (integrations/payment-settlement.ts)
+ * now prorates a refund by the original order's own blended tax-to-total
+ * ratio and debits Tax Payable for that portion — exact for a full-order
+ * refund or any order where every item shares one tax rate, an
+ * approximation only for a partial refund of an order that genuinely mixes
+ * taxable and tax-exempt items (no per-item link on a refund to do better
+ * than that). This report's net movement query needs no change either way
+ * — it already reads whatever `postRefundVoucher` actually posted to 2100,
+ * so it picks up 6d's more-correct figure automatically.
  */
 
 const OUTPUT_VAT_ACCOUNT_CODE = "2100"; // Tax Payable — credited by postSaleAndCogsVouchers whenever a sale's own taxInPaisa > 0.

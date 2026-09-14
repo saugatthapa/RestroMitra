@@ -103,6 +103,22 @@ export async function postPaymentSettlementVoucher(
  * refund, this much was tip," so splitting it would mean guessing rather
  * than reading real data. Unconditional on order status — a refund can
  * legitimately happen well after an order completed.
+ *
+ * Phase 6, Slice 6d — per sign-off, `orderTaxInPaisa`/`orderTotalInPaisa`
+ * (the ORIGINAL order's own recorded figures, unrelated to how much of it
+ * has been refunded before) let this now reduce the original invoice's own
+ * Output VAT correctly, not just its cash-flow side, closing the gap
+ * Slice 6c's own VAT return report flagged: the refund is prorated by the
+ * order's own blended tax-to-total ratio
+ * (`taxPortion = round(amountInPaisa * orderTaxInPaisa / orderTotalInPaisa)`),
+ * which is EXACT whenever the order's own items share one tax rate (the
+ * common flat-VAT-menu case, and always exact for a full-order refund),
+ * and an approximation only for an order that genuinely mixes taxable and
+ * tax-exempt items — there is no per-item link on a refund today to do
+ * better than that (see this function's own scope note in
+ * ACCOUNTING_PHASE_6_SLICE_6D_REPORT.md). A tax-free order
+ * (`orderTaxInPaisa === 0`) reduces to exactly today's pre-6d behavior —
+ * the full amount still goes entirely to Sales Returns & Refunds.
  */
 export async function postRefundVoucher(
   tx: Transaction,
@@ -113,15 +129,47 @@ export async function postRefundVoucher(
     refundPaymentId: string;
     method: PaymentMethod;
     amountInPaisa: number; // positive — the amount refunded, not payments.amountInPaisa's negative sign
+    orderTaxInPaisa: number;
+    orderTotalInPaisa: number;
     timezone: string;
     createdByUserId: string;
   },
 ): Promise<void> {
   if (params.amountInPaisa <= 0) return;
 
-  const accounts = await resolveAccountMappings(tx, {
-    restaurantId: params.restaurantId,
-    keys: [MAPPING_KEYS.SALES_RETURNS_AND_REFUNDS, PAYMENT_METHOD_MAPPING_KEYS[params.method]],
+  const taxPortionInPaisa =
+    params.orderTaxInPaisa > 0 && params.orderTotalInPaisa > 0
+      ? Math.min(
+          params.amountInPaisa,
+          Math.round((params.amountInPaisa * params.orderTaxInPaisa) / params.orderTotalInPaisa),
+        )
+      : 0;
+  const goodsPortionInPaisa = params.amountInPaisa - taxPortionInPaisa;
+
+  const keys: MappingKey[] = [PAYMENT_METHOD_MAPPING_KEYS[params.method]];
+  if (goodsPortionInPaisa > 0) keys.push(MAPPING_KEYS.SALES_RETURNS_AND_REFUNDS);
+  if (taxPortionInPaisa > 0) keys.push(MAPPING_KEYS.TAX_PAYABLE);
+  const accounts = await resolveAccountMappings(tx, { restaurantId: params.restaurantId, keys });
+
+  const lines: PostVoucherLine[] = [];
+  if (goodsPortionInPaisa > 0) {
+    lines.push({
+      accountId: accounts.get(MAPPING_KEYS.SALES_RETURNS_AND_REFUNDS)!,
+      debitInPaisa: goodsPortionInPaisa,
+      orderId: params.orderId,
+    });
+  }
+  if (taxPortionInPaisa > 0) {
+    lines.push({
+      accountId: accounts.get(MAPPING_KEYS.TAX_PAYABLE)!,
+      debitInPaisa: taxPortionInPaisa,
+      orderId: params.orderId,
+    });
+  }
+  lines.push({
+    accountId: accounts.get(PAYMENT_METHOD_MAPPING_KEYS[params.method])!,
+    creditInPaisa: params.amountInPaisa,
+    orderId: params.orderId,
   });
 
   await postVoucher(tx, {
@@ -129,22 +177,11 @@ export async function postRefundVoucher(
     branchId: params.branchId,
     voucherType: "refund",
     voucherDate: restaurantDate(params.timezone),
-    narration: "Refund issued",
+    narration: taxPortionInPaisa > 0 ? "Refund issued (credit note — reduces output VAT)" : "Refund issued",
     createdByUserId: params.createdByUserId,
     sourceType: "refund",
     sourceId: params.refundPaymentId,
     postingEvent: "refund",
-    lines: [
-      {
-        accountId: accounts.get(MAPPING_KEYS.SALES_RETURNS_AND_REFUNDS)!,
-        debitInPaisa: params.amountInPaisa,
-        orderId: params.orderId,
-      },
-      {
-        accountId: accounts.get(PAYMENT_METHOD_MAPPING_KEYS[params.method])!,
-        creditInPaisa: params.amountInPaisa,
-        orderId: params.orderId,
-      },
-    ],
+    lines,
   });
 }

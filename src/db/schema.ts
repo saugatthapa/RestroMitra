@@ -1381,6 +1381,33 @@ export const fiscalInvoiceCounters = pgTable(
   ],
 );
 
+// Phase 6, Slice 6d — a SEPARATE gapless sequence from
+// fiscalInvoiceCounters above, deliberately its own table rather than a
+// "kind" discriminator column on the existing one: a credit note is its
+// own fiscal document series in real-world VAT practice, not a sub-series
+// of invoice numbers, and this avoids touching that table's own already-
+// shipped shape/unique-constraint at all. Same atomic upsert-increment
+// mechanism (assignFiscalCreditNoteNumber in fiscal-invoice.ts).
+export const fiscalCreditNoteCounters = pgTable(
+  "fiscal_credit_note_counters",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    lastNumber: integer("last_number").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("fiscal_credit_note_counters_restaurant_unique").on(table.restaurantId),
+  ],
+);
+
 export const orderItems = pgTable(
   "order_items",
   {
@@ -1574,6 +1601,19 @@ export const payments = pgTable(
     // the payment reconciled here.
     reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
     reconciledByUserId: uuid("reconciled_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    // Phase 6, Slice 6d — a gapless, strictly-increasing credit-note number
+    // for a refund row, same shape and reasoning as
+    // orders.fiscalInvoiceNumber (see assignFiscalInvoiceNumber's own doc
+    // comment: mirrors assignKotSequence's atomic-upsert pattern). Assigned
+    // once, at the moment a refund posts, ONLY when the order being
+    // refunded actually charged tax (`orders.taxInPaisa > 0`) — a refund on
+    // a tax-free order has no output tax to correct, so it never needed a
+    // formal VAT credit note in the first place. Independent of whether
+    // the accounting module's automatic posting is even turned on (a
+    // compliance/paper-trail concern, not a bookkeeping one) — see
+    // assignFiscalCreditNoteNumber in fiscal-invoice.ts.
+    fiscalCreditNoteNumber: integer("fiscal_credit_note_number"),
+    fiscalCreditNoteAssignedAt: timestamp("fiscal_credit_note_assigned_at", { withTimezone: true }),
   },
   (table) => [
     index("payments_restaurant_id_idx").on(table.restaurantId),
@@ -1606,6 +1646,13 @@ export const payments = pgTable(
       sql`(${table.reconciledAt} IS NULL AND ${table.reconciledByUserId} IS NULL)
           OR (${table.reconciledAt} IS NOT NULL AND ${table.reconciledByUserId} IS NOT NULL)`,
     ),
+    // Phase 6, Slice 6d — same "partial, DB-level backstop" pattern as
+    // orders_restaurant_fiscal_invoice_number_unique: most payments rows
+    // never get one of these (only a tax-reducing refund does), so this
+    // only constrains rows that actually have a number assigned.
+    uniqueIndex("payments_restaurant_fiscal_credit_note_number_unique")
+      .on(table.restaurantId, table.fiscalCreditNoteNumber)
+      .where(sql`${table.fiscalCreditNoteNumber} IS NOT NULL`),
   ],
 );
 

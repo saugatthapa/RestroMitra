@@ -1,7 +1,7 @@
 import "server-only";
 import { eq, sql } from "drizzle-orm";
 import type { Transaction } from "@/db";
-import { fiscalInvoiceCounters, orders } from "@/db/schema";
+import { fiscalInvoiceCounters, fiscalCreditNoteCounters, orders, payments } from "@/db/schema";
 
 export type FiscalInvoiceAssignment = {
   number: number;
@@ -92,6 +92,61 @@ export async function assignFiscalInvoiceNumber(
     .update(orders)
     .set({ fiscalInvoiceNumber: counter.lastNumber, fiscalInvoiceAssignedAt: assignedAt })
     .where(eq(orders.id, params.orderId));
+
+  return { number: counter.lastNumber, assignedAt };
+}
+
+/**
+ * Phase 6, Slice 6d — the credit-note equivalent of
+ * assignFiscalInvoiceNumber above: same shape, same atomic-upsert
+ * mechanism (backed by `fiscal_credit_note_counters`, a SEPARATE sequence
+ * from the invoice one — see that table's own comment in schema.ts), same
+ * idempotent-safe-to-call-more-than-once guarantee.
+ *
+ * WHEN this is called matters here too: only from the refunds route,
+ * after a refund row is inserted, and ONLY when the order being refunded
+ * actually charged tax (`orders.taxInPaisa > 0`) — a refund on a tax-free
+ * order has no output tax to correct, so it never needed a formal VAT
+ * credit note. Deliberately called regardless of whether the accounting
+ * module's automatic posting is turned on (a compliance/paper-trail
+ * concern, not a bookkeeping one) — mirrors assignFiscalInvoiceNumber's
+ * own independence from any accounting-module setting.
+ *
+ * Must run inside the same transaction as the refund insert that triggered
+ * it, same reasoning as assignFiscalInvoiceNumber: the number assignment
+ * and the refund commit together, or neither does.
+ */
+export async function assignFiscalCreditNoteNumber(
+  tx: Transaction,
+  params: { restaurantId: string; paymentId: string },
+): Promise<FiscalInvoiceAssignment> {
+  const [existing] = await tx
+    .select({
+      fiscalCreditNoteNumber: payments.fiscalCreditNoteNumber,
+      fiscalCreditNoteAssignedAt: payments.fiscalCreditNoteAssignedAt,
+    })
+    .from(payments)
+    .where(eq(payments.id, params.paymentId))
+    .limit(1);
+
+  if (existing?.fiscalCreditNoteNumber != null && existing.fiscalCreditNoteAssignedAt) {
+    return { number: existing.fiscalCreditNoteNumber, assignedAt: existing.fiscalCreditNoteAssignedAt };
+  }
+
+  const [counter] = await tx
+    .insert(fiscalCreditNoteCounters)
+    .values({ restaurantId: params.restaurantId, lastNumber: 1 })
+    .onConflictDoUpdate({
+      target: fiscalCreditNoteCounters.restaurantId,
+      set: { lastNumber: sql`${fiscalCreditNoteCounters.lastNumber} + 1`, updatedAt: new Date() },
+    })
+    .returning({ lastNumber: fiscalCreditNoteCounters.lastNumber });
+
+  const assignedAt = new Date();
+  await tx
+    .update(payments)
+    .set({ fiscalCreditNoteNumber: counter.lastNumber, fiscalCreditNoteAssignedAt: assignedAt })
+    .where(eq(payments.id, params.paymentId));
 
   return { number: counter.lastNumber, assignedAt };
 }

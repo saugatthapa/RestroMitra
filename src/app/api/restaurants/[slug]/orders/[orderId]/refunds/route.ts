@@ -19,6 +19,7 @@ import { assertRegisterOpenForCashPayment } from "@/lib/cash-register";
 import { rateLimit } from "@/lib/rate-limit";
 import { isAutomaticPostingEnabled } from "@/lib/accounting/automatic-posting";
 import { postRefundVoucher } from "@/lib/accounting/integrations/payment-settlement";
+import { assignFiscalCreditNoteNumber } from "@/lib/fiscal-invoice";
 
 /**
  * Records a refund against an order, stored as a negative-amount row in the
@@ -215,9 +216,11 @@ export async function POST(
       // regardless of the order's current status (unlike the payments
       // route's settlement check above) — reversing revenue that was
       // already recognized can legitimately happen well after an order
-      // completed. Books the full amount to Sales Returns & Refunds; see
-      // postRefundVoucher's own comment for why the tip portion isn't
-      // split out separately (ACCOUNTING_PHASE_4_PLAN.md Slice 4b).
+      // completed. Per Phase 6, Slice 6d, the goods/tax split (and thus
+      // whether any of it reduces Output VAT) is computed inside
+      // postRefundVoucher itself from the order's own taxInPaisa/
+      // totalInPaisa — see that function's own comment for why (and for
+      // the tip-portion note, ACCOUNTING_PHASE_4_PLAN.md Slice 4b).
       if (await isAutomaticPostingEnabled(tx, restaurantId)) {
         await postRefundVoucher(tx, {
           restaurantId,
@@ -226,12 +229,30 @@ export async function POST(
           refundPaymentId: refund.id,
           method: refund.method,
           amountInPaisa: body.amount,
+          orderTaxInPaisa: order.taxInPaisa,
+          orderTotalInPaisa: order.totalInPaisa,
           timezone,
           createdByUserId: session.user.id,
         });
       }
 
-      return { refund, order: updatedOrder, billing: after, idempotentReplay: false } as const;
+      // Phase 6, Slice 6d — a formal VAT credit note number, independent
+      // of whether automatic accounting posting is even turned on (a
+      // compliance/paper-trail concern, not a bookkeeping one — see
+      // assignFiscalCreditNoteNumber's own comment). Only when the order
+      // being refunded actually charged tax: a refund on a tax-free order
+      // has no output tax to correct, so it never needed one.
+      let refundWithCreditNote = refund;
+      if (order.taxInPaisa > 0) {
+        const creditNote = await assignFiscalCreditNoteNumber(tx, { restaurantId, paymentId: refund.id });
+        refundWithCreditNote = {
+          ...refund,
+          fiscalCreditNoteNumber: creditNote.number,
+          fiscalCreditNoteAssignedAt: creditNote.assignedAt,
+        };
+      }
+
+      return { refund: refundWithCreditNote, order: updatedOrder, billing: after, idempotentReplay: false } as const;
     });
 
     if ("error" in result) {

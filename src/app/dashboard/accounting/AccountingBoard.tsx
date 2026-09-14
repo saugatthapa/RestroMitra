@@ -1734,9 +1734,11 @@ function VatReturnReport({ slug }: { slug: string }) {
             </div>
             <p className="text-xs text-neutral-400">
               A reference summary for your own records or your accountant — not a filable IRD
-              return. Output VAT here does not yet subtract tax on refunded sales (a refund books
-              entirely to Sales Returns &amp; Refunds today); Input VAT only reflects purchases
-              where a VAT amount was actually entered. Verify every figure before filing.
+              return. Output VAT already subtracts tax on refunded sales, prorated by each
+              order&apos;s own overall tax rate — exact for a full refund or a single flat tax
+              rate, an estimate for a partial refund of an order that genuinely mixes tax rates.
+              Input VAT only reflects purchases where a VAT amount was actually entered. Verify
+              every figure before filing.
             </p>
           </div>
         )

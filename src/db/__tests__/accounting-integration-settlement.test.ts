@@ -32,7 +32,7 @@ describe.skipIf(!hasDb)("Accounting — Slice 4b: payment settlement + refunds (
     return row.id;
   }
 
-  async function makeCompletedOrder(params: { totalInPaisa: number; customerId?: string | null }) {
+  async function makeCompletedOrder(params: { totalInPaisa: number; taxInPaisa?: number; customerId?: string | null }) {
     const suffix = Math.random().toString(36).slice(2, 8);
     const [order] = await db
       .insert(schema.orders)
@@ -42,8 +42,8 @@ describe.skipIf(!hasDb)("Accounting — Slice 4b: payment settlement + refunds (
         orderNumber: `TEST-${suffix}`,
         source: "pos",
         status: "completed",
-        subtotalInPaisa: params.totalInPaisa,
-        taxInPaisa: 0,
+        subtotalInPaisa: params.totalInPaisa - (params.taxInPaisa ?? 0),
+        taxInPaisa: params.taxInPaisa ?? 0,
         totalInPaisa: params.totalInPaisa,
         paymentStatus: "unpaid",
         customerId: params.customerId ?? null,
@@ -120,7 +120,7 @@ describe.skipIf(!hasDb)("Accounting — Slice 4b: payment settlement + refunds (
     await db.transaction((tx) => chartOfAccountsLib.seedDefaultChartOfAccounts(tx, { restaurantId }));
 
     accountIdByCode = new Map();
-    for (const code of ["1000", "1010", "1100", "2200", "4910"]) {
+    for (const code of ["1000", "1010", "1100", "2100", "2200", "4910"]) {
       accountIdByCode.set(code, await findAccountByCode(code));
     }
   });
@@ -228,6 +228,8 @@ describe.skipIf(!hasDb)("Accounting — Slice 4b: payment settlement + refunds (
         refundPaymentId: refund.id,
         method: "cash",
         amountInPaisa: 150_00,
+        orderTaxInPaisa: order.taxInPaisa,
+        orderTotalInPaisa: order.totalInPaisa,
         timezone: "Asia/Kathmandu",
         createdByUserId: userId,
       }),
@@ -258,6 +260,8 @@ describe.skipIf(!hasDb)("Accounting — Slice 4b: payment settlement + refunds (
         refundPaymentId: refund.id,
         method: "cash",
         amountInPaisa: 200_00,
+        orderTaxInPaisa: order.taxInPaisa,
+        orderTotalInPaisa: order.totalInPaisa,
         timezone: "Asia/Kathmandu",
         createdByUserId: userId,
       }),
@@ -266,6 +270,111 @@ describe.skipIf(!hasDb)("Accounting — Slice 4b: payment settlement + refunds (
     const refundVoucher = await voucherLinesFor("refund", refund.id, "refund");
     const todayInKathmandu = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kathmandu" });
     expect(refundVoucher!.voucher.voucherDate).toBe(todayInKathmandu);
+  });
+
+  it("Phase 6, Slice 6d — a FULL refund of a taxed order reduces Tax Payable by exactly the order's own tax, with the rest to Sales Returns & Refunds", async () => {
+    // 1000 subtotal + 130 tax (13%) = 1130 total.
+    const order = await makeCompletedOrder({ totalInPaisa: 1_130_00, taxInPaisa: 130_00 });
+    await postSale({ ...order, discountInPaisa: 0, serviceChargeInPaisa: 0 });
+    await db.insert(schema.payments).values({ restaurantId, orderId: order.id, amountInPaisa: 1_130_00, method: "cash" });
+
+    const [refund] = await db
+      .insert(schema.payments)
+      .values({ restaurantId, orderId: order.id, amountInPaisa: -1_130_00, method: "cash" })
+      .returning();
+
+    await db.transaction((tx) =>
+      settlementLib.postRefundVoucher(tx, {
+        restaurantId,
+        branchId,
+        orderId: order.id,
+        refundPaymentId: refund.id,
+        method: "cash",
+        amountInPaisa: 1_130_00,
+        orderTaxInPaisa: order.taxInPaisa,
+        orderTotalInPaisa: order.totalInPaisa,
+        timezone: "Asia/Kathmandu",
+        createdByUserId: userId,
+      }),
+    );
+
+    const refundVoucher = await voucherLinesFor("refund", refund.id, "refund");
+    expect(refundVoucher).not.toBeNull();
+    const returnsAccountId = accountIdByCode.get("4910")!;
+    const taxPayableAccountId = accountIdByCode.get("2100")!;
+    const cashAccountId = accountIdByCode.get("1000")!;
+    expect(refundVoucher!.lines.find((l) => l.accountId === returnsAccountId)?.debitInPaisa).toBe(1_000_00);
+    expect(refundVoucher!.lines.find((l) => l.accountId === taxPayableAccountId)?.debitInPaisa).toBe(130_00);
+    expect(refundVoucher!.lines.find((l) => l.accountId === cashAccountId)?.creditInPaisa).toBe(1_130_00);
+    const totalDebit = refundVoucher!.lines.reduce((s, l) => s + l.debitInPaisa, 0);
+    const totalCredit = refundVoucher!.lines.reduce((s, l) => s + l.creditInPaisa, 0);
+    expect(totalDebit).toBe(totalCredit);
+  });
+
+  it("Phase 6, Slice 6d — a PARTIAL refund of a taxed order prorates the tax portion by the order's own blended tax-to-total ratio", async () => {
+    // 1000 subtotal + 130 tax (13%) = 1130 total. A 565 partial refund (half
+    // the order) should carry exactly half the tax: 65.
+    const order = await makeCompletedOrder({ totalInPaisa: 1_130_00, taxInPaisa: 130_00 });
+    await postSale({ ...order, discountInPaisa: 0, serviceChargeInPaisa: 0 });
+    await db.insert(schema.payments).values({ restaurantId, orderId: order.id, amountInPaisa: 1_130_00, method: "cash" });
+
+    const [refund] = await db
+      .insert(schema.payments)
+      .values({ restaurantId, orderId: order.id, amountInPaisa: -565_00, method: "cash" })
+      .returning();
+
+    await db.transaction((tx) =>
+      settlementLib.postRefundVoucher(tx, {
+        restaurantId,
+        branchId,
+        orderId: order.id,
+        refundPaymentId: refund.id,
+        method: "cash",
+        amountInPaisa: 565_00,
+        orderTaxInPaisa: order.taxInPaisa,
+        orderTotalInPaisa: order.totalInPaisa,
+        timezone: "Asia/Kathmandu",
+        createdByUserId: userId,
+      }),
+    );
+
+    const refundVoucher = await voucherLinesFor("refund", refund.id, "refund");
+    const returnsAccountId = accountIdByCode.get("4910")!;
+    const taxPayableAccountId = accountIdByCode.get("2100")!;
+    expect(refundVoucher!.lines.find((l) => l.accountId === returnsAccountId)?.debitInPaisa).toBe(500_00);
+    expect(refundVoucher!.lines.find((l) => l.accountId === taxPayableAccountId)?.debitInPaisa).toBe(65_00);
+  });
+
+  it("Phase 6, Slice 6d — a refund of a tax-free order is unaffected: full amount to Sales Returns & Refunds, no Tax Payable line", async () => {
+    const order = await makeCompletedOrder({ totalInPaisa: 250_00 });
+    await postSale({ ...order, discountInPaisa: 0, serviceChargeInPaisa: 0, taxInPaisa: 0 });
+    await db.insert(schema.payments).values({ restaurantId, orderId: order.id, amountInPaisa: 250_00, method: "cash" });
+
+    const [refund] = await db
+      .insert(schema.payments)
+      .values({ restaurantId, orderId: order.id, amountInPaisa: -250_00, method: "cash" })
+      .returning();
+
+    await db.transaction((tx) =>
+      settlementLib.postRefundVoucher(tx, {
+        restaurantId,
+        branchId,
+        orderId: order.id,
+        refundPaymentId: refund.id,
+        method: "cash",
+        amountInPaisa: 250_00,
+        orderTaxInPaisa: order.taxInPaisa,
+        orderTotalInPaisa: order.totalInPaisa,
+        timezone: "Asia/Kathmandu",
+        createdByUserId: userId,
+      }),
+    );
+
+    const refundVoucher = await voucherLinesFor("refund", refund.id, "refund");
+    const returnsAccountId = accountIdByCode.get("4910")!;
+    const taxPayableAccountId = accountIdByCode.get("2100")!;
+    expect(refundVoucher!.lines.find((l) => l.accountId === returnsAccountId)?.debitInPaisa).toBe(250_00);
+    expect(refundVoucher!.lines.find((l) => l.accountId === taxPayableAccountId)).toBeUndefined();
   });
 
   it("is idempotent — replaying the same settlement or refund posts only one voucher each", async () => {
