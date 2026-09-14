@@ -30,6 +30,12 @@ export const createExpenseSchema = z.object({
   note: z.string().trim().max(1000).optional().or(z.literal("")),
   branchId: z.string().uuid().nullable().optional(),
   paymentMethod: z.enum(EXPENSE_PAYMENT_METHODS).optional(),
+  // Phase 5, Slice 5b — which real bank account this payout left from, only
+  // meaningful for a bank-shaped paymentMethod when the restaurant has more
+  // than one active bank account (see resolveBankAccountForPosting's own
+  // doc comment for the full resolution rules). Optional and ignored
+  // otherwise.
+  bankAccountId: z.string().uuid().optional(),
   // QA hardening pass — a client-generated retry key identifying this
   // exact submission attempt, not the expense itself. Mirrors
   // createStaffOrderSchema's clientRequestId (see its comment): a retry of
@@ -58,4 +64,6 @@ export const rejectExpenseSchema = z.object({
 
 export const payExpenseSchema = z.object({
   paymentMethod: z.enum(EXPENSE_PAYMENT_METHODS),
+  // Phase 5, Slice 5b — see createExpenseSchema's own comment.
+  bankAccountId: z.string().uuid().optional(),
 });

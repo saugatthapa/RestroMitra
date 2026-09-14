@@ -225,6 +225,7 @@ export async function POST(
               amountInPaisa: row.amountInPaisa,
               payPeriodLabel: row.payPeriodLabel,
               paymentMethod: row.paymentMethod,
+              bankAccountId: data.bankAccountId,
               timezone,
               createdByUserId: session.user.id,
             });

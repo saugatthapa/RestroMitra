@@ -33,6 +33,18 @@ type StaffMember = {
 };
 
 type Branch = { id: string; name: string; isActive: boolean };
+type BankAccount = { id: string; bankName: string; code: string; isActive: boolean };
+
+// Phase 5, Slice 5b — payout methods that post through the "Bank Accounts"
+// ledger concept (see PAYOUT_METHOD_MAPPING_KEYS-equivalent split in
+// src/lib/accounting/integrations/payroll.ts). Only these ever need a bank
+// account picker; cash/other never do.
+const BANK_SHAPED_PAYOUT_METHODS: ReadonlySet<PayoutMethod> = new Set([
+  "bank_transfer",
+  "esewa",
+  "khalti",
+  "mobile_banking",
+]);
 
 type AttendanceRecord = {
   id: string;
@@ -1361,6 +1373,7 @@ function formatComputationDetail(computation: PayrollComputation): string {
 function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll: boolean }) {
   const [staff, setStaff] = useState<PayrollStaffMember[]>([]);
   const [payments, setPayments] = useState<PayrollPayment[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payingFor, setPayingFor] = useState<PayrollStaffMember | null>(null);
@@ -1397,6 +1410,19 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, periodStart, periodEnd]);
+
+  // Phase 5, Slice 5b — fetched once per tab (not per staff row/modal open)
+  // to avoid redundant requests. Everyone who can reach this tab's "Pay"
+  // action holds MANAGE_PAYROLL, which always also holds MANAGE_ACCOUNTING,
+  // so this route is reachable for them. Empty on a restaurant that never
+  // visited the Bank Accounts screen — the picker below simply stays
+  // hidden and the legacy account keeps being used exactly as before.
+  useEffect(() => {
+    if (!canManagePayroll) return;
+    apiGet<{ bankAccounts: BankAccount[] }>(`${base(slug)}/accounting/bank-accounts`)
+      .then((res) => setBankAccounts(res.bankAccounts.filter((a) => a.isActive)))
+      .catch(() => {});
+  }, [slug, canManagePayroll]);
 
   async function voidPayment(payment: PayrollPayment) {
     if (!confirm(`Void the ${formatNPR(payment.amountInPaisa)} payment to ${payment.staffNameSnapshot}? This does not claw back the money — it only corrects the record.`)) {
@@ -1522,6 +1548,7 @@ function PayrollTab({ slug, canManagePayroll }: { slug: string; canManagePayroll
           staff={payingFor}
           periodStart={periodStart}
           periodEnd={periodEnd}
+          bankAccounts={bankAccounts}
           onClose={() => setPayingFor(null)}
           onPaid={() => {
             setPayingFor(null);
@@ -1594,6 +1621,7 @@ function PaySalaryModal({
   staff,
   periodStart,
   periodEnd,
+  bankAccounts,
   onClose,
   onPaid,
 }: {
@@ -1601,6 +1629,7 @@ function PaySalaryModal({
   staff: PayrollStaffMember;
   periodStart: string;
   periodEnd: string;
+  bankAccounts: BankAccount[];
   onClose: () => void;
   onPaid: () => void;
 }) {
@@ -1616,6 +1645,8 @@ function PaySalaryModal({
         : "",
   );
   const [method, setMethod] = useState<PayoutMethod>(staff.salary?.paymentMethod ?? "cash");
+  const [bankAccountId, setBankAccountId] = useState("");
+  const needsBankAccountChoice = BANK_SHAPED_PAYOUT_METHODS.has(method) && bankAccounts.length > 1;
   const [payPeriodLabel, setPayPeriodLabel] = useState("");
   const [note, setNote] = useState("");
   // Commercial completion pass — payslip generation. Purely itemized,
@@ -1648,6 +1679,7 @@ function PaySalaryModal({
         userRoleId: staff.userRoleId,
         amount: Number(amount),
         paymentMethod: method,
+        bankAccountId: needsBankAccountChoice && bankAccountId ? bankAccountId : undefined,
         payPeriodLabel: payPeriodLabel || undefined,
         periodStart,
         periodEnd,
@@ -1709,7 +1741,14 @@ function PaySalaryModal({
           </label>
           <label className="block text-sm">
             <span className="mb-1 block text-neutral-600">Paid via</span>
-            <select value={method} onChange={(e) => setMethod(e.target.value as PayoutMethod)} className="input">
+            <select
+              value={method}
+              onChange={(e) => {
+                setMethod(e.target.value as PayoutMethod);
+                setBankAccountId("");
+              }}
+              className="input"
+            >
               {PAYOUT_METHODS.map((m) => (
                 <option key={m} value={m}>
                   {PAYOUT_METHOD_LABELS[m]}
@@ -1717,6 +1756,19 @@ function PaySalaryModal({
               ))}
             </select>
           </label>
+          {needsBankAccountChoice && (
+            <label className="block text-sm">
+              <span className="mb-1 block text-neutral-600">Bank account</span>
+              <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className="input">
+                <option value="">Choose bank account…</option>
+                {bankAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.bankName} ({a.code})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="block text-sm">
             <span className="mb-1 block text-neutral-600">Period (optional, e.g. &quot;August 2026&quot;)</span>
             <input
@@ -1795,7 +1847,7 @@ function PaySalaryModal({
           <button type="button" onClick={onClose} className="btn-secondary" disabled={saving}>
             Cancel
           </button>
-          <button disabled={saving} className="btn-primary">
+          <button disabled={saving || (needsBankAccountChoice && !bankAccountId)} className="btn-primary">
             {saving ? "Recording…" : "Mark as paid"}
           </button>
         </div>

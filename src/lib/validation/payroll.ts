@@ -36,6 +36,9 @@ export const createPayrollPaymentSchema = z.object({
   userRoleId: z.string().uuid("Choose a staff member."),
   amount: rupeeAmount,
   paymentMethod: z.enum(PAYOUT_METHODS),
+  // Phase 5, Slice 5b — see createExpenseSchema's own comment (same
+  // meaning, same optionality rules).
+  bankAccountId: z.string().uuid().optional(),
   payPeriodLabel: z.string().trim().max(100).optional().or(z.literal("")),
   periodStart: isoDate.optional(),
   periodEnd: isoDate.optional(),

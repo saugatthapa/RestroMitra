@@ -89,10 +89,11 @@ describe.skipIf(!hasDb)("Accounting — postVoucher (integration)", () => {
       .select()
       .from(schema.chartOfAccounts)
       .where(eq(schema.chartOfAccounts.restaurantId, restaurantId));
-    // 24 seeded (Phase 4, Slice 4d added "1040 — Bank / Digital Payments";
-    // Slice 4f added "1045 — Bank Account") + the 1 inactive test fixture
-    // inserted directly above.
-    expect(accounts.length).toBe(25);
+    // 25 seeded (Phase 4, Slice 4d added "1040 — Bank / Digital Payments";
+    // Slice 4f added "1045 — Bank Account"; Phase 5, Slice 5b added "1050 —
+    // Bank Accounts", the grouping parent for real bank accounts) + the 1
+    // inactive test fixture inserted directly above.
+    expect(accounts.length).toBe(26);
     expect(accounts.every((a) => a.code !== "9999" || !a.isActive)).toBe(true);
 
     const mappings = await db

@@ -14,6 +14,18 @@ import { localDateIso } from "@/lib/local-date";
 
 type ExpenseCategory = { id: string; name: string; isActive: boolean };
 type Branch = { id: string; name: string };
+type BankAccount = { id: string; bankName: string; code: string; isActive: boolean };
+
+// Phase 5, Slice 5b — the payout methods that post through the "Bank
+// Accounts" ledger concept (see PAYOUT_METHOD_MAPPING_KEYS in
+// src/lib/accounting/integrations/expenses.ts). Only these need a bank
+// account picker; cash/other never do.
+const BANK_SHAPED_METHODS: ReadonlySet<ExpensePaymentMethod> = new Set([
+  "bank_transfer",
+  "esewa",
+  "khalti",
+  "mobile_banking",
+]);
 
 type Expense = {
   id: string;
@@ -75,6 +87,7 @@ export function ExpensesBoard({
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<ExpenseStatus | "">("");
   const [from, setFrom] = useState("");
@@ -115,6 +128,20 @@ export function ExpensesBoard({
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, categoryFilter, statusFilter, from, to]);
+
+  // Phase 5, Slice 5b — fetched once per board (not per row) to avoid N
+  // redundant requests. Only relevant to canPay holders: they're the only
+  // ones who ever choose a payment method here, and everyone who can pay an
+  // expense also holds MANAGE_ACCOUNTING, so this route is reachable for
+  // them. A restaurant that never visited the Bank Accounts screen returns
+  // an empty list, and the picker below simply stays hidden — the legacy
+  // account keeps being used exactly as before.
+  useEffect(() => {
+    if (!canPay) return;
+    apiGet<{ bankAccounts: BankAccount[] }>(`${base(slug)}/accounting/bank-accounts`)
+      .then((res) => setBankAccounts(res.bankAccounts.filter((a) => a.isActive)))
+      .catch(() => {});
+  }, [slug, canPay]);
 
   const activeCategories = useMemo(() => categories.filter((c) => c.isActive), [categories]);
 
@@ -217,6 +244,7 @@ export function ExpensesBoard({
           categories={activeCategories}
           branches={branches}
           canPay={canPay}
+          bankAccounts={bankAccounts}
           onAdded={() => {
             setShowAdd(false);
             load();
@@ -291,6 +319,7 @@ export function ExpensesBoard({
                     canManage={canManage}
                     canApprove={canApprove}
                     canPay={canPay}
+                    bankAccounts={bankAccounts}
                     onEdit={() => setEditingId(exp.id)}
                     onChanged={load}
                   />
@@ -310,6 +339,7 @@ function ExpenseRow({
   canManage,
   canApprove,
   canPay,
+  bankAccounts,
   onEdit,
   onChanged,
 }: {
@@ -318,6 +348,7 @@ function ExpenseRow({
   canManage: boolean;
   canApprove: boolean;
   canPay: boolean;
+  bankAccounts: BankAccount[];
   onEdit: () => void;
   onChanged: () => void;
 }) {
@@ -328,6 +359,8 @@ function ExpenseRow({
   const [rejectReason, setRejectReason] = useState("");
   const [showPay, setShowPay] = useState(false);
   const [payMethod, setPayMethod] = useState<ExpensePaymentMethod>("cash");
+  const [payBankAccountId, setPayBankAccountId] = useState("");
+  const needsBankAccountChoice = BANK_SHAPED_METHODS.has(payMethod) && bankAccounts.length > 1;
 
   async function approve() {
     setBusy(true);
@@ -360,7 +393,10 @@ function ExpenseRow({
     setBusy(true);
     setError(null);
     try {
-      await apiPost(`${base(slug)}/expenses/${expense.id}/pay`, { paymentMethod: payMethod });
+      await apiPost(`${base(slug)}/expenses/${expense.id}/pay`, {
+        paymentMethod: payMethod,
+        bankAccountId: needsBankAccountChoice && payBankAccountId ? payBankAccountId : undefined,
+      });
       setShowPay(false);
       onChanged();
     } catch (err) {
@@ -447,14 +483,39 @@ function ExpenseRow({
         <tr className="border-t border-neutral-100 bg-emerald-50/40">
           <td colSpan={6} className="px-3 py-3">
             <div className="flex flex-wrap items-center gap-2">
-              <select value={payMethod} onChange={(e) => setPayMethod(e.target.value as ExpensePaymentMethod)} className="input !w-auto">
+              <select
+                value={payMethod}
+                onChange={(e) => {
+                  setPayMethod(e.target.value as ExpensePaymentMethod);
+                  setPayBankAccountId("");
+                }}
+                className="input !w-auto"
+              >
                 {EXPENSE_PAYMENT_METHODS.map((m) => (
                   <option key={m} value={m}>
                     {EXPENSE_PAYMENT_METHOD_LABELS[m]}
                   </option>
                 ))}
               </select>
-              <button disabled={busy} onClick={pay} className="btn-primary">
+              {needsBankAccountChoice && (
+                <select
+                  value={payBankAccountId}
+                  onChange={(e) => setPayBankAccountId(e.target.value)}
+                  className="input !w-auto"
+                >
+                  <option value="">Choose bank account…</option>
+                  {bankAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.bankName} ({a.code})
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                disabled={busy || (needsBankAccountChoice && !payBankAccountId)}
+                onClick={pay}
+                className="btn-primary"
+              >
                 {busy ? "Recording…" : `Confirm paid via ${EXPENSE_PAYMENT_METHOD_LABELS[payMethod]}`}
               </button>
               <button disabled={busy} onClick={() => setShowPay(false)} className="btn-secondary">
@@ -477,12 +538,14 @@ function AddExpenseForm({
   categories,
   branches,
   canPay,
+  bankAccounts,
   onAdded,
 }: {
   slug: string;
   categories: ExpenseCategory[];
   branches: Branch[];
   canPay: boolean;
+  bankAccounts: BankAccount[];
   onAdded: () => void;
 }) {
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
@@ -493,9 +556,12 @@ function AddExpenseForm({
   const [note, setNote] = useState("");
   const [markPaidNow, setMarkPaidNow] = useState(canPay);
   const [paymentMethod, setPaymentMethod] = useState<ExpensePaymentMethod>("cash");
+  const [paymentBankAccountId, setPaymentBankAccountId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dateSystem = useDateSystem();
+  const needsBankAccountChoice =
+    markPaidNow && BANK_SHAPED_METHODS.has(paymentMethod) && bankAccounts.length > 1;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -510,6 +576,7 @@ function AddExpenseForm({
         note: note || undefined,
         branchId: branchId || undefined,
         paymentMethod: canPay && markPaidNow ? paymentMethod : undefined,
+        bankAccountId: needsBankAccountChoice && paymentBankAccountId ? paymentBankAccountId : undefined,
       });
       setAmount("");
       setDescription("");
@@ -609,20 +676,42 @@ function AddExpenseForm({
             This has already been paid — record it as paid now
           </label>
           {markPaidNow && (
-            <label className="mt-2 block text-sm">
-              <span className="mb-1 block text-neutral-600">Payment method</span>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as ExpensePaymentMethod)}
-                className="input !w-auto"
-              >
-                {EXPENSE_PAYMENT_METHODS.map((m) => (
-                  <option key={m} value={m}>
-                    {EXPENSE_PAYMENT_METHOD_LABELS[m]}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="mt-2 flex flex-wrap gap-3">
+              <label className="block text-sm">
+                <span className="mb-1 block text-neutral-600">Payment method</span>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => {
+                    setPaymentMethod(e.target.value as ExpensePaymentMethod);
+                    setPaymentBankAccountId("");
+                  }}
+                  className="input !w-auto"
+                >
+                  {EXPENSE_PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>
+                      {EXPENSE_PAYMENT_METHOD_LABELS[m]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {needsBankAccountChoice && (
+                <label className="block text-sm">
+                  <span className="mb-1 block text-neutral-600">Bank account</span>
+                  <select
+                    value={paymentBankAccountId}
+                    onChange={(e) => setPaymentBankAccountId(e.target.value)}
+                    className="input !w-auto"
+                  >
+                    <option value="">Choose bank account…</option>
+                    {bankAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.bankName} ({a.code})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
           )}
           {!markPaidNow && (
             <p className="mt-1 text-xs text-neutral-500">
@@ -637,7 +726,7 @@ function AddExpenseForm({
         </p>
       )}
 
-      <button disabled={saving} className="btn-primary mt-3">
+      <button disabled={saving || (needsBankAccountChoice && !paymentBankAccountId)} className="btn-primary mt-3">
         {saving ? "Adding…" : "Add expense"}
       </button>
     </form>

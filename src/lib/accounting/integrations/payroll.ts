@@ -5,6 +5,7 @@ import { accountingVouchers } from "@/db/schema";
 import { postVoucher, reverseVoucher } from "../post-voucher";
 import { resolveAccountMappings } from "../account-mappings";
 import { MAPPING_KEYS } from "../account-mapping-keys";
+import { resolveBankAccountForPosting } from "../bank-accounts";
 import { PAYOUT_METHOD_MAPPING_KEYS } from "./expenses";
 import { restaurantDate } from "@/lib/restaurant-date";
 import type { ExpensePaymentMethod } from "@/lib/finance/expense-payment-methods";
@@ -50,6 +51,9 @@ export async function postPayrollVoucher(
     amountInPaisa: number;
     payPeriodLabel: string | null;
     paymentMethod: ExpensePaymentMethod;
+    // Phase 5, Slice 5b — same meaning/rules as postExpenseVoucher's own
+    // bankAccountId param (see that file's doc comment).
+    bankAccountId?: string | null;
     timezone: string;
     createdByUserId: string;
   },
@@ -57,10 +61,23 @@ export async function postPayrollVoucher(
   if (params.amountInPaisa <= 0) return;
 
   const clearingKey = PAYOUT_METHOD_MAPPING_KEYS[params.paymentMethod];
-  const accounts = await resolveAccountMappings(tx, {
+  const salaryExpenseAccounts = await resolveAccountMappings(tx, {
     restaurantId: params.restaurantId,
-    keys: [MAPPING_KEYS.SALARY_EXPENSE, clearingKey],
+    keys: [MAPPING_KEYS.SALARY_EXPENSE],
   });
+  const clearingAccountId =
+    clearingKey === MAPPING_KEYS.BANK_DIGITAL_PAYMENTS
+      ? await resolveBankAccountForPosting(tx, {
+          restaurantId: params.restaurantId,
+          requestedBankAccountId: params.bankAccountId,
+          legacyMappingKey: MAPPING_KEYS.BANK_DIGITAL_PAYMENTS,
+        })
+      : (
+          await resolveAccountMappings(tx, {
+            restaurantId: params.restaurantId,
+            keys: [clearingKey],
+          })
+        ).get(clearingKey)!;
 
   await postVoucher(tx, {
     restaurantId: params.restaurantId,
@@ -75,8 +92,8 @@ export async function postPayrollVoucher(
     sourceId: params.payrollPaymentId,
     postingEvent: "paid",
     lines: [
-      { accountId: accounts.get(MAPPING_KEYS.SALARY_EXPENSE)!, debitInPaisa: params.amountInPaisa },
-      { accountId: accounts.get(clearingKey)!, creditInPaisa: params.amountInPaisa },
+      { accountId: salaryExpenseAccounts.get(MAPPING_KEYS.SALARY_EXPENSE)!, debitInPaisa: params.amountInPaisa },
+      { accountId: clearingAccountId, creditInPaisa: params.amountInPaisa },
     ],
   });
 }

@@ -5,6 +5,7 @@ import { accountingVouchers } from "@/db/schema";
 import { postVoucher, reverseVoucher } from "../post-voucher";
 import { resolveAccountMappings } from "../account-mappings";
 import { MAPPING_KEYS, type MappingKey } from "../account-mapping-keys";
+import { resolveBankAccountForPosting } from "../bank-accounts";
 import { restaurantDate } from "@/lib/restaurant-date";
 import type { PaymentMethod } from "@/lib/payments";
 
@@ -87,6 +88,14 @@ export async function postReconciliationVoucher(
     paymentId: string;
     amountInPaisa: number;
     method: PaymentMethod;
+    // Phase 5, Slice 5b — which real bank account this settlement landed
+    // in, when the restaurant has more than one active one (see
+    // resolveBankAccountForPosting's own doc comment). Only consulted on a
+    // brand-new mark (see below) — a re-mark after an unmark always
+    // restores to whichever bank account the ORIGINAL posting used; there
+    // is no mechanism here to move an existing reconciled payment to a
+    // different bank account after the fact.
+    bankAccountId?: string | null;
     timezone: string;
     createdByUserId: string;
   },
@@ -110,9 +119,17 @@ export async function postReconciliationVoucher(
   }
 
   const clearingKey = RECONCILABLE_METHOD_MAPPING_KEYS[params.method];
-  const accounts = await resolveAccountMappings(tx, {
+  // Sequential, not Promise.all — both queries run on the same `tx`
+  // connection, same "one statement at a time per transaction" discipline
+  // every other call site in this module already follows.
+  const bankLedgerAccountId = await resolveBankAccountForPosting(tx, {
     restaurantId: params.restaurantId,
-    keys: [MAPPING_KEYS.BANK_ACCOUNT, clearingKey],
+    requestedBankAccountId: params.bankAccountId,
+    legacyMappingKey: MAPPING_KEYS.BANK_ACCOUNT,
+  });
+  const clearingAccounts = await resolveAccountMappings(tx, {
+    restaurantId: params.restaurantId,
+    keys: [clearingKey],
   });
 
   await postVoucher(tx, {
@@ -126,8 +143,8 @@ export async function postReconciliationVoucher(
     sourceId: params.paymentId,
     postingEvent: "reconciled",
     lines: [
-      { accountId: accounts.get(MAPPING_KEYS.BANK_ACCOUNT)!, debitInPaisa: params.amountInPaisa },
-      { accountId: accounts.get(clearingKey)!, creditInPaisa: params.amountInPaisa },
+      { accountId: bankLedgerAccountId, debitInPaisa: params.amountInPaisa },
+      { accountId: clearingAccounts.get(clearingKey)!, creditInPaisa: params.amountInPaisa },
     ],
   });
 }

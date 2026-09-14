@@ -46,6 +46,14 @@ const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   // as 1040 above (that's an outgoing clearing bucket for expense/payroll
   // payouts).
   { code: "1045", name: "Bank Account", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.BANK_ACCOUNT] },
+  // Phase 5, Slice 5b — a grouping parent for real bank accounts a
+  // restaurant adds via "Add Bank Account" (src/lib/accounting/
+  // bank-accounts.ts). No mapping key of its own — this account is never
+  // posted to directly, only its children (1051, 1052, ...) are. Seeded
+  // for every restaurant up front (same "exists even before it's used"
+  // treatment as 1900 Fixed Assets/2400 Loans Payable below) so the first
+  // bank account added never races to create it.
+  { code: "1050", name: "Bank Accounts", type: "asset", normalBalance: "debit" },
   { code: "1100", name: "Accounts Receivable", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.ACCOUNTS_RECEIVABLE] },
   { code: "1200", name: "Inventory", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.INVENTORY] },
   { code: "1900", name: "Fixed Assets", type: "asset", normalBalance: "debit" },

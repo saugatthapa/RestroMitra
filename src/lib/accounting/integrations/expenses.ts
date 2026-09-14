@@ -5,6 +5,7 @@ import { accountingVouchers } from "@/db/schema";
 import { postVoucher, reverseVoucher } from "../post-voucher";
 import { resolveAccountMappings, resolveOrProvisionExpenseCategoryAccount } from "../account-mappings";
 import { MAPPING_KEYS, type MappingKey } from "../account-mapping-keys";
+import { resolveBankAccountForPosting } from "../bank-accounts";
 import { restaurantDate } from "@/lib/restaurant-date";
 import type { ExpensePaymentMethod } from "@/lib/finance/expense-payment-methods";
 
@@ -53,6 +54,13 @@ export async function postExpenseVoucher(
     categoryName: string;
     amountInPaisa: number;
     paymentMethod: ExpensePaymentMethod;
+    // Phase 5, Slice 5b — which real bank account this payout left from,
+    // when the restaurant has more than one active one (see
+    // resolveBankAccountForPosting's own doc comment for the full
+    // resolution rules). Ignored for cash/other, which never touch a bank
+    // account. Optional and safe to omit entirely for a restaurant that
+    // hasn't migrated to real bank accounts yet, or has exactly one.
+    bankAccountId?: string | null;
     timezone: string;
     createdByUserId: string;
   },
@@ -66,10 +74,19 @@ export async function postExpenseVoucher(
   });
 
   const clearingKey = PAYOUT_METHOD_MAPPING_KEYS[params.paymentMethod];
-  const clearingAccounts = await resolveAccountMappings(tx, {
-    restaurantId: params.restaurantId,
-    keys: [clearingKey],
-  });
+  const clearingAccountId =
+    clearingKey === MAPPING_KEYS.BANK_DIGITAL_PAYMENTS
+      ? await resolveBankAccountForPosting(tx, {
+          restaurantId: params.restaurantId,
+          requestedBankAccountId: params.bankAccountId,
+          legacyMappingKey: MAPPING_KEYS.BANK_DIGITAL_PAYMENTS,
+        })
+      : (
+          await resolveAccountMappings(tx, {
+            restaurantId: params.restaurantId,
+            keys: [clearingKey],
+          })
+        ).get(clearingKey)!;
 
   await postVoucher(tx, {
     restaurantId: params.restaurantId,
@@ -83,7 +100,7 @@ export async function postExpenseVoucher(
     postingEvent: "paid",
     lines: [
       { accountId: categoryAccountId, debitInPaisa: params.amountInPaisa },
-      { accountId: clearingAccounts.get(clearingKey)!, creditInPaisa: params.amountInPaisa },
+      { accountId: clearingAccountId, creditInPaisa: params.amountInPaisa },
     ],
   });
 

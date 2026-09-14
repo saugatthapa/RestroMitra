@@ -289,6 +289,7 @@ export async function POST(
                 categoryName: category.name,
                 amountInPaisa: row.amountInPaisa,
                 paymentMethod: data.paymentMethod!,
+                bankAccountId: data.bankAccountId,
                 timezone,
                 createdByUserId: session.user.id,
               });

@@ -1,19 +1,31 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/db";
 import { orders, payments } from "@/db/schema";
 import { PERMISSIONS } from "@/lib/rbac/permissions";
-import { resolveRestaurantContext, toErrorResponse } from "@/lib/api-route-helpers";
+import { resolveRestaurantContext, parseJsonBody, toErrorResponse } from "@/lib/api-route-helpers";
 import { requireBranchAccess } from "@/lib/rbac/guard";
 import { markPaymentReconciled } from "@/lib/financial-reconciliation";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 
+// Phase 5, Slice 5b — `bankAccountId` is a new, optional field: a
+// restaurant with more than one active bank account must pass it (see
+// resolveBankAccountForPosting's own doc comment); every other restaurant
+// can keep sending no body at all, exactly as before this slice —
+// `request.json()` on an empty body rejects to `null`, which this schema
+// accepts and normalizes to `{}`.
+const markReconciledBodySchema = z
+  .object({ bankAccountId: z.string().uuid().optional() })
+  .nullable()
+  .transform((v) => v ?? {});
+
 /**
  * A human has checked their bank/gateway statement and confirmed this
- * payment settled — mark it reconciled. No request body: the payment id
- * comes from the URL, same shape as stock-transfers' approve/dispatch
- * routes.
+ * payment settled — mark it reconciled. The payment id comes from the URL;
+ * an optional JSON body carries `bankAccountId` when one needs to be
+ * chosen (see the schema comment above).
  */
 export async function POST(
   request: Request,
@@ -24,6 +36,8 @@ export async function POST(
   }
   try {
     const { slug, paymentId } = await ctx.params;
+    const parsedBody = await parseJsonBody(request, markReconciledBodySchema);
+    if (!parsedBody.ok) return parsedBody.response;
     const {
       session,
       restaurantId,
@@ -49,7 +63,13 @@ export async function POST(
     });
 
     const updated = await db.transaction((tx) =>
-      markPaymentReconciled(tx, { restaurantId, paymentId, reconciledByUserId: session.user.id, timezone }),
+      markPaymentReconciled(tx, {
+        restaurantId,
+        paymentId,
+        reconciledByUserId: session.user.id,
+        timezone,
+        bankAccountId: parsedBody.data.bankAccountId,
+      }),
     );
 
     await recordAuditLog({

@@ -89,3 +89,49 @@ export const accountingVoucherTypeSchema = z.enum(VOUCHER_TYPES);
 // needs something `new Date()` can parse) since these come from a raw query
 // string rather than a date-picker payload.
 export const reportDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD.");
+
+// ---------------------------------------------------------------------------
+// Phase 5, Slice 5b — real bank accounts + bank-statement reconciliation.
+// ---------------------------------------------------------------------------
+
+export const createBankAccountSchema = z.object({
+  bankName: z.string().trim().min(1, "Enter a bank name.").max(150),
+  accountNumber: z.string().trim().max(60).optional().or(z.literal("")),
+  branchName: z.string().trim().max(150).optional().or(z.literal("")),
+  notes: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
+export const updateBankAccountSchema = z
+  .object({
+    bankName: z.string().trim().min(1).max(150).optional(),
+    accountNumber: z.string().trim().max(60).optional().or(z.literal("")),
+    branchName: z.string().trim().max(150).optional().or(z.literal("")),
+    notes: z.string().trim().max(1000).optional().or(z.literal("")),
+    isActive: z.boolean().optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Provide at least one field to update.",
+  });
+
+const statementDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD.");
+
+export const createBankReconciliationSchema = z.object({
+  bankAccountId: z.string().uuid("Choose a bank account."),
+  statementDate: statementDateSchema,
+  statementClosingBalance: rupeeAmount,
+  notes: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
+export const updateBankReconciliationSchema = z
+  .object({
+    statementClosingBalance: rupeeAmount.optional(),
+    notes: z.string().trim().max(1000).optional().or(z.literal("")),
+    // The full desired set of checked-off voucher line ids — the route
+    // diffs this against what's currently cleared (see setClearedLines's
+    // own doc comment), so the client always sends its complete current
+    // checklist state, never a delta.
+    clearedVoucherLineIds: z.array(z.string().uuid()).max(2000).optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Provide at least one field to update.",
+  });

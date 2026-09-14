@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost, apiPatch, ApiError } from "@/lib/api-client";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { apiGet, apiPost, apiPatch, apiDelete, ApiError } from "@/lib/api-client";
 import { formatNPR } from "@/lib/money";
 import { useDateSystem } from "@/lib/date-system";
 import { formatDate } from "@/lib/nepali-date";
@@ -99,10 +99,12 @@ type LedgerLine = {
 const ALL_TABS = [
   "Overview",
   "Chart of Accounts",
+  "Bank Accounts",
   "Journal Vouchers",
   "Day Book",
   "Ledger Accounts",
   "Reports",
+  "Bank Reconciliation",
   "Periods",
 ] as const;
 type Tab = (typeof ALL_TABS)[number];
@@ -164,12 +166,14 @@ export function AccountingBoard({ slug, canReopenPeriod }: { slug: string; canRe
 
       {tab === "Overview" && <OverviewTab slug={slug} />}
       {tab === "Chart of Accounts" && <ChartOfAccountsTab slug={slug} />}
+      {tab === "Bank Accounts" && <BankAccountsTab slug={slug} />}
       {tab === "Journal Vouchers" && <VouchersTab slug={slug} typeFilter="journal" />}
       {tab === "Day Book" && <VouchersTab slug={slug} typeFilter={null} />}
       {tab === "Ledger Accounts" && (
         <LedgerAccountsTab slug={slug} initialAccountId={ledgerDrillDownAccountId} />
       )}
       {tab === "Reports" && <ReportsTab slug={slug} onDrillDown={goToLedger} />}
+      {tab === "Bank Reconciliation" && <BankReconciliationTab slug={slug} />}
       {tab === "Periods" && <PeriodsTab slug={slug} canReopenPeriod={canReopenPeriod} />}
     </div>
   );
@@ -1977,5 +1981,767 @@ function OpeningBalanceForm({ slug, onPosted }: { slug: string; onPosted: () => 
         </button>
       </div>
     </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5, Slice 5b — Bank Accounts (CRUD) + Bank Reconciliation (the
+// bank-statement checklist). See src/lib/accounting/bank-accounts.ts and
+// bank-reconciliation.ts for the underlying rules this UI surfaces.
+// ---------------------------------------------------------------------------
+
+type BankAccount = {
+  id: string;
+  chartOfAccountsId: string;
+  bankName: string;
+  accountNumber: string | null;
+  branchName: string | null;
+  notes: string | null;
+  isActive: boolean;
+  code: string;
+  accountName: string;
+  createdAt: string;
+};
+
+function BankAccountsTab({ slug }: { slug: string }) {
+  const [accounts, setAccounts] = useState<BankAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await apiGet<{ bankAccounts: BankAccount[] }>(`${base(slug)}/accounting/bank-accounts`);
+      setAccounts(res.bankAccounts);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load bank accounts.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  async function toggleActive(account: BankAccount) {
+    try {
+      await apiPatch(`${base(slug)}/accounting/bank-accounts/${account.id}`, { isActive: !account.isActive });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update this bank account.");
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <p className="text-sm text-neutral-500">
+        Each bank account here wraps its own ledger account, so it already shows up correctly in Trial
+        Balance and the Balance Sheet. With exactly one active bank account, expense/payroll payments and
+        reconciliation use it automatically — a picker only appears once a second one exists.
+      </p>
+      <div className="flex justify-end">
+        <button onClick={() => setShowAdd((v) => !v)} className="btn-secondary">
+          {showAdd ? "Cancel" : "Add bank account"}
+        </button>
+      </div>
+      {showAdd && (
+        <AddBankAccountForm
+          slug={slug}
+          onAdded={() => {
+            setShowAdd(false);
+            load();
+          }}
+        />
+      )}
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
+                <th className="px-3 py-2">Code</th>
+                <th className="px-3 py-2">Bank</th>
+                <th className="px-3 py-2">Account number</th>
+                <th className="px-3 py-2">Branch</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.map((a) => (
+                <Fragment key={a.id}>
+                  <tr className="border-b border-neutral-100 last:border-0">
+                    <td className="px-3 py-2 font-mono text-xs text-neutral-500">{a.code}</td>
+                    <td className="px-3 py-2 text-neutral-900">{a.bankName}</td>
+                    <td className="px-3 py-2 text-neutral-600">{a.accountNumber || "—"}</td>
+                    <td className="px-3 py-2 text-neutral-600">{a.branchName || "—"}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          a.isActive ? "bg-green-100 text-green-800" : "bg-neutral-100 text-neutral-500"
+                        }`}
+                      >
+                        {a.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex justify-end gap-3">
+                        <button
+                          onClick={() => setEditingId(editingId === a.id ? null : a.id)}
+                          className="text-xs font-medium text-orange-700 hover:underline"
+                        >
+                          {editingId === a.id ? "Close" : "Edit"}
+                        </button>
+                        <button
+                          onClick={() => toggleActive(a)}
+                          className="text-xs font-medium text-orange-700 hover:underline"
+                        >
+                          {a.isActive ? "Deactivate" : "Reactivate"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {editingId === a.id && (
+                    <tr key={`${a.id}-edit`} className="border-b border-neutral-100 bg-neutral-50">
+                      <td colSpan={6} className="px-3 py-3">
+                        <EditBankAccountForm
+                          slug={slug}
+                          account={a}
+                          onSaved={() => {
+                            setEditingId(null);
+                            load();
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+              {accounts.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-6 text-center text-sm text-neutral-400">
+                    No bank accounts yet — add the first one above.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AddBankAccountForm({ slug, onAdded }: { slug: string; onAdded: () => void }) {
+  const [bankName, setBankName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [branchName, setBranchName] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/accounting/bank-accounts`, { bankName, accountNumber, branchName, notes });
+      onAdded();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not add this bank account.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Bank name</span>
+          <input required value={bankName} onChange={(e) => setBankName(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Account number (optional)</span>
+          <input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Branch (optional)</span>
+          <input value={branchName} onChange={(e) => setBranchName(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Notes (optional)</span>
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} className="input" />
+        </label>
+      </div>
+      <button disabled={saving} className="btn-primary mt-3">
+        {saving ? "Adding…" : "Add bank account"}
+      </button>
+    </form>
+  );
+}
+
+function EditBankAccountForm({
+  slug,
+  account,
+  onSaved,
+}: {
+  slug: string;
+  account: BankAccount;
+  onSaved: () => void;
+}) {
+  const [bankName, setBankName] = useState(account.bankName);
+  const [accountNumber, setAccountNumber] = useState(account.accountNumber ?? "");
+  const [branchName, setBranchName] = useState(account.branchName ?? "");
+  const [notes, setNotes] = useState(account.notes ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPatch(`${base(slug)}/accounting/bank-accounts/${account.id}`, {
+        bankName,
+        accountNumber,
+        branchName,
+        notes,
+      });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save changes.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Bank name</span>
+          <input required value={bankName} onChange={(e) => setBankName(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Account number</span>
+          <input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Branch</span>
+          <input value={branchName} onChange={(e) => setBranchName(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Notes</span>
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} className="input" />
+        </label>
+      </div>
+      <button disabled={saving} className="btn-primary">
+        {saving ? "Saving…" : "Save changes"}
+      </button>
+    </form>
+  );
+}
+
+type BankReconciliationStatus = "open" | "completed";
+type BankReconciliationRow = {
+  id: string;
+  bankAccountId: string;
+  statementDate: string;
+  statementClosingBalanceInPaisa: number;
+  status: BankReconciliationStatus;
+  bookBalanceInPaisa: number | null;
+  differenceInPaisa: number | null;
+  notes: string | null;
+  createdAt: string;
+  completedAt: string | null;
+};
+
+type BankReconciliationLine = {
+  id: string;
+  voucherId: string;
+  voucherNumber: string;
+  voucherType: string;
+  voucherDate: string;
+  narration: string | null;
+  description: string | null;
+  debitInPaisa: number;
+  creditInPaisa: number;
+  cleared: boolean;
+};
+
+function BankReconciliationTab({ slug }: { slug: string }) {
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState("");
+  const [reconciliations, setReconciliations] = useState<BankReconciliationRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showNew, setShowNew] = useState(false);
+  const [openReconciliationId, setOpenReconciliationId] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGet<{ bankAccounts: BankAccount[] }>(`${base(slug)}/accounting/bank-accounts`)
+      .then((res) => {
+        setBankAccounts(res.bankAccounts);
+        if (res.bankAccounts.length > 0) setSelectedBankAccountId((v) => v || res.bankAccounts[0].id);
+      })
+      .catch(() => {});
+  }, [slug]);
+
+  async function loadReconciliations() {
+    if (!selectedBankAccountId) {
+      setReconciliations([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await apiGet<{ reconciliations: BankReconciliationRow[] }>(
+        `${base(slug)}/accounting/bank-reconciliations?bankAccountId=${selectedBankAccountId}`,
+      );
+      setReconciliations(res.reconciliations);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load reconciliations.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadReconciliations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, selectedBankAccountId]);
+
+  if (openReconciliationId) {
+    return (
+      <BankReconciliationWorkspace
+        slug={slug}
+        reconciliationId={openReconciliationId}
+        onClose={() => {
+          setOpenReconciliationId(null);
+          loadReconciliations();
+        }}
+        onDeleted={() => {
+          setOpenReconciliationId(null);
+          loadReconciliations();
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {bankAccounts.length === 0 ? (
+        <p className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-6 text-center text-sm text-neutral-500">
+          Add a bank account first, from the Bank Accounts tab.
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <label className="block max-w-xs text-sm">
+              <span className="mb-1 block text-neutral-600">Bank account</span>
+              <select
+                value={selectedBankAccountId}
+                onChange={(e) => setSelectedBankAccountId(e.target.value)}
+                className="input"
+              >
+                {bankAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.bankName} ({a.code})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button onClick={() => setShowNew((v) => !v)} className="btn-secondary">
+              {showNew ? "Cancel" : "New reconciliation"}
+            </button>
+          </div>
+
+          {showNew && (
+            <NewBankReconciliationForm
+              slug={slug}
+              bankAccountId={selectedBankAccountId}
+              onCreated={(id) => {
+                setShowNew(false);
+                setOpenReconciliationId(id);
+              }}
+            />
+          )}
+
+          {loading ? (
+            <p className="text-sm text-neutral-500">Loading…</p>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
+                    <th className="px-3 py-2">Statement date</th>
+                    <th className="px-3 py-2 text-right">Closing balance</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2 text-right">Difference</th>
+                    <th className="px-3 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {reconciliations.map((r) => (
+                    <tr key={r.id} className="border-b border-neutral-100 last:border-0">
+                      <td className="px-3 py-2 text-neutral-900">{r.statementDate}</td>
+                      <td className="px-3 py-2 text-right">{formatNPR(r.statementClosingBalanceInPaisa)}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                            r.status === "completed"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {r.status === "completed" ? "Completed" : "Open"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {r.differenceInPaisa === null ? (
+                          "—"
+                        ) : r.differenceInPaisa === 0 ? (
+                          <span className="text-green-700">Matched</span>
+                        ) : (
+                          <span className="text-red-700">{formatNPR(r.differenceInPaisa)}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          onClick={() => setOpenReconciliationId(r.id)}
+                          className="text-xs font-medium text-orange-700 hover:underline"
+                        >
+                          Open
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {reconciliations.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-sm text-neutral-400">
+                        No reconciliations yet for this bank account.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function NewBankReconciliationForm({
+  slug,
+  bankAccountId,
+  onCreated,
+}: {
+  slug: string;
+  bankAccountId: string;
+  onCreated: (id: string) => void;
+}) {
+  const [statementDate, setStatementDate] = useState(todayIso());
+  const [statementClosingBalance, setStatementClosingBalance] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await apiPost<{ reconciliation: BankReconciliationRow }>(
+        `${base(slug)}/accounting/bank-reconciliations`,
+        {
+          bankAccountId,
+          statementDate,
+          statementClosingBalance: Number(statementClosingBalance),
+        },
+      );
+      onCreated(res.reconciliation.id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not create this reconciliation.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Statement date</span>
+          <input
+            required
+            type="date"
+            value={statementDate}
+            onChange={(e) => setStatementDate(e.target.value)}
+            className="input"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Statement closing balance (Rs)</span>
+          <input
+            required
+            type="number"
+            step="0.01"
+            min="0"
+            value={statementClosingBalance}
+            onChange={(e) => setStatementClosingBalance(e.target.value)}
+            className="input"
+          />
+        </label>
+      </div>
+      <button disabled={saving} className="btn-primary mt-3">
+        {saving ? "Creating…" : "Start reconciliation"}
+      </button>
+    </form>
+  );
+}
+
+function BankReconciliationWorkspace({
+  slug,
+  reconciliationId,
+  onClose,
+  onDeleted,
+}: {
+  slug: string;
+  reconciliationId: string;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [reconciliation, setReconciliation] = useState<BankReconciliationRow | null>(null);
+  const [lines, setLines] = useState<BankReconciliationLine[]>([]);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await apiGet<{ reconciliation: BankReconciliationRow; lines: BankReconciliationLine[] }>(
+        `${base(slug)}/accounting/bank-reconciliations/${reconciliationId}`,
+      );
+      setReconciliation(res.reconciliation);
+      setLines(res.lines);
+      setChecked(new Set(res.lines.filter((l) => l.cleared).map((l) => l.id)));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load this reconciliation.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reconciliationId]);
+
+  const isOpen = reconciliation?.status === "open";
+  const clearedTotal = useMemo(
+    () =>
+      lines
+        .filter((l) => checked.has(l.id))
+        .reduce((sum, l) => sum + l.debitInPaisa - l.creditInPaisa, 0),
+    [lines, checked],
+  );
+
+  function toggleLine(id: string) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function saveChecklist() {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPatch(`${base(slug)}/accounting/bank-reconciliations/${reconciliationId}`, {
+        clearedVoucherLineIds: Array.from(checked),
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save the checklist.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function complete() {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/accounting/bank-reconciliations/${reconciliationId}/complete`, {});
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not complete this reconciliation.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function reopen() {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/accounting/bank-reconciliations/${reconciliationId}/reopen`, {});
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not reopen this reconciliation.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove() {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiDelete(`${base(slug)}/accounting/bank-reconciliations/${reconciliationId}`);
+      onDeleted();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not delete this reconciliation.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <button onClick={onClose} className="text-sm font-medium text-orange-700 hover:underline">
+        ← Back to reconciliations
+      </button>
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {loading || !reconciliation ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : (
+        <>
+          <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+            <div className="grid gap-3 text-sm sm:grid-cols-4">
+              <div>
+                <span className="block text-xs uppercase tracking-wide text-neutral-500">Statement date</span>
+                <span className="font-medium text-neutral-900">{reconciliation.statementDate}</span>
+              </div>
+              <div>
+                <span className="block text-xs uppercase tracking-wide text-neutral-500">Statement balance</span>
+                <span className="font-medium text-neutral-900">
+                  {formatNPR(reconciliation.statementClosingBalanceInPaisa)}
+                </span>
+              </div>
+              <div>
+                <span className="block text-xs uppercase tracking-wide text-neutral-500">
+                  Cleared so far
+                </span>
+                <span className="font-medium text-neutral-900">{formatNPR(clearedTotal)}</span>
+              </div>
+              <div>
+                <span className="block text-xs uppercase tracking-wide text-neutral-500">Status</span>
+                <span
+                  className={`font-medium ${
+                    reconciliation.status === "completed" ? "text-green-700" : "text-amber-700"
+                  }`}
+                >
+                  {reconciliation.status === "completed" ? "Completed" : "Open"}
+                </span>
+              </div>
+            </div>
+            {reconciliation.status === "completed" && (
+              <div
+                className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+                  reconciliation.differenceInPaisa === 0
+                    ? "bg-green-50 text-green-700"
+                    : "bg-red-50 text-red-700"
+                }`}
+              >
+                {reconciliation.differenceInPaisa === 0
+                  ? "Fully reconciled — the cleared total matches the statement exactly."
+                  : `Difference of ${formatNPR(Math.abs(reconciliation.differenceInPaisa ?? 0))} — worth investigating (e.g. an uncleared bank fee).`}
+              </div>
+            )}
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
+                  <th className="px-3 py-2">Cleared</th>
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">Voucher</th>
+                  <th className="px-3 py-2">Narration</th>
+                  <th className="px-3 py-2 text-right">Debit</th>
+                  <th className="px-3 py-2 text-right">Credit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l) => (
+                  <tr key={l.id} className="border-b border-neutral-100 last:border-0">
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        disabled={!isOpen}
+                        checked={checked.has(l.id)}
+                        onChange={() => toggleLine(l.id)}
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-neutral-500">{l.voucherDate}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-neutral-500">{l.voucherNumber}</td>
+                    <td className="px-3 py-2 text-neutral-900">{l.narration || l.description || "—"}</td>
+                    <td className="px-3 py-2 text-right">{l.debitInPaisa > 0 ? formatNPR(l.debitInPaisa) : "—"}</td>
+                    <td className="px-3 py-2 text-right">{l.creditInPaisa > 0 ? formatNPR(l.creditInPaisa) : "—"}</td>
+                  </tr>
+                ))}
+                {lines.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-6 text-center text-sm text-neutral-400">
+                      No ledger activity on or before the statement date.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-wrap justify-end gap-2">
+            {isOpen ? (
+              <>
+                <button onClick={remove} disabled={saving} className="btn-secondary">
+                  Delete
+                </button>
+                <button onClick={saveChecklist} disabled={saving} className="btn-secondary">
+                  {saving ? "Saving…" : "Save checklist"}
+                </button>
+                <button onClick={complete} disabled={saving} className="btn-primary">
+                  {saving ? "Completing…" : "Complete reconciliation"}
+                </button>
+              </>
+            ) : (
+              <button onClick={reopen} disabled={saving} className="btn-secondary">
+                {saving ? "Reopening…" : "Reopen for correction"}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }

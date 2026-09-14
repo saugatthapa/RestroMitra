@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { apiGet, apiPost, ApiError } from "@/lib/api-client";
 import { localDateIso } from "@/lib/local-date";
 import { formatNPR } from "@/lib/money";
@@ -844,6 +844,17 @@ function AddEntryForm({
 
 type ReconciliationStatusFilter = "unreconciled" | "reconciled" | "all";
 
+// Phase 5, Slice 5b — redacted bank-account picker rows from the
+// MANAGE_ACCOUNT_BOOKS-gated /reconciliation/bank-accounts route (see that
+// route's own doc comment for why this uses a different, lighter-weight
+// route than the Bank Accounts admin screen). Unlike expense/payroll
+// payouts, EVERY reconcilable payment method here (card, mobile wallet,
+// other) posts through the Bank Account concept on the Dr side — see
+// postReconciliationVoucher's own doc comment — so the picker isn't
+// conditional on the row's method, only on whether more than one active
+// bank account exists.
+type ReconciliationBankAccount = { id: string; bankName: string; code: string };
+
 type PaymentReconciliationRow = {
   id: string;
   orderId: string;
@@ -872,6 +883,9 @@ function ReconciliationView({ slug }: { slug: string }) {
   const [method, setMethod] = useState<PaymentMethod | "">("");
   const [rows, setRows] = useState<PaymentReconciliationRow[]>([]);
   const [summary, setSummary] = useState<ReconciliationSummaryRow[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<ReconciliationBankAccount[]>([]);
+  const [markingRowId, setMarkingRowId] = useState<string | null>(null);
+  const [markBankAccountId, setMarkBankAccountId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -906,9 +920,39 @@ function ReconciliationView({ slug }: { slug: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, status, method, activeBranchId]);
 
-  async function toggle(row: PaymentReconciliationRow) {
+  // Fetched once per view. This route is reachable by anyone who can see
+  // this tab at all (both are gated by MANAGE_ACCOUNT_BOOKS) — see this
+  // type's own doc comment for why it's a separate, redacted route.
+  useEffect(() => {
+    apiGet<{ bankAccounts: ReconciliationBankAccount[] }>(`${base(slug)}/reconciliation/bank-accounts`)
+      .then((res) => setBankAccounts(res.bankAccounts))
+      .catch(() => {});
+  }, [slug]);
+
+  function startMarking(row: PaymentReconciliationRow) {
+    if (bankAccounts.length > 1) {
+      setMarkingRowId(row.id);
+      setMarkBankAccountId("");
+      return;
+    }
+    void mark(row, undefined);
+  }
+
+  async function mark(row: PaymentReconciliationRow, bankAccountId: string | undefined) {
     try {
-      await apiPost(`${base(slug)}/reconciliation/${row.id}/${row.reconciledAt ? "unmark" : "mark"}`, {});
+      await apiPost(`${base(slug)}/reconciliation/${row.id}/mark`, {
+        bankAccountId: bankAccountId || undefined,
+      });
+      setMarkingRowId(null);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update this payment.");
+    }
+  }
+
+  async function unmark(row: PaymentReconciliationRow) {
+    try {
+      await apiPost(`${base(slug)}/reconciliation/${row.id}/unmark`, {});
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not update this payment.");
@@ -1003,40 +1047,80 @@ function ReconciliationView({ slug }: { slug: string }) {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="border-t border-neutral-100">
-                  <td className="px-3 py-2 text-neutral-500">
-                    {formatDate(row.createdAt, dateSystem, { withTime: true })}
-                  </td>
-                  <td className="px-3 py-2 text-neutral-700">{row.orderNumber}</td>
-                  {branches.length > 1 && (
-                    <td className="px-3 py-2 text-neutral-500">{branchName(row.branchId)}</td>
-                  )}
-                  <td className="px-3 py-2 text-neutral-500">{PAYMENT_METHOD_LABELS[row.method]}</td>
-                  <td
-                    className={`px-3 py-2 text-right font-medium ${
-                      row.amountInPaisa < 0 ? "text-red-700" : "text-neutral-800"
-                    }`}
-                  >
-                    {formatNPR(row.amountInPaisa)}
-                    {row.amountInPaisa < 0 && <span className="ml-1 text-xs text-neutral-400">(refund)</span>}
-                  </td>
-                  <td className="px-3 py-2">
-                    {row.reconciledAt ? (
-                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                        Reconciled
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                        Unreconciled
-                      </span>
+                <Fragment key={row.id}>
+                  <tr className="border-t border-neutral-100">
+                    <td className="px-3 py-2 text-neutral-500">
+                      {formatDate(row.createdAt, dateSystem, { withTime: true })}
+                    </td>
+                    <td className="px-3 py-2 text-neutral-700">{row.orderNumber}</td>
+                    {branches.length > 1 && (
+                      <td className="px-3 py-2 text-neutral-500">{branchName(row.branchId)}</td>
                     )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <button onClick={() => toggle(row)} className="btn-secondary text-xs">
-                      {row.reconciledAt ? "Unmark" : "Mark reconciled"}
-                    </button>
-                  </td>
-                </tr>
+                    <td className="px-3 py-2 text-neutral-500">{PAYMENT_METHOD_LABELS[row.method]}</td>
+                    <td
+                      className={`px-3 py-2 text-right font-medium ${
+                        row.amountInPaisa < 0 ? "text-red-700" : "text-neutral-800"
+                      }`}
+                    >
+                      {formatNPR(row.amountInPaisa)}
+                      {row.amountInPaisa < 0 && <span className="ml-1 text-xs text-neutral-400">(refund)</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      {row.reconciledAt ? (
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                          Reconciled
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                          Unreconciled
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        onClick={() => (row.reconciledAt ? unmark(row) : startMarking(row))}
+                        className="btn-secondary text-xs"
+                      >
+                        {row.reconciledAt ? "Unmark" : "Mark reconciled"}
+                      </button>
+                    </td>
+                  </tr>
+                  {markingRowId === row.id && (
+                    <tr className="border-t border-neutral-100 bg-neutral-50">
+                      <td colSpan={branches.length > 1 ? 7 : 6} className="px-3 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="text-sm">
+                            <span className="mb-1 block text-neutral-600">
+                              Which bank account did this land in?
+                            </span>
+                            <select
+                              value={markBankAccountId}
+                              onChange={(e) => setMarkBankAccountId(e.target.value)}
+                              className="input !w-auto"
+                            >
+                              <option value="">Choose bank account…</option>
+                              {bankAccounts.map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.bankName} ({a.code})
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            disabled={!markBankAccountId}
+                            onClick={() => mark(row, markBankAccountId)}
+                            className="btn-primary"
+                          >
+                            Confirm
+                          </button>
+                          <button onClick={() => setMarkingRowId(null)} className="btn-secondary">
+                            Cancel
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

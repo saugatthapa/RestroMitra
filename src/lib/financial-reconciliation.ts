@@ -247,7 +247,14 @@ async function loadOwnedPayment(tx: Transaction, restaurantId: string, paymentId
  */
 export async function markPaymentReconciled(
   tx: Transaction,
-  params: { restaurantId: string; paymentId: string; reconciledByUserId: string; timezone: string },
+  params: {
+    restaurantId: string;
+    paymentId: string;
+    reconciledByUserId: string;
+    timezone: string;
+    // Phase 5, Slice 5b — see postReconciliationVoucher's own doc comment.
+    bankAccountId?: string | null;
+  },
 ) {
   const existing = await loadOwnedPayment(tx, params.restaurantId, params.paymentId);
   assertReconcilableMethod(existing.method as PaymentMethod);
@@ -276,6 +283,7 @@ export async function markPaymentReconciled(
       paymentId: params.paymentId,
       amountInPaisa: existing.amountInPaisa,
       method: existing.method as PaymentMethod,
+      bankAccountId: params.bankAccountId,
       timezone: params.timezone,
       createdByUserId: params.reconciledByUserId,
     });

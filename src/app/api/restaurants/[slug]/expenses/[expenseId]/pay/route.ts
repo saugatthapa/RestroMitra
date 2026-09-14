@@ -144,6 +144,7 @@ export async function POST(
             categoryName: category?.name ?? "Expense",
             amountInPaisa: row.amountInPaisa,
             paymentMethod: parsed.data.paymentMethod,
+            bankAccountId: parsed.data.bankAccountId,
             timezone,
             createdByUserId: session.user.id,
           });

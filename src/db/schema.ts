@@ -6159,3 +6159,144 @@ export const accountMappingsRelations = relations(accountMappings, ({ one }) => 
     references: [chartOfAccounts.id],
   }),
 }));
+
+// ---------------------------------------------------------------------------
+// Phase 5, Slice 5b — real bank accounts + bank-statement-level
+// reconciliation. See ACCOUNTING_PHASE_5_PLAN.md Part 2.1/3 (Slice 5b).
+// ---------------------------------------------------------------------------
+
+// Each real bank account a restaurant adds wraps its own chart_of_accounts
+// row (created in the same transaction, parented under the seeded "1050
+// Bank Accounts" account — see chart-of-accounts.ts) so the existing
+// balance/Trial Balance/Balance Sheet machinery already reports it
+// correctly with zero new reporting code — same shape as an auto-
+// provisioned expense-category account, just created explicitly by a human
+// action ("Add Bank Account") instead of on first use. This table holds
+// only the OPERATIONAL metadata a ledger account has no business carrying.
+export const bankAccounts = pgTable(
+  "bank_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    chartOfAccountsId: uuid("chart_of_accounts_id")
+      .notNull()
+      .references(() => chartOfAccounts.id, { onDelete: "restrict" }),
+    bankName: varchar("bank_name", { length: 150 }).notNull(),
+    accountNumber: varchar("account_number", { length: 60 }),
+    branchName: varchar("branch_name", { length: 150 }),
+    notes: text("notes"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("bank_accounts_restaurant_id_idx").on(table.restaurantId),
+    uniqueIndex("bank_accounts_chart_of_accounts_id_unique").on(table.chartOfAccountsId),
+  ],
+);
+
+export const bankReconciliationStatusEnum = pgEnum("bank_reconciliation_status", ["open", "completed"]);
+
+// Bank-statement-level reconciliation: a running checklist confirming the
+// ledger's own bank-account balance matches what the restaurant's real bank
+// statement says at a point in time. Deliberately a MANUAL checklist, same
+// "no bank-API or payment-gateway integration" spirit as Slice 4f's own
+// payment-level reconciliation (see financial-reconciliation.ts's doc
+// comment) — a human reads their own statement and enters its closing
+// balance and date here, then marks which of the bank account's own posted
+// voucher lines have appeared on it (bankReconciliationClearedLines below).
+// A real difference between the ledger and the statement isn't blocked at
+// completion — it's recorded and surfaced for a human to investigate (e.g.
+// an uncleared bank fee), not silently forced to zero.
+export const bankReconciliations = pgTable(
+  "bank_reconciliations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    bankAccountId: uuid("bank_account_id")
+      .notNull()
+      .references(() => bankAccounts.id, { onDelete: "restrict" }),
+    statementDate: date("statement_date").notNull(),
+    statementClosingBalanceInPaisa: integer("statement_closing_balance_in_paisa").notNull(),
+    status: bankReconciliationStatusEnum("status").notNull().default("open"),
+    // Recorded once, at completion (and re-recorded if reopened + re-
+    // completed) — see completeBankReconciliation's own doc comment for the
+    // formula.
+    bookBalanceInPaisa: integer("book_balance_in_paisa"),
+    differenceInPaisa: integer("difference_in_paisa"),
+    notes: text("notes"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedByUserId: uuid("completed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("bank_reconciliations_restaurant_id_idx").on(table.restaurantId),
+    index("bank_reconciliations_bank_account_id_idx").on(table.bankAccountId),
+  ],
+);
+
+// Which of the bank account's own posted accounting_voucher_lines have been
+// checked off ("cleared") as part of one reconciliation. A voucher line can
+// only ever be cleared by ONE reconciliation, ever — enforced by the unique
+// index below — since a specific ledger movement only clears the bank
+// once; the surrounding reconciliation row is deleted (cascading here too)
+// if it's abandoned while still "open", freeing the line for a later one.
+export const bankReconciliationClearedLines = pgTable(
+  "bank_reconciliation_cleared_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reconciliationId: uuid("reconciliation_id")
+      .notNull()
+      .references(() => bankReconciliations.id, { onDelete: "cascade" }),
+    voucherLineId: uuid("voucher_line_id")
+      .notNull()
+      .references(() => accountingVoucherLines.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("bank_reconciliation_cleared_lines_reconciliation_id_idx").on(table.reconciliationId),
+    uniqueIndex("bank_reconciliation_cleared_lines_voucher_line_unique").on(table.voucherLineId),
+  ],
+);
+
+export const bankAccountsRelations = relations(bankAccounts, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [bankAccounts.restaurantId],
+    references: [restaurants.id],
+  }),
+  chartOfAccount: one(chartOfAccounts, {
+    fields: [bankAccounts.chartOfAccountsId],
+    references: [chartOfAccounts.id],
+  }),
+  reconciliations: many(bankReconciliations),
+}));
+
+export const bankReconciliationsRelations = relations(bankReconciliations, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [bankReconciliations.restaurantId],
+    references: [restaurants.id],
+  }),
+  bankAccount: one(bankAccounts, {
+    fields: [bankReconciliations.bankAccountId],
+    references: [bankAccounts.id],
+  }),
+  clearedLines: many(bankReconciliationClearedLines),
+}));
+
+export const bankReconciliationClearedLinesRelations = relations(bankReconciliationClearedLines, ({ one }) => ({
+  reconciliation: one(bankReconciliations, {
+    fields: [bankReconciliationClearedLines.reconciliationId],
+    references: [bankReconciliations.id],
+  }),
+  voucherLine: one(accountingVoucherLines, {
+    fields: [bankReconciliationClearedLines.voucherLineId],
+    references: [accountingVoucherLines.id],
+  }),
+}));
