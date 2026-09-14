@@ -1180,7 +1180,7 @@ type AgingReportData = {
   totalOutstandingInPaisa: number;
 };
 
-const REPORT_TABS = ["Trial Balance", "Profit & Loss", "Balance Sheet", "AR/AP Aging"] as const;
+const REPORT_TABS = ["Trial Balance", "Profit & Loss", "Balance Sheet", "Cash Flow", "AR/AP Aging"] as const;
 type ReportTab = (typeof REPORT_TABS)[number];
 
 function todayIso() {
@@ -1215,6 +1215,7 @@ function ReportsTab({ slug, onDrillDown }: { slug: string; onDrillDown: (account
       {reportTab === "Trial Balance" && <TrialBalanceReport slug={slug} onDrillDown={onDrillDown} />}
       {reportTab === "Profit & Loss" && <ProfitAndLossReport slug={slug} onDrillDown={onDrillDown} />}
       {reportTab === "Balance Sheet" && <BalanceSheetReport slug={slug} onDrillDown={onDrillDown} />}
+      {reportTab === "Cash Flow" && <CashFlowReport slug={slug} />}
       {reportTab === "AR/AP Aging" && <AgingReportTab slug={slug} />}
     </div>
   );
@@ -1528,6 +1529,133 @@ function BalanceSheetReport({ slug, onDrillDown }: { slug: string; onDrillDown: 
               period-closing entries yet. This keeps the sheet balanced arithmetically, but it won&apos;t
               reflect every real-world balance (inventory, accrued liabilities, etc.) until Phase 4/5&apos;s
               automatic postings land.
+            </p>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+type CashFlowLine = { label: string; amountInPaisa: number };
+type CashFlowSection = { lines: CashFlowLine[]; totalInPaisa: number };
+type CashFlowData = {
+  fromDate: string;
+  toDate: string;
+  beginningCashInPaisa: number;
+  endingCashInPaisa: number;
+  operating: CashFlowSection;
+  investing: CashFlowSection;
+  financing: CashFlowSection;
+  netChangeInCashInPaisa: number;
+  isReconciled: boolean;
+};
+
+/**
+ * Phase 5, Slice 5c — Cash Flow Statement, indirect method. See
+ * cash-flow.ts's own top-of-file comment for the full classification
+ * rules; `isReconciled` here is a genuine correctness check (it can only
+ * be true if the classification below is complete), not a tautology.
+ */
+function CashFlowReport({ slug }: { slug: string }) {
+  const [fromDate, setFromDate] = useState(firstOfMonthIso());
+  const [toDate, setToDate] = useState(todayIso());
+  const [data, setData] = useState<CashFlowData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    apiGet<CashFlowData>(`${base(slug)}/accounting/reports/cash-flow?fromDate=${fromDate}&toDate=${toDate}`)
+      .then((res) => {
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load the Cash Flow Statement."))
+      .finally(() => setLoading(false));
+  }, [slug, fromDate, toDate]);
+
+  function Section({ title, section }: { title: string; section: CashFlowSection }) {
+    return (
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+        <div className="border-b border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-900">{title}</div>
+        <table className="w-full text-sm">
+          <tbody>
+            {section.lines.map((l, i) => (
+              <tr key={i} className="border-b border-neutral-100 last:border-0">
+                <td className="px-4 py-2 text-neutral-600">{l.label}</td>
+                <td className="px-3 py-2 text-right">{formatNPR(l.amountInPaisa)}</td>
+              </tr>
+            ))}
+            {section.lines.length === 0 && (
+              <tr>
+                <td colSpan={2} className="px-4 py-4 text-center text-sm text-neutral-400">
+                  No activity in this period.
+                </td>
+              </tr>
+            )}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-neutral-300 font-semibold text-neutral-900">
+              <td className="px-4 py-2">Net cash from {title.toLowerCase()}</td>
+              <td className="px-3 py-2 text-right">{formatNPR(section.totalInPaisa)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="grid max-w-md gap-3 sm:grid-cols-2">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">From</span>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">To</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
+        </label>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : (
+        data && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
+              <span className="text-neutral-600">Beginning cash</span>
+              <span className="font-medium text-neutral-900">{formatNPR(data.beginningCashInPaisa)}</span>
+            </div>
+            <Section title="Operating Activities" section={data.operating} />
+            <Section title="Investing Activities" section={data.investing} />
+            <Section title="Financing Activities" section={data.financing} />
+            <div className="flex items-center justify-between rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
+              <span className="text-neutral-600">Net change in cash</span>
+              <span className="font-medium text-neutral-900">{formatNPR(data.netChangeInCashInPaisa)}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm">
+              <span className="font-medium text-neutral-900">Ending cash</span>
+              <span className="font-semibold text-neutral-900">{formatNPR(data.endingCashInPaisa)}</span>
+            </div>
+            <div
+              className={`rounded-2xl border px-4 py-2 text-xs ${
+                data.isReconciled
+                  ? "border-green-200 bg-green-50 text-green-700"
+                  : "border-red-200 bg-red-50 text-red-700"
+              }`}
+            >
+              {data.isReconciled
+                ? "Reconciled — the net change in cash above matches the actual change in cash and bank account balances exactly."
+                : "Not reconciled — the classified activity above does not match the actual change in cash and bank account balances. This can happen if an opening-balance voucher touching cash falls inside the chosen period."}
+            </div>
+            <p className="text-xs text-neutral-400">
+              Indirect method — the Operating section starts from Net Income and adjusts for
+              non-cash depreciation and loan interest paid; a &quot;changes in working capital and
+              other operating activity&quot; line absorbs everything else so the section&apos;s total
+              always matches actual operating cash movement.
             </p>
           </div>
         )
