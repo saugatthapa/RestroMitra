@@ -6473,6 +6473,21 @@ export const fixedAssetDepreciationMethodEnum = pgEnum("fixed_asset_depreciation
   "straight_line",
 ]);
 
+// Phase 6, Slice 6e — Nepal tax depreciation (Income Tax Act 2058, Schedule
+// 2) pool classification. A=buildings/structures 5%, B=computers/furniture/
+// office equipment 25%, C=automobiles/buses/minibuses 20%, D=construction
+// equipment + catch-all 15%, E=intangibles (not pooled — straight-line, see
+// tax-depreciation.ts's own comment). Lives on fixedAssets itself — see that
+// table's own comment for why this is safe alongside Slice 5d's existing
+// book-depreciation fields, which this column never reads or writes.
+export const fixedAssetTaxDepreciationPoolEnum = pgEnum("fixed_asset_tax_depreciation_pool", [
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+]);
+
 // One row per fixed asset a restaurant has recorded. Each wraps its own
 // child chart_of_accounts row (parented under the seeded "1900 Fixed
 // Assets", coded in the reserved 1901-1999 block) — same auto-provisioning
@@ -6514,6 +6529,11 @@ export const fixedAssets = pgTable(
       onDelete: "set null",
     }),
     disposalProceedsInPaisa: integer("disposal_proceeds_in_paisa"),
+    // Phase 6, Slice 6e — nullable: an asset has no tax pool until an owner
+    // explicitly classifies it (this app never guesses which Schedule-2 pool
+    // an asset belongs in from its free-text `category`). Never read or
+    // written by any Slice 5d book-depreciation logic in this file.
+    taxDepreciationPool: fixedAssetTaxDepreciationPoolEnum("tax_depreciation_pool"),
     notes: text("notes"),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

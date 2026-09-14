@@ -1180,7 +1180,15 @@ type AgingReportData = {
   totalOutstandingInPaisa: number;
 };
 
-const REPORT_TABS = ["Trial Balance", "Profit & Loss", "Balance Sheet", "Cash Flow", "AR/AP Aging", "VAT Return"] as const;
+const REPORT_TABS = [
+  "Trial Balance",
+  "Profit & Loss",
+  "Balance Sheet",
+  "Cash Flow",
+  "AR/AP Aging",
+  "VAT Return",
+  "Tax Depreciation",
+] as const;
 type ReportTab = (typeof REPORT_TABS)[number];
 
 function todayIso() {
@@ -1218,6 +1226,7 @@ function ReportsTab({ slug, onDrillDown }: { slug: string; onDrillDown: (account
       {reportTab === "Cash Flow" && <CashFlowReport slug={slug} />}
       {reportTab === "AR/AP Aging" && <AgingReportTab slug={slug} />}
       {reportTab === "VAT Return" && <VatReturnReport slug={slug} />}
+      {reportTab === "Tax Depreciation" && <TaxDepreciationReportTab slug={slug} />}
     </div>
   );
 }
@@ -1740,6 +1749,226 @@ function VatReturnReport({ slug }: { slug: string }) {
               Input VAT only reflects purchases where a VAT amount was actually entered. Verify
               every figure before filing.
             </p>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+type TaxDepreciationPoolYearRow = {
+  incomeYear: number;
+  incomeYearLabel: string;
+  openingBalanceInPaisa: number;
+  additionsInPaisa: number;
+  disposalProceedsInPaisa: number;
+  poolValueBeforeDepreciationInPaisa: number;
+  balancingChargeInPaisa: number;
+  isDeMinimisWriteOff: boolean;
+  depreciationChargeInPaisa: number;
+  closingBalanceInPaisa: number;
+};
+
+type TaxDepreciationIntangibleYearRow = {
+  incomeYear: number;
+  incomeYearLabel: string;
+  openingBalanceInPaisa: number;
+  depreciationChargeInPaisa: number;
+  closingBalanceInPaisa: number;
+};
+
+type TaxDepreciationIntangible = {
+  fixedAssetId: string;
+  name: string;
+  costInPaisa: number;
+  usefulLifeYears: number;
+  years: TaxDepreciationIntangibleYearRow[];
+};
+
+type TaxDepreciationData = {
+  throughIncomeYear: number;
+  throughIncomeYearLabel: string;
+  pools: Array<{
+    pool: "A" | "B" | "C" | "D";
+    ratePercent: number;
+    assetCount: number;
+    years: TaxDepreciationPoolYearRow[];
+  }>;
+  intangibles: TaxDepreciationIntangible[];
+  unclassifiedAssetCount: number;
+};
+
+const TAX_DEPRECIATION_POOL_NAMES: Record<"A" | "B" | "C" | "D", string> = {
+  A: "Pool A — Buildings",
+  B: "Pool B — Computers/furniture/office equipment",
+  C: "Pool C — Vehicles",
+  D: "Pool D — Construction equipment/other",
+};
+
+/**
+ * Phase 6, Slice 6e — Nepal tax depreciation (pooled declining-balance), a
+ * SECOND, INDEPENDENT report alongside the Fixed Assets tab's own
+ * straight-line book depreciation — it never affects those figures. See
+ * tax-depreciation.ts's own top-of-file comment for the full mechanics and
+ * this report's verification status; the caveat below says the same thing
+ * in plain language for whoever's reading the report itself.
+ */
+function TaxDepreciationReportTab({ slug }: { slug: string }) {
+  const [incomeYear, setIncomeYear] = useState<number | null>(null);
+  const [data, setData] = useState<TaxDepreciationData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    const qs = incomeYear != null ? `?incomeYear=${incomeYear}` : "";
+    apiGet<TaxDepreciationData>(`${base(slug)}/accounting/reports/tax-depreciation${qs}`)
+      .then((res) => {
+        setData(res);
+        setError(null);
+        setIncomeYear((prev) => prev ?? res.throughIncomeYear);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load the tax depreciation report."))
+      .finally(() => setLoading(false));
+  }, [slug, incomeYear]);
+
+  function PoolTable({ pool }: { pool: TaxDepreciationData["pools"][number] }) {
+    if (pool.assetCount === 0) return null;
+    return (
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+        <div className="border-b border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-900">
+          {TAX_DEPRECIATION_POOL_NAMES[pool.pool]} · {pool.ratePercent}% · {pool.assetCount} asset
+          {pool.assetCount === 1 ? "" : "s"}
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
+              <th className="px-3 py-2">Income year</th>
+              <th className="px-3 py-2 text-right">Opening</th>
+              <th className="px-3 py-2 text-right">Additions</th>
+              <th className="px-3 py-2 text-right">Disposals</th>
+              <th className="px-3 py-2 text-right">Depreciation</th>
+              <th className="px-3 py-2 text-right">Closing</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pool.years.map((y) => (
+              <tr key={y.incomeYear} className="border-b border-neutral-100 last:border-0">
+                <td className="px-3 py-2 text-neutral-600">{y.incomeYearLabel}</td>
+                <td className="px-3 py-2 text-right">{formatNPR(y.openingBalanceInPaisa)}</td>
+                <td className="px-3 py-2 text-right">{formatNPR(y.additionsInPaisa)}</td>
+                <td className="px-3 py-2 text-right">{formatNPR(y.disposalProceedsInPaisa)}</td>
+                <td className="px-3 py-2 text-right">
+                  {formatNPR(y.depreciationChargeInPaisa)}
+                  {y.isDeMinimisWriteOff && (
+                    <span className="ml-1 rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-800">
+                      de minimis
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right font-medium">{formatNPR(y.closingBalanceInPaisa)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {pool.years.some((y) => y.balancingChargeInPaisa > 0) && (
+          <div className="border-t border-orange-200 bg-orange-50 px-4 py-2 text-xs text-orange-800">
+            {pool.years
+              .filter((y) => y.balancingChargeInPaisa > 0)
+              .map((y) => (
+                <div key={y.incomeYear}>
+                  {y.incomeYearLabel}: disposal proceeds exceeded this pool&apos;s value by{" "}
+                  {formatNPR(y.balancingChargeInPaisa)} — a balancing charge (taxable income for that
+                  year, not a depreciation figure). Not posted to your ledger by this report.
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function IntangibleTable({ asset }: { asset: TaxDepreciationIntangible }) {
+    return (
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+        <div className="border-b border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-900">
+          {asset.name} · {formatNPR(asset.costInPaisa)} · {asset.usefulLifeYears}-year life
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
+              <th className="px-3 py-2">Income year</th>
+              <th className="px-3 py-2 text-right">Opening</th>
+              <th className="px-3 py-2 text-right">Depreciation</th>
+              <th className="px-3 py-2 text-right">Closing</th>
+            </tr>
+          </thead>
+          <tbody>
+            {asset.years.map((y) => (
+              <tr key={y.incomeYear} className="border-b border-neutral-100 last:border-0">
+                <td className="px-3 py-2 text-neutral-600">{y.incomeYearLabel}</td>
+                <td className="px-3 py-2 text-right">{formatNPR(y.openingBalanceInPaisa)}</td>
+                <td className="px-3 py-2 text-right">{formatNPR(y.depreciationChargeInPaisa)}</td>
+                <td className="px-3 py-2 text-right font-medium">{formatNPR(y.closingBalanceInPaisa)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-xs text-orange-800">
+        A reference computation for your own records or your accountant — never a filable IRD
+        schedule. The pool rates and the mid-year &quot;thirds&quot; first-year rule are
+        corroborated across several sources; the disposal balancing-charge mechanic and the
+        Rs. 2,000 write-off rule are less certain. Verify every figure against the IRD or a
+        licensed Nepali chartered accountant before relying on it for an actual filing.
+      </div>
+
+      <label className="block max-w-xs text-sm">
+        <span className="mb-1 block text-neutral-600">Nepali income year (B.S.)</span>
+        <input
+          type="number"
+          className="input"
+          value={incomeYear ?? ""}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (Number.isInteger(v)) setIncomeYear(v);
+          }}
+        />
+        {data && <span className="mt-1 block text-xs text-neutral-400">{data.throughIncomeYearLabel}</span>}
+      </label>
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : (
+        data && (
+          <div className="space-y-4">
+            {data.unclassifiedAssetCount > 0 && (
+              <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
+                {data.unclassifiedAssetCount} active fixed asset{data.unclassifiedAssetCount === 1 ? "" : "s"} not
+                yet classified into a tax pool — set each one&apos;s &quot;Tax pool&quot; on the Fixed Assets
+                tab to include it here.
+              </p>
+            )}
+
+            {data.pools.map((p) => (
+              <PoolTable key={p.pool} pool={p} />
+            ))}
+            {data.intangibles.map((a) => (
+              <IntangibleTable key={a.fixedAssetId} asset={a} />
+            ))}
+
+            {data.pools.every((p) => p.assetCount === 0) && data.intangibles.length === 0 && (
+              <p className="text-sm text-neutral-400">
+                No fixed assets classified into a tax pool yet.
+              </p>
+            )}
           </div>
         )
       )}
@@ -3007,12 +3236,21 @@ type FixedAsset = {
   bookValueInPaisa: number;
   disposedAt: string | null;
   disposalProceedsInPaisa: number | null;
+  taxDepreciationPool: "A" | "B" | "C" | "D" | "E" | null;
   notes: string | null;
   code: string;
   accountName: string;
   isActive: boolean;
   createdAt: string;
 };
+
+const TAX_DEPRECIATION_POOLS = [
+  { value: "A", label: "A — Buildings (5%)" },
+  { value: "B", label: "B — Computers/furniture/office (25%)" },
+  { value: "C", label: "C — Vehicles (20%)" },
+  { value: "D", label: "D — Construction equipment/other (15%)" },
+  { value: "E", label: "E — Intangibles (straight-line)" },
+] as const;
 
 type DepreciationEntry = {
   id: string;
@@ -3061,8 +3299,9 @@ function FixedAssetsTab({ slug }: { slug: string }) {
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <p className="text-sm text-neutral-500">
         Each fixed asset here wraps its own ledger account under &quot;1900 Fixed Assets&quot;.
-        Depreciation is straight-line, for book/management purposes only — not a Nepal tax
-        depreciation computation.
+        Depreciation here is straight-line, for book/management purposes only. Classify an
+        asset&apos;s &quot;Tax pool&quot; below to include it in the separate Nepal Tax
+        Depreciation report under Reports — that computation never affects these book figures.
       </p>
 
       <RunDepreciationPanel slug={slug} onRun={load} />
@@ -3096,6 +3335,7 @@ function FixedAssetsTab({ slug }: { slug: string }) {
                 <th className="px-3 py-2 text-right">Cost</th>
                 <th className="px-3 py-2 text-right">Accum. depreciation</th>
                 <th className="px-3 py-2 text-right">Book value</th>
+                <th className="px-3 py-2">Tax pool</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2" />
               </tr>
@@ -3113,6 +3353,16 @@ function FixedAssetsTab({ slug }: { slug: string }) {
                     <td className="px-3 py-2 text-right">{formatNPR(a.costInPaisa)}</td>
                     <td className="px-3 py-2 text-right">{formatNPR(a.accumulatedDepreciationInPaisa)}</td>
                     <td className="px-3 py-2 text-right font-medium">{formatNPR(a.bookValueInPaisa)}</td>
+                    <td className="px-3 py-2">
+                      <TaxDepreciationPoolSelect
+                        slug={slug}
+                        fixedAssetId={a.id}
+                        value={a.taxDepreciationPool}
+                        onChanged={(pool) =>
+                          setAssets((prev) => prev.map((x) => (x.id === a.id ? { ...x, taxDepreciationPool: pool } : x)))
+                        }
+                      />
+                    </td>
                     <td className="px-3 py-2">
                       {a.disposedAt ? (
                         <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-500">
@@ -3145,14 +3395,14 @@ function FixedAssetsTab({ slug }: { slug: string }) {
                   </tr>
                   {historyId === a.id && (
                     <tr className="border-b border-neutral-100 bg-neutral-50">
-                      <td colSpan={8} className="px-3 py-3">
+                      <td colSpan={9} className="px-3 py-3">
                         <DepreciationHistory slug={slug} fixedAssetId={a.id} />
                       </td>
                     </tr>
                   )}
                   {disposingId === a.id && (
                     <tr className="border-b border-neutral-100 bg-neutral-50">
-                      <td colSpan={8} className="px-3 py-3">
+                      <td colSpan={9} className="px-3 py-3">
                         <DisposeFixedAssetForm
                           slug={slug}
                           asset={a}
@@ -3169,7 +3419,7 @@ function FixedAssetsTab({ slug }: { slug: string }) {
               ))}
               {assets.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-6 text-center text-sm text-neutral-400">
+                  <td colSpan={9} className="px-3 py-6 text-center text-sm text-neutral-400">
                     No fixed assets yet — add the first one above.
                   </td>
                 </tr>
@@ -3178,6 +3428,60 @@ function FixedAssetsTab({ slug }: { slug: string }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Phase 6, Slice 6e — the only editable thing about an existing fixed
+ * asset: which Nepal tax-depreciation pool it belongs to (or none). Saves
+ * immediately on change (no separate save button) since this is a single,
+ * low-stakes classification field, not a form.
+ */
+function TaxDepreciationPoolSelect({
+  slug,
+  fixedAssetId,
+  value,
+  onChanged,
+}: {
+  slug: string;
+  fixedAssetId: string;
+  value: FixedAsset["taxDepreciationPool"];
+  onChanged: (pool: FixedAsset["taxDepreciationPool"]) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleChange(next: string) {
+    const pool = (next || null) as FixedAsset["taxDepreciationPool"];
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPatch(`${base(slug)}/accounting/fixed-assets/${fixedAssetId}`, { taxDepreciationPool: pool });
+      onChanged(pool);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      <select
+        className="input py-1 text-xs"
+        value={value ?? ""}
+        disabled={saving}
+        onChange={(e) => handleChange(e.target.value)}
+      >
+        <option value="">Unclassified</option>
+        {TAX_DEPRECIATION_POOLS.map((p) => (
+          <option key={p.value} value={p.value}>
+            {p.label}
+          </option>
+        ))}
+      </select>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
   );
 }

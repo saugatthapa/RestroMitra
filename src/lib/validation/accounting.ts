@@ -177,6 +177,14 @@ export const disposeFixedAssetSchema = z.object({
   bankAccountId: z.string().uuid().optional(),
 });
 
+// Phase 6, Slice 6e — classifies (or clears the classification of) a fixed
+// asset into one of the five Nepal tax-depreciation pools (see
+// tax-depreciation.ts). Narrow and single-purpose on purpose: this never
+// touches any Slice 5d book-depreciation field.
+export const setFixedAssetTaxDepreciationPoolSchema = z.object({
+  taxDepreciationPool: z.enum(["A", "B", "C", "D", "E"]).nullable(),
+});
+
 // ---------------------------------------------------------------------------
 // Phase 5, Slice 5e — Loan accounting (manual principal/interest split on
 // every repayment — no amortization-schedule calculator).

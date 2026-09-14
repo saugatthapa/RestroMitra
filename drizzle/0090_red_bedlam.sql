@@ -1,0 +1,2 @@
+CREATE TYPE "public"."fixed_asset_tax_depreciation_pool" AS ENUM('A', 'B', 'C', 'D', 'E');--> statement-breakpoint
+ALTER TABLE "fixed_assets" ADD COLUMN "tax_depreciation_pool" "fixed_asset_tax_depreciation_pool";

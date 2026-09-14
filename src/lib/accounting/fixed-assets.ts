@@ -7,6 +7,7 @@ import {
   chartOfAccounts,
   branches,
   type fixedAssetDepreciationMethodEnum,
+  type fixedAssetTaxDepreciationPoolEnum,
 } from "@/db/schema";
 import { postVoucher, AccountingError, type PostedVoucher } from "./post-voucher";
 import { resolveAccountMappings } from "./account-mappings";
@@ -40,6 +41,7 @@ const DEPRECIATION_EXPENSE_CODE = "5150";
 const GAIN_LOSS_ON_DISPOSAL_CODE = "4920";
 
 export type FixedAssetDepreciationMethod = (typeof fixedAssetDepreciationMethodEnum.enumValues)[number];
+export type FixedAssetTaxDepreciationPool = (typeof fixedAssetTaxDepreciationPoolEnum.enumValues)[number];
 
 export type FundingMethod = "cash" | "bank" | "credit";
 
@@ -57,6 +59,7 @@ export type FixedAssetRow = {
   bookValueInPaisa: number;
   disposedAt: Date | null;
   disposalProceedsInPaisa: number | null;
+  taxDepreciationPool: FixedAssetTaxDepreciationPool | null;
   notes: string | null;
   code: string;
   accountName: string;
@@ -114,6 +117,7 @@ function toFixedAssetRow(row: {
   accumulatedDepreciationInPaisa: number;
   disposedAt: Date | null;
   disposalProceedsInPaisa: number | null;
+  taxDepreciationPool?: FixedAssetTaxDepreciationPool | null;
   notes: string | null;
   createdAt: Date;
   code: string;
@@ -134,6 +138,7 @@ function toFixedAssetRow(row: {
     bookValueInPaisa: row.costInPaisa - row.accumulatedDepreciationInPaisa,
     disposedAt: row.disposedAt,
     disposalProceedsInPaisa: row.disposalProceedsInPaisa,
+    taxDepreciationPool: row.taxDepreciationPool ?? null,
     notes: row.notes,
     code: row.code,
     accountName: row.accountName,
@@ -158,6 +163,7 @@ export async function listFixedAssets(tx: Transaction, restaurantId: string): Pr
       accumulatedDepreciationInPaisa: fixedAssets.accumulatedDepreciationInPaisa,
       disposedAt: fixedAssets.disposedAt,
       disposalProceedsInPaisa: fixedAssets.disposalProceedsInPaisa,
+      taxDepreciationPool: fixedAssets.taxDepreciationPool,
       notes: fixedAssets.notes,
       createdAt: fixedAssets.createdAt,
       code: chartOfAccounts.code,
@@ -169,6 +175,34 @@ export async function listFixedAssets(tx: Transaction, restaurantId: string): Pr
     .where(eq(fixedAssets.restaurantId, restaurantId))
     .orderBy(fixedAssets.acquisitionDate);
   return rows.map(toFixedAssetRow).reverse();
+}
+
+/**
+ * Phase 6, Slice 6e — classifies (or clears, via `null`) a fixed asset's
+ * Nepal tax-depreciation pool. Deliberately its own narrow function, not
+ * folded into a general "update fixed asset" endpoint (none exists — Slice
+ * 5d's own book fields, once set at acquisition, are not editable here) —
+ * this is the one thing about a fixed asset this module lets an owner
+ * change after the fact, and only this one field.
+ */
+export async function setFixedAssetTaxDepreciationPool(
+  tx: Transaction,
+  params: { restaurantId: string; fixedAssetId: string; taxDepreciationPool: FixedAssetTaxDepreciationPool | null },
+): Promise<FixedAssetRow> {
+  const [row] = await tx
+    .update(fixedAssets)
+    .set({ taxDepreciationPool: params.taxDepreciationPool, updatedAt: new Date() })
+    .where(and(eq(fixedAssets.id, params.fixedAssetId), eq(fixedAssets.restaurantId, params.restaurantId)))
+    .returning();
+  if (!row) {
+    throw new AccountingError("Fixed asset not found.", 404);
+  }
+  const [account] = await tx
+    .select({ code: chartOfAccounts.code, name: chartOfAccounts.name, isActive: chartOfAccounts.isActive })
+    .from(chartOfAccounts)
+    .where(eq(chartOfAccounts.id, row.chartOfAccountsId))
+    .limit(1);
+  return toFixedAssetRow({ ...row, code: account.code, accountName: account.name, isActive: account.isActive });
 }
 
 export type DepreciationEntryRow = {
