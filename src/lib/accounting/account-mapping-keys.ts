@@ -52,6 +52,13 @@ export const MAPPING_KEYS = {
   // support; nothing here needs to change for that migration except adding
   // more mapping keys alongside this one.
   BANK_ACCOUNT: "control:bank_account",
+  // Phase 6, Slice 6a — the recoverable VAT a VAT-registered supplier
+  // charged on a purchase, additive to that purchase's own goods/service
+  // cost (never carved out of it — see chart-of-accounts.ts's own "1150
+  // Input VAT Receivable" comment and integrations/purchases.ts's
+  // postPurchaseVoucher). A future VAT-return report (Slice 6c) nets this
+  // asset against TAX_PAYABLE's own Output VAT credits.
+  INPUT_VAT: "control:input_vat",
 } as const;
 
 export type MappingKey = (typeof MAPPING_KEYS)[keyof typeof MAPPING_KEYS];

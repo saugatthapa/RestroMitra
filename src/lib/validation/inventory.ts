@@ -91,6 +91,13 @@ export const createPurchaseSchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected a YYYY-MM-DD date.")
       .nullable()
       .optional(),
+    // Phase 6, Slice 6a — optional, ADDITIVE VAT amount a VAT-registered
+    // supplier charged on this invoice, on top of the line items' own
+    // goods cost below (never carved out of it — see
+    // purchases.vatInPaisa's own schema comment). Omitted entirely (not
+    // zero) means "no VAT on this purchase," the same as every purchase
+    // before this slice.
+    vatAmount: rupeeAmount.optional(),
     items: z
       .array(
         z.object({

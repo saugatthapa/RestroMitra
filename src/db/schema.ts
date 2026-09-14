@@ -1969,12 +1969,27 @@ export const purchases = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // Phase 6, Slice 6a — the portion of what's actually owed/paid to the
+    // supplier that is input VAT the supplier charged on this invoice.
+    // Deliberately ADDITIVE to totalInPaisa above, never carved out of it:
+    // totalInPaisa stays exactly what its own comment always said (the
+    // denormalized sum of this purchase's line items' own goods cost, at
+    // whatever per-unit cost the app's inventory costing also uses), so
+    // nothing about an existing purchase's inventory valuation changes by
+    // this column existing. Null = no VAT on this purchase (the default,
+    // and the only possibility before this slice) — never 0, so "VAT not
+    // entered" and "VAT confirmed zero" stay distinguishable if that ever
+    // matters. The true amount owed to the supplier, and what
+    // postPurchaseVoucher/recordPurchaseLedgerEntry actually book against
+    // Accounts Payable/Cash, is totalInPaisa + (vatInPaisa ?? 0).
+    vatInPaisa: integer("vat_in_paisa"),
   },
   (table) => [
     index("purchases_restaurant_id_idx").on(table.restaurantId),
     index("purchases_supplier_id_idx").on(table.supplierId),
     index("purchases_branch_id_idx").on(table.branchId),
     check("purchases_total_non_negative", sql`${table.totalInPaisa} >= 0`),
+    check("purchases_vat_non_negative", sql`${table.vatInPaisa} IS NULL OR ${table.vatInPaisa} >= 0`),
     // All-or-nothing, same pattern as register_shifts' closed-fields
     // CHECK: a purchase is either never voided (both null, isVoided
     // false) or fully voided (both set, isVoided true) — never half.

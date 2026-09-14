@@ -20,6 +20,17 @@ import { restaurantDate } from "@/lib/restaurant-date";
  * immediate purchase defaults to the Cash on Hand account (the same account
  * `payment_method:cash` resolves to) until a real payment-method field
  * exists alongside Bank Accounts (Phase 5).
+ *
+ * Phase 6, Slice 6a — `vatInPaisa` is an optional, ADDITIVE third line: per
+ * sign-off, VAT a VAT-registered supplier charged is on TOP of
+ * `totalInPaisa` (the goods/service cost, still exactly what the line
+ * items sum to and still exactly what Inventory is debited for — untouched
+ * by this slice), not carved out of it. So a VAT-inclusive purchase debits
+ * Inventory for the goods cost, debits "1150 Input VAT Receivable" for the
+ * VAT, and credits Accounts Payable/Cash for the TRUE total actually owed
+ * (`totalInPaisa + vatInPaisa`) — the voucher still balances by
+ * construction, the same as every other slice's optional-line pattern
+ * (Slice 5e's interest line, Slice 5d's disposal gain/loss line).
  */
 export async function postPurchaseVoucher(
   tx: Transaction,
@@ -32,30 +43,38 @@ export async function postPurchaseVoucher(
     supplierId: string | null;
     timezone: string;
     createdByUserId: string;
+    vatInPaisa?: number | null;
   },
 ): Promise<void> {
   // Mirrors recordPurchaseLedgerEntry's own zero-total no-op.
   if (params.totalInPaisa <= 0) return;
 
+  const vatInPaisa = params.vatInPaisa ?? 0;
+  const owedInPaisa = params.totalInPaisa + vatInPaisa;
+
   const creditKey = params.isCredit ? MAPPING_KEYS.ACCOUNTS_PAYABLE : MAPPING_KEYS.PAYMENT_METHOD_CASH;
+  const keys = vatInPaisa > 0 ? [MAPPING_KEYS.INVENTORY, MAPPING_KEYS.INPUT_VAT, creditKey] : [MAPPING_KEYS.INVENTORY, creditKey];
   const accounts = await resolveAccountMappings(tx, {
     restaurantId: params.restaurantId,
-    keys: [MAPPING_KEYS.INVENTORY, creditKey],
+    keys,
   });
 
-  const lines: PostVoucherLine[] = [
-    { accountId: accounts.get(MAPPING_KEYS.INVENTORY)!, debitInPaisa: params.totalInPaisa },
+  const lines: PostVoucherLine[] = [{ accountId: accounts.get(MAPPING_KEYS.INVENTORY)!, debitInPaisa: params.totalInPaisa }];
+  if (vatInPaisa > 0) {
+    lines.push({ accountId: accounts.get(MAPPING_KEYS.INPUT_VAT)!, debitInPaisa: vatInPaisa });
+  }
+  lines.push(
     params.isCredit
-      ? { accountId: accounts.get(creditKey)!, creditInPaisa: params.totalInPaisa, supplierId: params.supplierId }
-      : { accountId: accounts.get(creditKey)!, creditInPaisa: params.totalInPaisa },
-  ];
+      ? { accountId: accounts.get(creditKey)!, creditInPaisa: owedInPaisa, supplierId: params.supplierId }
+      : { accountId: accounts.get(creditKey)!, creditInPaisa: owedInPaisa },
+  );
 
   await postVoucher(tx, {
     restaurantId: params.restaurantId,
     branchId: params.branchId,
     voucherType: "purchase",
     voucherDate: restaurantDate(params.timezone),
-    narration: "Stock purchase",
+    narration: vatInPaisa > 0 ? "Stock purchase (incl. input VAT)" : "Stock purchase",
     createdByUserId: params.createdByUserId,
     sourceType: "purchase",
     sourceId: params.purchaseId,

@@ -38,6 +38,10 @@ export async function GET(_request: Request, ctx: { params: Promise<{ slug: stri
             .join("; "),
       },
       { header: "Total (Rs)", value: (r) => paisaToRupees(r.totalInPaisa) },
+      // Phase 6, Slice 6a — additive to "Total" above, not part of it (see
+      // purchases.vatInPaisa's own schema comment); blank, not "0", when
+      // no VAT was ever entered for this purchase.
+      { header: "VAT (Rs)", value: (r) => (r.vatInPaisa != null ? paisaToRupees(r.vatInPaisa) : "") },
       { header: "Credit purchase", value: (r) => r.isCredit },
       { header: "Due status", value: (r) => r.ledgerEntry?.dueStatus ?? "" },
       {

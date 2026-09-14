@@ -55,6 +55,17 @@ const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   // bank account added never races to create it.
   { code: "1050", name: "Bank Accounts", type: "asset", normalBalance: "debit" },
   { code: "1100", name: "Accounts Receivable", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.ACCOUNTS_RECEIVABLE] },
+  // Phase 6, Slice 6a — the recoverable VAT paid on a VAT-registered
+  // supplier's purchase invoice, additive to that purchase's own goods
+  // cost (see purchases.vatInPaisa's own schema comment: it is never
+  // carved out of the existing total, so Inventory's own posted amount is
+  // unaffected by this account existing). Only debited when a purchase
+  // actually records a non-zero VAT amount — postPurchaseVoucher skips
+  // this line entirely otherwise, the same "optional third line" pattern
+  // Slice 5e's interest line (5160) already established. Fixed at 1150,
+  // between Accounts Receivable and Inventory, since neither of those
+  // reserves any code block of its own to collide with.
+  { code: "1150", name: "Input VAT Receivable", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.INPUT_VAT] },
   { code: "1200", name: "Inventory", type: "asset", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.INVENTORY] },
   { code: "1900", name: "Fixed Assets", type: "asset", normalBalance: "debit" },
   // Contra-asset — accumulated depreciation reduces total assets even

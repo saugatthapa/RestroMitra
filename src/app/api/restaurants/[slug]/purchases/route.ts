@@ -190,6 +190,10 @@ export async function POST(
           isCredit: data.isCredit,
           dueDate: data.isCredit ? data.dueDate || null : null,
           recordedByUserId: session.user.id,
+          // Accounting module Phase 6, Slice 6a — additive to totalInPaisa
+          // above, never carved out of it; see purchases.vatInPaisa's own
+          // schema comment.
+          vatInPaisa: data.vatAmount ?? null,
         })
         .returning();
 
@@ -229,10 +233,16 @@ export async function POST(
       // own comment in ledger.ts). The ledger entry's id is looked up again
       // by the GET route below (never cached on the purchase row itself) so
       // there is exactly one place a due amount is tracked.
+      //
+      // Phase 6, Slice 6a — the amount actually owed/paid to the supplier
+      // (what Account Books' own due-tracking and Supplier Statement care
+      // about) is the goods total PLUS any additive VAT, not totalInPaisa
+      // alone — see purchases.vatInPaisa's own schema comment.
+      const owedInPaisa = totalInPaisa + (data.vatAmount ?? 0);
       const ledgerEntry = await recordPurchaseLedgerEntry(tx, {
         restaurantId,
         purchaseId: purchase.id,
-        totalInPaisa,
+        totalInPaisa: owedInPaisa,
         supplierName,
         invoiceNumber: purchase.invoiceNumber,
         timezone,
@@ -254,6 +264,7 @@ export async function POST(
           supplierId: data.supplierId ?? null,
           timezone,
           createdByUserId: session.user.id,
+          vatInPaisa: data.vatAmount ?? null,
         });
       }
 
@@ -268,7 +279,7 @@ export async function POST(
       resourceType: "purchase",
       resourceId: result.purchase.id,
       ipAddress: getClientIp(request),
-      metadata: { totalInPaisa, lineCount: lineTotals.length },
+      metadata: { totalInPaisa, vatInPaisa: data.vatAmount ?? null, lineCount: lineTotals.length },
     });
 
     return NextResponse.json(

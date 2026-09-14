@@ -71,6 +71,32 @@ describe("createPurchaseSchema", () => {
   it("requires at least one line item", () => {
     expect(() => createPurchaseSchema.parse({ items: [] })).toThrow();
   });
+
+  // Phase 6, Slice 6a.
+  it("vatAmount is optional and converts to paisa when provided", () => {
+    const withoutVat = createPurchaseSchema.parse({
+      branchId: "00000000-0000-0000-0000-000000000000",
+      items: [{ inventoryItemId: "00000000-0000-0000-0000-000000000000", quantity: 2, unitCost: 150.5 }],
+    });
+    expect(withoutVat.vatAmount).toBeUndefined();
+
+    const withVat = createPurchaseSchema.parse({
+      branchId: "00000000-0000-0000-0000-000000000000",
+      items: [{ inventoryItemId: "00000000-0000-0000-0000-000000000000", quantity: 2, unitCost: 150.5 }],
+      vatAmount: 39.1,
+    });
+    expect(withVat.vatAmount).toBe(3910);
+  });
+
+  it("rejects a zero or negative vatAmount — omit the field entirely for 'no VAT', per rupeeAmount's own positive-only rule", () => {
+    expect(() =>
+      createPurchaseSchema.parse({
+        branchId: "00000000-0000-0000-0000-000000000000",
+        items: [{ inventoryItemId: "00000000-0000-0000-0000-000000000000", quantity: 2, unitCost: 150.5 }],
+        vatAmount: 0,
+      }),
+    ).toThrow();
+  });
 });
 
 describe("replaceRecipeSchema", () => {

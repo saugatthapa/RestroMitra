@@ -44,6 +44,9 @@ type Purchase = {
   id: string;
   invoiceNumber: string | null;
   totalInPaisa: number;
+  // Phase 6, Slice 6a — additive to totalInPaisa above, never part of it;
+  // null means no VAT was entered for this purchase.
+  vatInPaisa: number | null;
   notes: string | null;
   createdAt: string;
   isCredit: boolean;
@@ -1460,6 +1463,12 @@ function PurchasesTab({
                 {canViewProfit && (
                   <p className="font-medium text-neutral-900">
                     Total: {formatNPR(p.totalInPaisa)}
+                    {!!p.vatInPaisa && (
+                      <span className="font-normal text-neutral-500">
+                        {" "}
+                        + VAT {formatNPR(p.vatInPaisa)} = {formatNPR(p.totalInPaisa + p.vatInPaisa)}
+                      </span>
+                    )}
                     {isOutstanding && canViewProfit && (
                       <span className="ml-2 font-normal text-amber-700">
                         ({formatNPR(outstandingInPaisa)} due{p.dueDate ? ` by ${p.dueDate}` : ""})
@@ -1806,6 +1815,12 @@ function SupplierDuesTab({ slug, canManageAccountBooks }: { slug: string; canMan
             id: payingRow.purchaseId,
             invoiceNumber: payingRow.invoiceNumber,
             totalInPaisa: payingRow.totalInPaisa,
+            // SupplierDueRow (the aging-style summary this modal is opened
+            // from) doesn't carry its own VAT breakdown — only the full
+            // Purchase list rows do. RecordPaymentModal doesn't display VAT
+            // itself, so null is a safe, honest "unknown from this context"
+            // rather than a guess.
+            vatInPaisa: null,
             notes: null,
             createdAt: payingRow.createdAt,
             isCredit: true,
@@ -1850,6 +1865,7 @@ function CreatePurchaseForm({
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [isCredit, setIsCredit] = useState(false);
   const [dueDate, setDueDate] = useState("");
+  const [vatAmount, setVatAmount] = useState("");
   const [lines, setLines] = useState<PurchaseLineDraft[]>([
     { inventoryItemId: items[0]?.id ?? "", quantity: "", unitCost: "" },
   ]);
@@ -1883,6 +1899,7 @@ function CreatePurchaseForm({
         invoiceNumber,
         isCredit,
         dueDate: isCredit && dueDate ? dueDate : null,
+        vatAmount: vatAmount ? Number(vatAmount) : undefined,
         items: lines.map((l) => ({
           inventoryItemId: l.inventoryItemId,
           quantity: Number(l.quantity),
@@ -1932,6 +1949,21 @@ function CreatePurchaseForm({
         <label className="text-sm">
           <span className="mb-1 block text-neutral-600">Invoice number (optional)</span>
           <input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">VAT charged by supplier, Rs. (optional)</span>
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={vatAmount}
+            onChange={(e) => setVatAmount(e.target.value)}
+            className="input"
+            placeholder="e.g. 130.00"
+          />
+          <span className="mt-1 block text-xs text-neutral-400">
+            Added on top of the line items below — leave blank if this invoice had no VAT.
+          </span>
         </label>
         <label className="flex items-center gap-2 text-sm text-neutral-700">
           <input type="checkbox" checked={isCredit} onChange={(e) => setIsCredit(e.target.checked)} />

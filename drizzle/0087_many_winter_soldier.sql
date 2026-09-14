@@ -1,0 +1,2 @@
+ALTER TABLE "purchases" ADD COLUMN "vat_in_paisa" integer;--> statement-breakpoint
+ALTER TABLE "purchases" ADD CONSTRAINT "purchases_vat_non_negative" CHECK ("purchases"."vat_in_paisa" IS NULL OR "purchases"."vat_in_paisa" >= 0);

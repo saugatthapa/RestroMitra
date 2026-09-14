@@ -111,7 +111,7 @@ describe.skipIf(!hasDb)("Accounting — Slice 4c: purchases + supplier/customer 
     await db.transaction((tx) => chartOfAccountsLib.seedDefaultChartOfAccounts(tx, { restaurantId }));
 
     accountIdByCode = new Map();
-    for (const code of ["1000", "1100", "1200", "2000"]) {
+    for (const code of ["1000", "1100", "1150", "1200", "2000"]) {
       accountIdByCode.set(code, await findAccountByCode(code));
     }
   });
@@ -165,6 +165,140 @@ describe.skipIf(!hasDb)("Accounting — Slice 4c: purchases + supplier/customer 
     const apLine = posted!.lines.find((l) => l.accountId === apId);
     expect(apLine?.creditInPaisa).toBe(800_00);
     expect(apLine?.supplierId).toBe(supplierId);
+  });
+
+  it("Phase 6, Slice 6a — a cash purchase with input VAT posts Dr Inventory (goods) + Dr Input VAT / Cr Cash (goods + VAT)", async () => {
+    const purchase = await makePurchase({ totalInPaisa: 500_00, isCredit: false });
+
+    await db.transaction((tx) =>
+      purchasesLib.postPurchaseVoucher(tx, {
+        restaurantId,
+        branchId,
+        purchaseId: purchase.id,
+        totalInPaisa: purchase.totalInPaisa,
+        isCredit: false,
+        supplierId: null,
+        timezone: "Asia/Kathmandu",
+        createdByUserId: userId,
+        vatInPaisa: 65_00,
+      }),
+    );
+
+    const posted = await voucherLinesFor("purchase", purchase.id, "purchase");
+    expect(posted).not.toBeNull();
+    const inventoryId = accountIdByCode.get("1200")!;
+    const vatId = accountIdByCode.get("1150")!;
+    const cashId = accountIdByCode.get("1000")!;
+    // Additive, per sign-off: Inventory keeps debiting exactly the goods
+    // cost (unchanged from the no-VAT case above), and Cash is credited for
+    // the TRUE amount paid — goods + VAT — not just the goods figure.
+    expect(posted!.lines.find((l) => l.accountId === inventoryId)?.debitInPaisa).toBe(500_00);
+    expect(posted!.lines.find((l) => l.accountId === vatId)?.debitInPaisa).toBe(65_00);
+    expect(posted!.lines.find((l) => l.accountId === cashId)?.creditInPaisa).toBe(565_00);
+    // The voucher still balances — postVoucher() would have thrown otherwise.
+    const totalDebits = posted!.lines.reduce((s, l) => s + l.debitInPaisa, 0);
+    const totalCredits = posted!.lines.reduce((s, l) => s + l.creditInPaisa, 0);
+    expect(totalDebits).toBe(totalCredits);
+  });
+
+  it("Phase 6, Slice 6a — a credit purchase with input VAT posts Dr Inventory + Dr Input VAT / Cr Accounts Payable (goods + VAT), tagged to the supplier", async () => {
+    const purchase = await makePurchase({ totalInPaisa: 800_00, isCredit: true, supplierId });
+
+    await db.transaction((tx) =>
+      purchasesLib.postPurchaseVoucher(tx, {
+        restaurantId,
+        branchId,
+        purchaseId: purchase.id,
+        totalInPaisa: purchase.totalInPaisa,
+        isCredit: true,
+        supplierId,
+        timezone: "Asia/Kathmandu",
+        createdByUserId: userId,
+        vatInPaisa: 104_00,
+      }),
+    );
+
+    const posted = await voucherLinesFor("purchase", purchase.id, "purchase");
+    const inventoryId = accountIdByCode.get("1200")!;
+    const vatId = accountIdByCode.get("1150")!;
+    const apId = accountIdByCode.get("2000")!;
+    expect(posted!.lines.find((l) => l.accountId === inventoryId)?.debitInPaisa).toBe(800_00);
+    expect(posted!.lines.find((l) => l.accountId === vatId)?.debitInPaisa).toBe(104_00);
+    const apLine = posted!.lines.find((l) => l.accountId === apId);
+    expect(apLine?.creditInPaisa).toBe(904_00);
+    expect(apLine?.supplierId).toBe(supplierId);
+  });
+
+  it("Phase 6, Slice 6a — voiding a VAT-inclusive purchase reverses its voucher, netting Inventory/Input VAT/Accounts Payable back to zero", async () => {
+    const purchase = await makePurchase({ totalInPaisa: 300_00, isCredit: true, supplierId });
+    await db.transaction((tx) =>
+      ledgerLib.recordPurchaseLedgerEntry(tx, {
+        restaurantId,
+        purchaseId: purchase.id,
+        totalInPaisa: 339_00, // goods + VAT — the true amount owed, per Slice 6a's own additive model.
+        timezone: "Asia/Kathmandu",
+        markAsDue: true,
+        recordedByUserId: userId,
+        supplierId,
+      }),
+    );
+    await db.transaction((tx) =>
+      purchasesLib.postPurchaseVoucher(tx, {
+        restaurantId,
+        branchId,
+        purchaseId: purchase.id,
+        totalInPaisa: purchase.totalInPaisa,
+        isCredit: true,
+        supplierId,
+        timezone: "Asia/Kathmandu",
+        createdByUserId: userId,
+        vatInPaisa: 39_00,
+      }),
+    );
+
+    await db.transaction((tx) =>
+      supplierDuesLib.voidPurchase(tx, {
+        restaurantId,
+        purchaseId: purchase.id,
+        voidedByUserId: userId,
+        reason: "TEST — wrong delivery",
+        timezone: "Asia/Kathmandu",
+      }),
+    );
+    await db.transaction((tx) =>
+      purchasesLib.reversePurchaseVoucher(tx, {
+        restaurantId,
+        purchaseId: purchase.id,
+        reason: "TEST — wrong delivery",
+        reversedByUserId: userId,
+        timezone: "Asia/Kathmandu",
+      }),
+    );
+
+    const original = await voucherLinesFor("purchase", purchase.id, "purchase");
+    expect(original!.voucher.status).toBe("reversed");
+
+    const inventoryId = accountIdByCode.get("1200")!;
+    const vatId = accountIdByCode.get("1150")!;
+    const apId = accountIdByCode.get("2000")!;
+
+    const reversalVoucher = await db
+      .select()
+      .from(schema.accountingVouchers)
+      .where(eq(schema.accountingVouchers.reversalOfVoucherId, original!.voucher.id));
+    expect(reversalVoucher).toHaveLength(1);
+    const reversalLines = await db
+      .select()
+      .from(schema.accountingVoucherLines)
+      .where(eq(schema.accountingVoucherLines.voucherId, reversalVoucher[0].id));
+
+    const netFor = (accountId: string) =>
+      [...original!.lines, ...reversalLines]
+        .filter((l) => l.accountId === accountId)
+        .reduce((s, l) => s + l.debitInPaisa - l.creditInPaisa, 0);
+    expect(netFor(inventoryId)).toBe(0);
+    expect(netFor(vatId)).toBe(0);
+    expect(netFor(apId)).toBe(0);
   });
 
   it("voiding a purchase reverses its voucher, netting Inventory/Accounts Payable back to zero", async () => {
