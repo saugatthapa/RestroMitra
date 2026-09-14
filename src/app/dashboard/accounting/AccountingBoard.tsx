@@ -1180,7 +1180,7 @@ type AgingReportData = {
   totalOutstandingInPaisa: number;
 };
 
-const REPORT_TABS = ["Trial Balance", "Profit & Loss", "Balance Sheet", "Cash Flow", "AR/AP Aging"] as const;
+const REPORT_TABS = ["Trial Balance", "Profit & Loss", "Balance Sheet", "Cash Flow", "AR/AP Aging", "VAT Return"] as const;
 type ReportTab = (typeof REPORT_TABS)[number];
 
 function todayIso() {
@@ -1217,6 +1217,7 @@ function ReportsTab({ slug, onDrillDown }: { slug: string; onDrillDown: (account
       {reportTab === "Balance Sheet" && <BalanceSheetReport slug={slug} onDrillDown={onDrillDown} />}
       {reportTab === "Cash Flow" && <CashFlowReport slug={slug} />}
       {reportTab === "AR/AP Aging" && <AgingReportTab slug={slug} />}
+      {reportTab === "VAT Return" && <VatReturnReport slug={slug} />}
     </div>
   );
 }
@@ -1656,6 +1657,86 @@ function CashFlowReport({ slug }: { slug: string }) {
               non-cash depreciation and loan interest paid; a &quot;changes in working capital and
               other operating activity&quot; line absorbs everything else so the section&apos;s total
               always matches actual operating cash movement.
+            </p>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+type VatReturnData = {
+  fromDate: string;
+  toDate: string;
+  outputVatInPaisa: number;
+  inputVatInPaisa: number;
+  netPayableInPaisa: number;
+};
+
+/**
+ * Phase 6, Slice 6c — VAT return / tax summary for a period. See
+ * vat-return.ts's own top-of-file comment for exactly what "Output VAT"
+ * and "Input VAT" mean here (net period movement, not a running balance)
+ * and its documented limitation (a sales refund doesn't reduce Output VAT
+ * in this version). Explicitly a reference summary, never a claim of being
+ * a filable IRD form — the note below says so plainly.
+ */
+function VatReturnReport({ slug }: { slug: string }) {
+  const [fromDate, setFromDate] = useState(firstOfMonthIso());
+  const [toDate, setToDate] = useState(todayIso());
+  const [data, setData] = useState<VatReturnData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    apiGet<VatReturnData>(`${base(slug)}/accounting/reports/vat-return?fromDate=${fromDate}&toDate=${toDate}`)
+      .then((res) => {
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load the VAT return summary."))
+      .finally(() => setLoading(false));
+  }, [slug, fromDate, toDate]);
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="grid max-w-md gap-3 sm:grid-cols-2">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">From</span>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">To</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
+        </label>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : (
+        data && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm">
+              <span className="text-neutral-600">Output VAT (collected on sales)</span>
+              <span className="font-medium text-neutral-900">{formatNPR(data.outputVatInPaisa)}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm">
+              <span className="text-neutral-600">Input VAT (paid on purchases)</span>
+              <span className="font-medium text-neutral-900">{formatNPR(data.inputVatInPaisa)}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
+              <span className="font-medium text-neutral-900">
+                {data.netPayableInPaisa >= 0 ? "Net VAT payable" : "Net VAT refundable/creditable"}
+              </span>
+              <span className="font-semibold text-neutral-900">{formatNPR(Math.abs(data.netPayableInPaisa))}</span>
+            </div>
+            <p className="text-xs text-neutral-400">
+              A reference summary for your own records or your accountant — not a filable IRD
+              return. Output VAT here does not yet subtract tax on refunded sales (a refund books
+              entirely to Sales Returns &amp; Refunds today); Input VAT only reflects purchases
+              where a VAT amount was actually entered. Verify every figure before filing.
             </p>
           </div>
         )
