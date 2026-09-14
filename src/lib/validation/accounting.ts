@@ -15,6 +15,7 @@ const VOUCHER_TYPES = [
   "opening_balance",
   "fixed_asset",
   "depreciation",
+  "loan",
 ] as const;
 
 export const createAccountSchema = z.object({
@@ -175,3 +176,37 @@ export const disposeFixedAssetSchema = z.object({
   proceedsMethod: z.enum(["cash", "bank"]).optional().default("cash"),
   bankAccountId: z.string().uuid().optional(),
 });
+
+// ---------------------------------------------------------------------------
+// Phase 5, Slice 5e — Loan accounting (manual principal/interest split on
+// every repayment — no amortization-schedule calculator).
+// ---------------------------------------------------------------------------
+
+const LOAN_FUNDING_METHODS = ["cash", "bank"] as const;
+
+export const recordLoanReceiptSchema = z.object({
+  lenderName: z.string().trim().min(1, "Enter the lender's name.").max(200),
+  principal: rupeeAmount,
+  // Informational-only display data — never used to compute a repayment
+  // split. e.g. 12.5 (percent) becomes 1250 basis points.
+  interestRatePercent: z.number().nonnegative().max(1000).optional(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD."),
+  termMonths: z.number().int().positive().max(1200).optional(),
+  fundingMethod: z.enum(LOAN_FUNDING_METHODS),
+  bankAccountId: z.string().uuid().optional(),
+  notes: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
+export const recordLoanRepaymentSchema = z
+  .object({
+    paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD."),
+    principal: paisaAmount("Principal").optional().default(0),
+    interest: paisaAmount("Interest").optional().default(0),
+    paymentMethod: z.enum(LOAN_FUNDING_METHODS),
+    bankAccountId: z.string().uuid().optional(),
+    notes: z.string().trim().max(1000).optional().or(z.literal("")),
+  })
+  .refine((data) => data.principal > 0 || data.interest > 0, {
+    message: "Enter a principal or interest amount.",
+    path: ["principal"],
+  });

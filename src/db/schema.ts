@@ -5914,6 +5914,13 @@ export const accountingVoucherTypeEnum = pgEnum("accounting_voucher_type", [
   // Dr Depreciation Expense / Cr Accumulated Depreciation, summed across
   // every eligible asset for that run.
   "depreciation",
+  // Phase 5, Slice 5e — covers both a loan's receipt (Dr Cash/Bank / Cr the
+  // loan's own Payable sub-account) and each repayment instalment (Dr the
+  // loan's own Payable sub-account for the principal portion + Dr Interest
+  // Expense for the interest portion / Cr Cash/Bank), distinguished by
+  // narration — same "one type per business-event category" convention as
+  // "fixed_asset" above.
+  "loan",
 ]);
 
 // "draft"/"approved"/"cancelled" are reserved for the Phase 2 UI's own
@@ -6443,6 +6450,122 @@ export const fixedAssetDepreciationEntriesRelations = relations(fixedAssetDeprec
   }),
   voucher: one(accountingVouchers, {
     fields: [fixedAssetDepreciationEntries.voucherId],
+    references: [accountingVouchers.id],
+  }),
+}));
+
+// "active" until the outstanding principal reaches exactly zero, at which
+// point recordLoanRepayment auto-flips this to "closed" and stamps
+// closedAt — never set by hand.
+export const loanStatusEnum = pgEnum("loan_status", ["active", "closed"]);
+
+// One row per loan a restaurant has taken out. Each wraps its own child
+// chart_of_accounts row (parented under the seeded "2400 Loans Payable",
+// coded in the reserved 2401-2499 block) — same auto-provisioning pattern
+// Slice 5b/5d already established for bank accounts and fixed assets.
+// interestRateBasisPoints and termMonths are purely informational display
+// data (e.g. 1250 = 12.50%) — per sign-off, every repayment's
+// principal/interest split is entered manually, never computed from these,
+// so there is no amortization-schedule calculator anywhere in this module.
+export const loans = pgTable(
+  "loans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    chartOfAccountsId: uuid("chart_of_accounts_id")
+      .notNull()
+      .references(() => chartOfAccounts.id, { onDelete: "restrict" }),
+    lenderName: varchar("lender_name", { length: 200 }).notNull(),
+    principalInPaisa: integer("principal_in_paisa").notNull(),
+    interestRateBasisPoints: integer("interest_rate_basis_points"),
+    startDate: date("start_date").notNull(),
+    termMonths: integer("term_months"),
+    // Decremented by each repayment's principal portion (never the interest
+    // portion) — starts equal to principalInPaisa. Maintained here as a
+    // running total for the same reason fixedAssets.accumulatedDepreciationInPaisa
+    // is: a single-row read instead of a per-loan SUM over loan_payments.
+    outstandingPrincipalInPaisa: integer("outstanding_principal_in_paisa").notNull(),
+    status: loanStatusEnum("status").notNull().default("active"),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    notes: text("notes"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("loans_restaurant_id_idx").on(table.restaurantId),
+    uniqueIndex("loans_chart_of_accounts_id_unique").on(table.chartOfAccountsId),
+    check("loans_principal_positive", sql`${table.principalInPaisa} > 0`),
+    check(
+      "loans_outstanding_within_range",
+      sql`${table.outstandingPrincipalInPaisa} >= 0 AND ${table.outstandingPrincipalInPaisa} <= ${table.principalInPaisa}`,
+    ),
+  ],
+);
+
+// One row per repayment instalment recorded against a loan — the audit
+// trail behind loans.outstandingPrincipalInPaisa. Unlike
+// fixedAssetDepreciationEntries, there is no unique-index idempotency
+// backstop here: a loan can have many repayments with no natural one-time
+// key, so recordLoanRepayment posts its voucher WITHOUT sourceType/sourceId
+// idempotency (same reasoning as runDepreciation) and simply trusts each
+// call to represent one genuine, distinct payment.
+export const loanPayments = pgTable(
+  "loan_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    loanId: uuid("loan_id")
+      .notNull()
+      .references(() => loans.id, { onDelete: "restrict" }),
+    voucherId: uuid("voucher_id")
+      .notNull()
+      .references(() => accountingVouchers.id, { onDelete: "restrict" }),
+    paymentDate: date("payment_date").notNull(),
+    principalInPaisa: integer("principal_in_paisa").notNull().default(0),
+    interestInPaisa: integer("interest_in_paisa").notNull().default(0),
+    notes: text("notes"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("loan_payments_restaurant_id_idx").on(table.restaurantId),
+    index("loan_payments_loan_id_idx").on(table.loanId),
+    index("loan_payments_voucher_id_idx").on(table.voucherId),
+    check(
+      "loan_payments_amounts_valid",
+      sql`${table.principalInPaisa} >= 0 AND ${table.interestInPaisa} >= 0 AND (${table.principalInPaisa} > 0 OR ${table.interestInPaisa} > 0)`,
+    ),
+  ],
+);
+
+export const loansRelations = relations(loans, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [loans.restaurantId],
+    references: [restaurants.id],
+  }),
+  chartOfAccount: one(chartOfAccounts, {
+    fields: [loans.chartOfAccountsId],
+    references: [chartOfAccounts.id],
+  }),
+  payments: many(loanPayments),
+}));
+
+export const loanPaymentsRelations = relations(loanPayments, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [loanPayments.restaurantId],
+    references: [restaurants.id],
+  }),
+  loan: one(loans, {
+    fields: [loanPayments.loanId],
+    references: [loans.id],
+  }),
+  voucher: one(accountingVouchers, {
+    fields: [loanPayments.voucherId],
     references: [accountingVouchers.id],
   }),
 }));

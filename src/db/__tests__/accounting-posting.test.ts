@@ -93,9 +93,9 @@ describe.skipIf(!hasDb)("Accounting — postVoucher (integration)", () => {
     // Slice 4f added "1045 — Bank Account"; Phase 5, Slice 5b added "1050 —
     // Bank Accounts", the grouping parent for real bank accounts; Slice 5d
     // added "4920 — Gain/Loss on Disposal of Fixed Assets" and "5150 —
-    // Depreciation Expense") + the 1 inactive test fixture inserted
-    // directly above.
-    expect(accounts.length).toBe(28);
+    // Depreciation Expense"; Slice 5e added "5160 — Interest Expense") + the
+    // 1 inactive test fixture inserted directly above.
+    expect(accounts.length).toBe(29);
     expect(accounts.every((a) => a.code !== "9999" || !a.isActive)).toBe(true);
 
     const mappings = await db

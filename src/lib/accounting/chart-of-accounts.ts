@@ -89,6 +89,13 @@ const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   // expense accounts) so a growing restaurant's own expense categories can
   // never collide with this seeded account's code.
   { code: "5150", name: "Depreciation Expense", type: "expense", normalBalance: "debit" },
+  // Phase 5, Slice 5e — fixed at 5160, same reasoning as 5150 above: kept
+  // outside the 5200+ auto-allocated per-category expense block so it can
+  // never collide with a restaurant's own expense categories. Only debited
+  // when a loan repayment's manually-entered split includes an interest
+  // portion (recordLoanRepayment skips this line entirely when interest is
+  // zero).
+  { code: "5160", name: "Interest Expense", type: "expense", normalBalance: "debit" },
 ];
 
 export type SeedChartOfAccountsResult = {

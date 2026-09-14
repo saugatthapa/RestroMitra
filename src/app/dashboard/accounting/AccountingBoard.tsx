@@ -51,7 +51,8 @@ type VoucherType =
   | "payroll"
   | "opening_balance"
   | "fixed_asset"
-  | "depreciation";
+  | "depreciation"
+  | "loan";
 
 type Voucher = {
   id: string;
@@ -103,6 +104,7 @@ const ALL_TABS = [
   "Chart of Accounts",
   "Bank Accounts",
   "Fixed Assets",
+  "Loans",
   "Journal Vouchers",
   "Day Book",
   "Ledger Accounts",
@@ -128,6 +130,7 @@ const VOUCHER_TYPE_LABELS: Record<VoucherType, string> = {
   opening_balance: "Opening Balance",
   fixed_asset: "Fixed Asset",
   depreciation: "Depreciation",
+  loan: "Loan",
 };
 
 const STATUS_BADGE: Record<Voucher["status"], string> = {
@@ -173,6 +176,7 @@ export function AccountingBoard({ slug, canReopenPeriod }: { slug: string; canRe
       {tab === "Chart of Accounts" && <ChartOfAccountsTab slug={slug} />}
       {tab === "Bank Accounts" && <BankAccountsTab slug={slug} />}
       {tab === "Fixed Assets" && <FixedAssetsTab slug={slug} />}
+      {tab === "Loans" && <LoansTab slug={slug} />}
       {tab === "Journal Vouchers" && <VouchersTab slug={slug} typeFilter="journal" />}
       {tab === "Day Book" && <VouchersTab slug={slug} typeFilter={null} />}
       {tab === "Ledger Accounts" && (
@@ -3359,6 +3363,514 @@ function DisposeFixedAssetForm({
       <p className="text-xs text-neutral-400">
         Removes the asset&apos;s full cost and its accumulated depreciation from the books; any
         difference between proceeds and book value posts as a gain or loss.
+      </p>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Loans (Phase 5, Slice 5e)
+// ---------------------------------------------------------------------------
+
+type LoanFundingMethod = "cash" | "bank";
+
+const LOAN_FUNDING_METHOD_LABELS: Record<LoanFundingMethod, string> = {
+  cash: "Cash",
+  bank: "Bank account",
+};
+
+type Loan = {
+  id: string;
+  chartOfAccountsId: string;
+  lenderName: string;
+  principalInPaisa: number;
+  interestRateBasisPoints: number | null;
+  startDate: string;
+  termMonths: number | null;
+  outstandingPrincipalInPaisa: number;
+  status: "active" | "closed";
+  closedAt: string | null;
+  notes: string | null;
+  code: string;
+  accountName: string;
+  isActive: boolean;
+  createdAt: string;
+};
+
+type LoanPayment = {
+  id: string;
+  loanId: string;
+  voucherId: string;
+  paymentDate: string;
+  principalInPaisa: number;
+  interestInPaisa: number;
+  notes: string | null;
+  createdAt: string;
+};
+
+function LoansTab({ slug }: { slug: string }) {
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [repayingId, setRepayingId] = useState<string | null>(null);
+  const [historyId, setHistoryId] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [loansRes, bankRes] = await Promise.all([
+        apiGet<{ loans: Loan[] }>(`${base(slug)}/accounting/loans`),
+        apiGet<{ bankAccounts: BankAccount[] }>(`${base(slug)}/accounting/bank-accounts`),
+      ]);
+      setLoans(loansRes.loans);
+      setBankAccounts(bankRes.bankAccounts.filter((a) => a.isActive));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load loans.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <p className="text-sm text-neutral-500">
+        Each loan here wraps its own ledger account under &quot;2400 Loans Payable&quot;. Every
+        repayment&apos;s principal/interest split is entered manually — there is no
+        amortization-schedule calculator.
+      </p>
+
+      <div className="flex justify-end">
+        <button onClick={() => setShowAdd((v) => !v)} className="btn-secondary">
+          {showAdd ? "Cancel" : "Record a loan"}
+        </button>
+      </div>
+      {showAdd && (
+        <AddLoanForm
+          slug={slug}
+          bankAccounts={bankAccounts}
+          onAdded={() => {
+            setShowAdd(false);
+            load();
+          }}
+        />
+      )}
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
+                <th className="px-3 py-2">Code</th>
+                <th className="px-3 py-2">Lender</th>
+                <th className="px-3 py-2">Started</th>
+                <th className="px-3 py-2 text-right">Principal</th>
+                <th className="px-3 py-2 text-right">Outstanding</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {loans.map((l) => (
+                <Fragment key={l.id}>
+                  <tr className="border-b border-neutral-100 last:border-0">
+                    <td className="px-3 py-2 font-mono text-xs text-neutral-500">{l.code}</td>
+                    <td className="px-3 py-2 text-neutral-900">
+                      {l.lenderName}
+                      {l.interestRateBasisPoints != null && (
+                        <span className="ml-2 text-xs text-neutral-400">
+                          · {(l.interestRateBasisPoints / 100).toFixed(2)}%
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-neutral-600">{formatDate(l.startDate, dateSystem)}</td>
+                    <td className="px-3 py-2 text-right">{formatNPR(l.principalInPaisa)}</td>
+                    <td className="px-3 py-2 text-right font-medium">
+                      {formatNPR(l.outstandingPrincipalInPaisa)}
+                    </td>
+                    <td className="px-3 py-2">
+                      {l.status === "closed" ? (
+                        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-500">
+                          Closed
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                          Active
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex justify-end gap-3">
+                        <button
+                          onClick={() => setHistoryId(historyId === l.id ? null : l.id)}
+                          className="text-xs font-medium text-orange-700 hover:underline"
+                        >
+                          {historyId === l.id ? "Close" : "History"}
+                        </button>
+                        {l.status === "active" && (
+                          <button
+                            onClick={() => setRepayingId(repayingId === l.id ? null : l.id)}
+                            className="text-xs font-medium text-orange-700 hover:underline"
+                          >
+                            {repayingId === l.id ? "Cancel" : "Record repayment"}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  {historyId === l.id && (
+                    <tr className="border-b border-neutral-100 bg-neutral-50">
+                      <td colSpan={7} className="px-3 py-3">
+                        <LoanPaymentHistory slug={slug} loanId={l.id} />
+                      </td>
+                    </tr>
+                  )}
+                  {repayingId === l.id && (
+                    <tr className="border-b border-neutral-100 bg-neutral-50">
+                      <td colSpan={7} className="px-3 py-3">
+                        <RepayLoanForm
+                          slug={slug}
+                          loan={l}
+                          bankAccounts={bankAccounts}
+                          onRepaid={() => {
+                            setRepayingId(null);
+                            load();
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+              {loans.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-3 py-6 text-center text-sm text-neutral-400">
+                    No loans yet — record the first one above.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LoanPaymentHistory({ slug, loanId }: { slug: string; loanId: string }) {
+  const [payments, setPayments] = useState<LoanPayment[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGet<{ payments: LoanPayment[] }>(`${base(slug)}/accounting/loans/${loanId}`)
+      .then((res) => setPayments(res.payments))
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load repayment history."));
+  }, [slug, loanId]);
+
+  if (error) return <p className="text-sm text-red-700">{error}</p>;
+  if (!payments) return <p className="text-sm text-neutral-500">Loading…</p>;
+  if (payments.length === 0) return <p className="text-sm text-neutral-400">No repayments recorded yet.</p>;
+
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
+          <th className="py-1">Date</th>
+          <th className="py-1 text-right">Principal</th>
+          <th className="py-1 text-right">Interest</th>
+        </tr>
+      </thead>
+      <tbody>
+        {payments.map((p) => (
+          <tr key={p.id} className="border-t border-neutral-100">
+            <td className="py-1 text-neutral-600">{p.paymentDate}</td>
+            <td className="py-1 text-right">{formatNPR(p.principalInPaisa)}</td>
+            <td className="py-1 text-right">{formatNPR(p.interestInPaisa)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function AddLoanForm({
+  slug,
+  bankAccounts,
+  onAdded,
+}: {
+  slug: string;
+  bankAccounts: BankAccount[];
+  onAdded: () => void;
+}) {
+  const [lenderName, setLenderName] = useState("");
+  const [principal, setPrincipal] = useState("");
+  const [interestRatePercent, setInterestRatePercent] = useState("");
+  const [startDate, setStartDate] = useState(todayIso());
+  const [termMonths, setTermMonths] = useState("");
+  const [fundingMethod, setFundingMethod] = useState<LoanFundingMethod>("cash");
+  const [bankAccountId, setBankAccountId] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const needsBankAccountChoice = fundingMethod === "bank" && bankAccounts.length > 1;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/accounting/loans`, {
+        lenderName,
+        principal: Number(principal),
+        interestRatePercent: interestRatePercent ? Number(interestRatePercent) : undefined,
+        startDate,
+        termMonths: termMonths ? Number(termMonths) : undefined,
+        fundingMethod,
+        bankAccountId: needsBankAccountChoice && bankAccountId ? bankAccountId : undefined,
+        notes: notes || undefined,
+      });
+      onAdded();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not record this loan.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Lender name</span>
+          <input required value={lenderName} onChange={(e) => setLenderName(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Principal (Rs)</span>
+          <input
+            required
+            type="number"
+            min={0.01}
+            step="0.01"
+            value={principal}
+            onChange={(e) => setPrincipal(e.target.value)}
+            className="input"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Interest rate (%, optional)</span>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={interestRatePercent}
+            onChange={(e) => setInterestRatePercent(e.target.value)}
+            className="input"
+            placeholder="For display only"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Start date</span>
+          <input
+            required
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="input"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Term (months, optional)</span>
+          <input
+            type="number"
+            min={1}
+            step="1"
+            value={termMonths}
+            onChange={(e) => setTermMonths(e.target.value)}
+            className="input"
+            placeholder="For display only"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Received into</span>
+          <select
+            value={fundingMethod}
+            onChange={(e) => {
+              setFundingMethod(e.target.value as LoanFundingMethod);
+              setBankAccountId("");
+            }}
+            className="input"
+          >
+            {(Object.keys(LOAN_FUNDING_METHOD_LABELS) as LoanFundingMethod[]).map((m) => (
+              <option key={m} value={m}>
+                {LOAN_FUNDING_METHOD_LABELS[m]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {needsBankAccountChoice && (
+          <label className="text-sm">
+            <span className="mb-1 block text-neutral-600">Bank account</span>
+            <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className="input">
+              <option value="">Choose bank account…</option>
+              {bankAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.bankName} ({a.code})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="text-sm sm:col-span-2 lg:col-span-3">
+          <span className="mb-1 block text-neutral-600">Notes (optional)</span>
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} className="input" />
+        </label>
+      </div>
+      <p className="mt-2 text-xs text-neutral-400">
+        Interest rate and term are shown for reference only — every repayment&apos;s
+        principal/interest split is entered by hand.
+      </p>
+      <button disabled={saving || (needsBankAccountChoice && !bankAccountId)} className="btn-primary mt-3">
+        {saving ? "Recording…" : "Record loan"}
+      </button>
+    </form>
+  );
+}
+
+function RepayLoanForm({
+  slug,
+  loan,
+  bankAccounts,
+  onRepaid,
+}: {
+  slug: string;
+  loan: Loan;
+  bankAccounts: BankAccount[];
+  onRepaid: () => void;
+}) {
+  const [paymentDate, setPaymentDate] = useState(todayIso());
+  const [principal, setPrincipal] = useState("0");
+  const [interest, setInterest] = useState("0");
+  const [paymentMethod, setPaymentMethod] = useState<LoanFundingMethod>("cash");
+  const [bankAccountId, setBankAccountId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const needsBankAccountChoice = paymentMethod === "bank" && bankAccounts.length > 1;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/accounting/loans/${loan.id}/repay`, {
+        paymentDate,
+        principal: Number(principal || 0),
+        interest: Number(interest || 0),
+        paymentMethod,
+        bankAccountId: needsBankAccountChoice && bankAccountId ? bankAccountId : undefined,
+      });
+      onRepaid();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not record this repayment.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <p className="text-sm text-neutral-600">
+        Outstanding balance: <span className="font-medium">{formatNPR(loan.outstandingPrincipalInPaisa)}</span>
+      </p>
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Payment date</span>
+          <input
+            required
+            type="date"
+            value={paymentDate}
+            onChange={(e) => setPaymentDate(e.target.value)}
+            className="input"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Principal (Rs)</span>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={principal}
+            onChange={(e) => setPrincipal(e.target.value)}
+            className="input"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Interest (Rs)</span>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={interest}
+            onChange={(e) => setInterest(e.target.value)}
+            className="input"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Paid from</span>
+          <select
+            value={paymentMethod}
+            onChange={(e) => {
+              setPaymentMethod(e.target.value as LoanFundingMethod);
+              setBankAccountId("");
+            }}
+            className="input"
+          >
+            {(Object.keys(LOAN_FUNDING_METHOD_LABELS) as LoanFundingMethod[]).map((m) => (
+              <option key={m} value={m}>
+                {LOAN_FUNDING_METHOD_LABELS[m]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {needsBankAccountChoice && (
+          <label className="text-sm">
+            <span className="mb-1 block text-neutral-600">Bank account</span>
+            <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className="input">
+              <option value="">Choose bank account…</option>
+              {bankAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.bankName} ({a.code})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <button
+          disabled={
+            saving ||
+            (needsBankAccountChoice && !bankAccountId) ||
+            (Number(principal || 0) <= 0 && Number(interest || 0) <= 0)
+          }
+          className="btn-primary"
+        >
+          {saving ? "Recording…" : "Record repayment"}
+        </button>
+      </div>
+      <p className="text-xs text-neutral-400">
+        The principal/interest split is entered by hand — this module never computes it from the
+        loan&apos;s own interest rate.
       </p>
     </form>
   );
