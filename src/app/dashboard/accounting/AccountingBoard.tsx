@@ -1187,6 +1187,7 @@ const REPORT_TABS = [
   "Cash Flow",
   "Cash Book",
   "Journal",
+  "Inventory Valuation",
   "AR/AP Aging",
   "VAT Return",
   "Tax Depreciation",
@@ -1244,6 +1245,7 @@ function ReportsTab({ slug, onDrillDown }: { slug: string; onDrillDown: (account
       {reportTab === "Cash Flow" && <CashFlowReport slug={slug} />}
       {reportTab === "Cash Book" && <CashBookReport slug={slug} />}
       {reportTab === "Journal" && <JournalReportTab slug={slug} />}
+      {reportTab === "Inventory Valuation" && <InventoryValuationReportTab slug={slug} />}
       {reportTab === "AR/AP Aging" && <AgingReportTab slug={slug} />}
       {reportTab === "VAT Return" && <VatReturnReport slug={slug} />}
       {reportTab === "Tax Depreciation" && <TaxDepreciationReportTab slug={slug} />}
@@ -2280,6 +2282,169 @@ function BranchProfitabilityReport({ slug }: { slug: string }) {
             </table>
           </div>
         ))
+      )}
+    </div>
+  );
+}
+
+type InventoryValuationLine = {
+  lineId: string;
+  voucherId: string;
+  voucherNumber: string;
+  voucherType: string;
+  voucherDate: string;
+  narration: string | null;
+  description: string | null;
+  debitInPaisa: number;
+  creditInPaisa: number;
+  runningBalanceInPaisa: number;
+};
+type InventoryValuationData = {
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  fromDate: string;
+  toDate: string;
+  openingValuationInPaisa: number;
+  closingValuationInPaisa: number;
+  purchasesInPaisa: number;
+  costOfGoodsSoldInPaisa: number;
+  adjustmentsInPaisa: number;
+  lines: InventoryValuationLine[];
+};
+
+/**
+ * Phase 7, Slice 7d — Inventory Valuation. Values inventory exactly as the
+ * ledger's own Inventory account balance already reflects it (no second,
+ * independent costing method — see inventory-valuation.ts's own top-of-file
+ * comment), and groups the same period activity Slice 7a's Cash Book would
+ * show into Purchases / Cost of Goods Sold / Adjustments so an owner can see
+ * why the valuation moved, not just that it did.
+ */
+function InventoryValuationReportTab({ slug }: { slug: string }) {
+  const [fromDate, setFromDate] = useState(firstOfMonthIso());
+  const [toDate, setToDate] = useState(todayIso());
+  const [report, setReport] = useState<InventoryValuationData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    const qs = new URLSearchParams({ fromDate, toDate });
+    apiGet<{ report: InventoryValuationData | null }>(
+      `${base(slug)}/accounting/reports/inventory-valuation?${qs.toString()}`,
+    )
+      .then((res) => {
+        setReport(res.report);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load Inventory Valuation."))
+      .finally(() => setLoading(false));
+  }, [slug, fromDate, toDate]);
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="grid max-w-md gap-3 sm:grid-cols-2">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">From</span>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">To</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
+        </label>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : !report ? (
+        <p className="rounded-lg bg-neutral-50 px-3 py-2 text-sm text-neutral-500">
+          No Inventory account is mapped yet for this restaurant — map one from the Account Mappings screen to see
+          this report.
+        </p>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Opening</p>
+              <p className="text-lg font-semibold text-neutral-900">{formatNPR(report.openingValuationInPaisa)}</p>
+            </div>
+            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Purchases</p>
+              <p className="text-lg font-semibold text-green-700">{formatNPR(report.purchasesInPaisa)}</p>
+            </div>
+            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Cost of Goods Sold</p>
+              <p className="text-lg font-semibold text-red-700">{formatNPR(report.costOfGoodsSoldInPaisa)}</p>
+            </div>
+            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Adjustments</p>
+              <p className="text-lg font-semibold text-neutral-700">{formatNPR(report.adjustmentsInPaisa)}</p>
+            </div>
+            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Closing</p>
+              <p className="text-lg font-semibold text-neutral-900">{formatNPR(report.closingValuationInPaisa)}</p>
+            </div>
+          </div>
+          <p className="text-xs text-neutral-400">
+            {report.accountCode} — {report.accountName}. Valued as the ledger&apos;s own Inventory account balance —
+            not a separate FIFO/weighted-average costing method (see the report&apos;s own documentation for why).
+          </p>
+
+          <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">Voucher</th>
+                  <th className="px-3 py-2">Narration</th>
+                  <th className="px-3 py-2 text-right">Debit</th>
+                  <th className="px-3 py-2 text-right">Credit</th>
+                  <th className="px-3 py-2 text-right">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-neutral-100 bg-neutral-50 font-medium text-neutral-700">
+                  <td className="px-3 py-2" colSpan={5}>
+                    Opening balance
+                  </td>
+                  <td className="px-3 py-2 text-right">{formatNPR(report.openingValuationInPaisa)}</td>
+                </tr>
+                {report.lines.map((l) => (
+                  <tr key={l.lineId} className="border-b border-neutral-100 last:border-0">
+                    <td className="px-3 py-2 text-neutral-500">{l.voucherDate}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-neutral-500">{l.voucherNumber}</td>
+                    <td className="px-3 py-2 text-neutral-600">{l.description || l.narration || "—"}</td>
+                    <td className="px-3 py-2 text-right">
+                      {l.debitInPaisa > 0 ? formatNPR(l.debitInPaisa) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {l.creditInPaisa > 0 ? formatNPR(l.creditInPaisa) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right">{formatNPR(l.runningBalanceInPaisa)}</td>
+                  </tr>
+                ))}
+                {report.lines.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-6 text-center text-sm text-neutral-400">
+                      No inventory activity in this period.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-neutral-300 font-semibold text-neutral-900">
+                  <td className="px-3 py-2" colSpan={5}>
+                    Closing balance
+                  </td>
+                  <td className="px-3 py-2 text-right">{formatNPR(report.closingValuationInPaisa)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );
