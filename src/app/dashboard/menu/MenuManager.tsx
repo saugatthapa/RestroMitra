@@ -51,6 +51,15 @@ type MenuItem = {
   addons: Addon[];
 };
 
+// Phase 6, Slice 6b
+type TaxRateHistoryEntry = {
+  id: string;
+  taxRateBasisPoints: number;
+  effectiveFrom: string;
+  createdAt: string;
+  createdByName: string;
+};
+
 function base(slug: string) {
   return `/api/restaurants/${slug}`;
 }
@@ -593,12 +602,41 @@ function ItemFormModal({
   const [taxPercent, setTaxPercent] = useState(
     item ? String(item.taxRateBasisPoints / 100) : "0",
   );
+  // Phase 6, Slice 6b — blank means "today" (the route defaults it); only
+  // ever sent when actually editing an existing item, since a brand-new
+  // item's own tax rate can't be backdated (it didn't exist before today).
+  const [taxRateEffectiveFrom, setTaxRateEffectiveFrom] = useState("");
+  const [showTaxHistory, setShowTaxHistory] = useState(false);
+  const [taxHistory, setTaxHistory] = useState<TaxRateHistoryEntry[] | null>(null);
+  const [taxHistoryLoading, setTaxHistoryLoading] = useState(false);
+  const [taxHistoryError, setTaxHistoryError] = useState<string | null>(null);
   const [prepTime, setPrepTime] = useState(item?.prepTimeMinutes?.toString() ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageProcessing, setImageProcessing] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function toggleTaxHistory() {
+    if (showTaxHistory) {
+      setShowTaxHistory(false);
+      return;
+    }
+    setShowTaxHistory(true);
+    if (taxHistory !== null || !item) return;
+    setTaxHistoryLoading(true);
+    setTaxHistoryError(null);
+    try {
+      const res = await apiGet<{ history: TaxRateHistoryEntry[] }>(
+        `${base(slug)}/menu-items/${item.id}/tax-rate-history`,
+      );
+      setTaxHistory(res.history);
+    } catch (err) {
+      setTaxHistoryError(err instanceof ApiError ? err.message : "Could not load tax rate history.");
+    } finally {
+      setTaxHistoryLoading(false);
+    }
+  }
 
   async function handleFileChosen(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -633,6 +671,9 @@ function ItemFormModal({
       if (canEditPrice || !item) {
         payload.price = Number(price);
         payload.taxRatePercent = Number(taxPercent || 0);
+        if (item && taxRateEffectiveFrom) {
+          payload.taxRateEffectiveFrom = taxRateEffectiveFrom;
+        }
       }
 
       if (item) {
@@ -804,11 +845,65 @@ function ItemFormModal({
               </label>
             </div>
           )}
+          {(canEditPrice || !item) && item && (
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">
+                Tax change effective from (optional)
+              </span>
+              <input
+                className="input"
+                type="date"
+                max={new Date().toISOString().slice(0, 10)}
+                value={taxRateEffectiveFrom}
+                onChange={(e) => setTaxRateEffectiveFrom(e.target.value)}
+              />
+              <span className="mt-1 block text-xs text-neutral-400">
+                Leave blank to apply today. Only set this to backdate a correction for a rate
+                that already took effect on an earlier date — a future date isn&apos;t supported yet.
+              </span>
+            </label>
+          )}
           {!canEditPrice && item && (
             <p className="text-xs text-neutral-400">
               You don&apos;t have permission to change prices. Current price:{" "}
               {formatNPR(item.basePriceInPaisa)}.
             </p>
+          )}
+          {item && (
+            <div>
+              <button
+                type="button"
+                onClick={toggleTaxHistory}
+                className="text-xs font-medium text-blue-600 hover:text-blue-800"
+              >
+                {showTaxHistory ? "Hide tax rate history" : "View tax rate history"}
+              </button>
+              {showTaxHistory && (
+                <div className="mt-2 rounded-lg border border-neutral-200 p-2">
+                  {taxHistoryLoading && (
+                    <p className="text-xs text-neutral-400">Loading…</p>
+                  )}
+                  {taxHistoryError && (
+                    <p className="text-xs text-red-600">{taxHistoryError}</p>
+                  )}
+                  {taxHistory && taxHistory.length === 0 && (
+                    <p className="text-xs text-neutral-400">No recorded tax rate changes yet.</p>
+                  )}
+                  {taxHistory && taxHistory.length > 0 && (
+                    <ul className="space-y-1">
+                      {taxHistory.map((h) => (
+                        <li key={h.id} className="flex items-center justify-between text-xs">
+                          <span className="text-neutral-600">
+                            Effective {h.effectiveFrom} — {h.taxRateBasisPoints / 100}%
+                          </span>
+                          <span className="text-neutral-400">by {h.createdByName}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {error && (

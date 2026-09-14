@@ -8,6 +8,8 @@ import { createMenuItemSchema } from "@/lib/validation/menu";
 import { recordAuditLog } from "@/lib/audit";
 import { getClientIp, hasValidCsrfHeader } from "@/lib/request";
 import { rateLimit } from "@/lib/rate-limit";
+import { recordTaxRateChange } from "@/lib/accounting/tax-rate-history";
+import { restaurantDate } from "@/lib/restaurant-date";
 
 export async function GET(
   _request: Request,
@@ -41,7 +43,7 @@ export async function POST(
   }
   try {
     const { slug } = await ctx.params;
-    const { session, restaurantId } = await resolveRestaurantContext(
+    const { session, restaurantId, timezone } = await resolveRestaurantContext(
       slug,
       PERMISSIONS.EDIT_MENU,
     );
@@ -78,22 +80,42 @@ export async function POST(
       return NextResponse.json({ error: "Category not found." }, { status: 404 });
     }
 
-    const [item] = await db
-      .insert(menuItems)
-      .values({
+    // Phase 6, Slice 6b — the item's own tax_rate_history starts here
+    // rather than on its first later edit, so menuItems.taxRateBasisPoints
+    // is NEVER written directly (see recordTaxRateChange's own comment):
+    // it's always a cache this function set, even for the very first
+    // value. Inserted with the default (0) first, then immediately
+    // corrected to the real initial rate inside the same transaction —
+    // never a moment where the row exists with an untracked rate.
+    const item = await db.transaction(async (tx) => {
+      const [inserted] = await tx
+        .insert(menuItems)
+        .values({
+          restaurantId,
+          categoryId: data.categoryId,
+          kitchenStationId: data.kitchenStationId ?? null,
+          name: data.name,
+          description: data.description || null,
+          imageUrl: data.imageUrl || null,
+          sku: data.sku || null,
+          basePriceInPaisa: data.price,
+          prepTimeMinutes: data.prepTimeMinutes ?? null,
+          isAvailable: data.isAvailable ?? true,
+        })
+        .returning();
+
+      const today = restaurantDate(timezone);
+      await recordTaxRateChange(tx, {
         restaurantId,
-        categoryId: data.categoryId,
-        kitchenStationId: data.kitchenStationId ?? null,
-        name: data.name,
-        description: data.description || null,
-        imageUrl: data.imageUrl || null,
-        sku: data.sku || null,
-        basePriceInPaisa: data.price,
+        menuItemId: inserted.id,
         taxRateBasisPoints: data.taxRatePercent ?? 0,
-        prepTimeMinutes: data.prepTimeMinutes ?? null,
-        isAvailable: data.isAvailable ?? true,
-      })
-      .returning();
+        effectiveFrom: today,
+        asOfDate: today,
+        createdByUserId: session.user.id,
+      });
+
+      return { ...inserted, taxRateBasisPoints: data.taxRatePercent ?? 0 };
+    });
 
     await recordAuditLog({
       restaurantId,

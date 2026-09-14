@@ -16,6 +16,16 @@ const percentTax = z
   .max(100, "Tax rate cannot exceed 100%.")
   .transform((percent) => Math.round(percent * 100));
 
+// Phase 6, Slice 6b — the effective date for a tax rate change, when the
+// caller wants to backdate a correction rather than have it apply today.
+// Same date-string validation as accounting.ts's own voucherDate fields,
+// for consistency; the ROUTE (not this schema) checks it's not in the
+// future, since "the future" depends on the restaurant's own timezone,
+// which this schema has no access to.
+const taxRateEffectiveFrom = z
+  .string()
+  .refine((v) => !Number.isNaN(new Date(v).getTime()), "Invalid effective date.");
+
 // Phase 15 — a menu item photo. Accepts either a normal http(s) image URL
 // (the original design) or a data: URL (what MenuManager's client-side
 // upload produces — it resizes/re-encodes the picked file through a canvas
@@ -77,6 +87,12 @@ export const updateMenuItemSchema = z.object({
   sku: z.string().trim().max(60).optional().or(z.literal("")),
   price: rupeeAmount.optional(),
   taxRatePercent: percentTax.optional(),
+  // Phase 6, Slice 6b — only meaningful alongside taxRatePercent; ignored
+  // otherwise. Omit to have the change take effect today (the common
+  // case); provide a past date only to backdate a correction — the route
+  // rejects a future date outright, see recordTaxRateChange's own comment
+  // for why.
+  taxRateEffectiveFrom: taxRateEffectiveFrom.optional(),
   prepTimeMinutes: z.number().int().min(0).max(600).nullable().optional(),
   isAvailable: z.boolean().optional(),
   isActive: z.boolean().optional(),

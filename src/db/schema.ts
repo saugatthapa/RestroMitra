@@ -823,6 +823,71 @@ export const menuItems = pgTable(
   ],
 );
 
+// Phase 6, Slice 6b — effective-dated tax rate history, LAYERED ON TOP of
+// menuItems.taxRateBasisPoints (per sign-off), never replacing it: this
+// table is the single source of truth for "what rate applied when," and
+// menuItems.taxRateBasisPoints stays a fast, POS-readable CACHE of
+// whichever row here currently governs — kept in sync by
+// recordTaxRateChange (src/lib/accounting/tax-rate-history.ts) every time
+// a rate change is written, so the live field is never written directly.
+// This also means every tax-rate change — at menu-item creation and every
+// edit afterward — must go through that one function, closing the gap a
+// direct write would otherwise leave in the audit trail.
+//
+// `effectiveFrom` is a DATE (not a timestamp): a rate applies to a whole
+// calendar day, matching how accountingVouchers.voucherDate and every
+// other date-scoped column in this schema already works. Deliberately
+// scoped to menu-item level only — this codebase has no restaurant- or
+// category-level tax rate today (see menuItems.taxRateBasisPoints's own
+// comment), so there is nothing broader to audit yet; the plan's own
+// "optionally a category/item scope" phrasing is satisfied by building
+// the level that actually exists.
+//
+// Per sign-off, this slice does NOT support scheduling a future rate
+// change to auto-apply on its effective date — see recordTaxRateChange's
+// own comment for why (this codebase's established convention, per
+// fixed-assets.ts's run-depreciation route, is "deliberately
+// human-triggered, never a background cron," and there is no reconcile
+// path that would flip the live cache on the day a future-dated row
+// becomes due). `effectiveFrom` must be today or a past date — i.e. this
+// records changes that take effect immediately, or corrects the record
+// for a change that demonstrably already took effect (a backdated
+// correction), never a change staged for later.
+export const menuItemTaxRateHistory = pgTable(
+  "menu_item_tax_rate_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    menuItemId: uuid("menu_item_id")
+      .notNull()
+      .references(() => menuItems.id, { onDelete: "cascade" }),
+    taxRateBasisPoints: integer("tax_rate_basis_points").notNull(),
+    effectiveFrom: date("effective_from").notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("menu_item_tax_rate_history_menu_item_id_idx").on(table.menuItemId),
+    // One rate per item per effective date — if a correction is needed for
+    // a date that already has a row, it replaces that row's own value
+    // rather than adding an ambiguous second claim on the same date (no
+    // update path is exposed for that today; delete-and-reinsert via a
+    // future slice if it turns out to be needed).
+    uniqueIndex("menu_item_tax_rate_history_item_date_unique").on(
+      table.menuItemId,
+      table.effectiveFrom,
+    ),
+    check("menu_item_tax_rate_history_non_negative", sql`${table.taxRateBasisPoints} >= 0`),
+    check("menu_item_tax_rate_history_le_10000", sql`${table.taxRateBasisPoints} <= 10000`),
+  ],
+);
+
 export const menuVariants = pgTable(
   "menu_variants",
   {
@@ -5249,12 +5314,28 @@ export const menuItemsRelations = relations(menuItems, ({ one, many }) => ({
   variants: many(menuVariants),
   addons: many(menuAddons),
   recipeItems: many(recipeItems),
+  taxRateHistory: many(menuItemTaxRateHistory),
 }));
 
 export const menuVariantsRelations = relations(menuVariants, ({ one }) => ({
   menuItem: one(menuItems, {
     fields: [menuVariants.menuItemId],
     references: [menuItems.id],
+  }),
+}));
+
+export const menuItemTaxRateHistoryRelations = relations(menuItemTaxRateHistory, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [menuItemTaxRateHistory.restaurantId],
+    references: [restaurants.id],
+  }),
+  menuItem: one(menuItems, {
+    fields: [menuItemTaxRateHistory.menuItemId],
+    references: [menuItems.id],
+  }),
+  createdByUser: one(users, {
+    fields: [menuItemTaxRateHistory.createdByUserId],
+    references: [users.id],
   }),
 }));
 
