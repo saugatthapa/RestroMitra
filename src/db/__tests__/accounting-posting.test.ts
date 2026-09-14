@@ -203,6 +203,44 @@ describe.skipIf(!hasDb)("Accounting — postVoucher (integration)", () => {
     ).rejects.toThrow(/inactive/i);
   });
 
+  it("rejects a non-opening_balance voucher that posts to Opening Balance Equity (3200), per Part 1.2's write-guard", async () => {
+    const [openingBalanceEquity] = await db
+      .select({ id: schema.chartOfAccounts.id })
+      .from(schema.chartOfAccounts)
+      .where(and(eq(schema.chartOfAccounts.restaurantId, restaurantId), eq(schema.chartOfAccounts.code, "3200")));
+
+    await expect(
+      db.transaction((tx) =>
+        postVoucherLib.postVoucher(tx, {
+          restaurantId,
+          branchId,
+          voucherType: "journal",
+          createdByUserId: userId,
+          lines: [
+            { accountId: cashAccountId, debitInPaisa: 100_00 },
+            { accountId: openingBalanceEquity.id, creditInPaisa: 100_00 },
+          ],
+        }),
+      ),
+    ).rejects.toThrow(/opening balance equity.*one-time opening balance voucher/i);
+
+    // The guard is scoped to voucherType — an actual "opening_balance"
+    // voucher (the one-time cutover route's own type) still posts fine.
+    const result = await db.transaction((tx) =>
+      postVoucherLib.postVoucher(tx, {
+        restaurantId,
+        branchId,
+        voucherType: "opening_balance",
+        createdByUserId: userId,
+        lines: [
+          { accountId: cashAccountId, debitInPaisa: 100_00 },
+          { accountId: openingBalanceEquity.id, creditInPaisa: 100_00 },
+        ],
+      }),
+    );
+    expect(result.voucher.voucherType).toBe("opening_balance");
+  });
+
   it("is idempotent on the source/postingEvent key — a replay returns the original, never double-posts", async () => {
     const first = await db.transaction((tx) =>
       postVoucherLib.postVoucher(tx, {

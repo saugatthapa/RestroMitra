@@ -7,9 +7,11 @@ import {
   accountingVoucherCounters,
   accountingPeriods,
   chartOfAccounts,
+  accountMappings,
   type accountingVoucherTypeEnum,
 } from "@/db/schema";
 import { HttpError } from "@/lib/http-error";
+import { MAPPING_KEYS } from "./account-mapping-keys";
 
 /**
  * The single choke point every voucher — manual or automatic — is created
@@ -128,9 +130,10 @@ function toDateOnly(value: Date | string | undefined): string {
  * voucher balances (sum(debit) === sum(credit)); if this is an automatic
  * posting, replays the existing voucher instead of double-posting;
  * every referenced account exists, belongs to this restaurant, and is
- * active; the accounting period covering voucherDate is open (or the
- * caller has already verified permission to bypass a closed one). Only
- * after all of that does it touch the database.
+ * active; no non-"opening_balance" voucher touches the Opening Balance
+ * Equity (3200) account; the accounting period covering voucherDate is
+ * open (or the caller has already verified permission to bypass a closed
+ * one). Only after all of that does it touch the database.
  */
 export async function postVoucher(
   tx: Transaction,
@@ -237,6 +240,35 @@ export async function postVoucher(
   const inactive = accounts.find((a) => !a.isActive);
   if (inactive) {
     throw new AccountingError(`Account "${inactive.name}" is inactive and cannot be posted to.`);
+  }
+
+  // Opening Balance Equity (3200) is a one-time cutover plug —
+  // ACCOUNTING_POLICY_AND_POSTING_MATRIX.md §12's own rule is "this is the
+  // only voucher ever allowed to touch account 3200." Enforced here, the
+  // single choke point every voucher (manual or automatic) goes through —
+  // not only on the journal-voucher route, so this also protects any other
+  // present or future voucher type from the same mistake. A direct, lenient
+  // lookup rather than resolveAccountMappings' own "throw if the mapping is
+  // missing" behavior (which would wrongly block an unrelated voucher for a
+  // restaurant that hasn't mapped, or hasn't yet seeded, this account) —
+  // importing that helper here would also be a circular import, since it
+  // itself imports AccountingError from this file.
+  if (params.voucherType !== "opening_balance") {
+    const [openingBalanceMapping] = await tx
+      .select({ accountId: accountMappings.accountId })
+      .from(accountMappings)
+      .where(
+        and(
+          eq(accountMappings.restaurantId, params.restaurantId),
+          eq(accountMappings.mappingKey, MAPPING_KEYS.OPENING_BALANCE_EQUITY),
+        ),
+      )
+      .limit(1);
+    if (openingBalanceMapping && accountIds.includes(openingBalanceMapping.accountId)) {
+      throw new AccountingError(
+        "Opening Balance Equity (3200) can only be posted to by the one-time opening balance voucher.",
+      );
+    }
   }
 
   const voucherDate = toDateOnly(params.voucherDate);
