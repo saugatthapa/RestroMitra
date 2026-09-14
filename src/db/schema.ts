@@ -5902,6 +5902,18 @@ export const accountingVoucherTypeEnum = pgEnum("accounting_voucher_type", [
   "contra",
   "payroll",
   "opening_balance",
+  // Phase 5, Slice 5d — covers both a fixed asset's acquisition (Dr its own
+  // account / Cr Cash-Bank-or-Accounts-Payable) and its disposal (Dr
+  // Accumulated Depreciation + Dr proceeds + Dr/Cr Gain/Loss on Disposal /
+  // Cr the asset's own account), distinguished by narration, not by a
+  // second voucher type — same "one type per business-event category"
+  // convention as "expense" already covering both this module's own
+  // payout events.
+  "fixed_asset",
+  // Phase 5, Slice 5d — one "Run Depreciation" action's periodic charge:
+  // Dr Depreciation Expense / Cr Accumulated Depreciation, summed across
+  // every eligible asset for that run.
+  "depreciation",
 ]);
 
 // "draft"/"approved"/"cancelled" are reserved for the Phase 2 UI's own
@@ -6298,5 +6310,139 @@ export const bankReconciliationClearedLinesRelations = relations(bankReconciliat
   voucherLine: one(accountingVoucherLines, {
     fields: [bankReconciliationClearedLines.voucherLineId],
     references: [accountingVoucherLines.id],
+  }),
+}));
+
+// Phase 5, Slice 5d — book-purposes-only straight-line depreciation (see
+// this table's own module doc comment in fixed-assets.ts for the "why
+// straight-line only, why not a Nepal tax computation" reasoning). Only
+// "straight_line" exists today; left as an enum (not a plain literal
+// column) so a future method is a plain ALTER TYPE ADD VALUE, not a
+// migration touching every existing row.
+export const fixedAssetDepreciationMethodEnum = pgEnum("fixed_asset_depreciation_method", [
+  "straight_line",
+]);
+
+// One row per fixed asset a restaurant has recorded. Each wraps its own
+// child chart_of_accounts row (parented under the seeded "1900 Fixed
+// Assets", coded in the reserved 1901-1999 block) — same auto-provisioning
+// pattern Slice 5b already established for bank accounts under "1050 Bank
+// Accounts". Accumulated depreciation is NOT split per asset (it stays the
+// single shared contra-asset "1910 Accumulated Depreciation" account,
+// matching what the seed chart of accounts already has) — this table's own
+// accumulatedDepreciationInPaisa is a per-asset running total maintained
+// alongside fixedAssetDepreciationEntries, used to cap a period's charge so
+// an asset is never depreciated below its own salvage value.
+export const fixedAssets = pgTable(
+  "fixed_assets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    chartOfAccountsId: uuid("chart_of_accounts_id")
+      .notNull()
+      .references(() => chartOfAccounts.id, { onDelete: "restrict" }),
+    name: varchar("name", { length: 200 }).notNull(),
+    category: varchar("category", { length: 100 }),
+    acquisitionDate: date("acquisition_date").notNull(),
+    costInPaisa: integer("cost_in_paisa").notNull(),
+    usefulLifeMonths: integer("useful_life_months").notNull(),
+    salvageValueInPaisa: integer("salvage_value_in_paisa").notNull().default(0),
+    depreciationMethod: fixedAssetDepreciationMethodEnum("depreciation_method")
+      .notNull()
+      .default("straight_line"),
+    // Maintained alongside fixed_asset_depreciation_entries (the source of
+    // truth) purely so "how much is left to depreciate" is a single-row
+    // read rather than a per-asset SUM every time a depreciation run needs
+    // to cap a charge — recomputed from the entries table whenever it
+    // matters for correctness (e.g. before capping a new charge), never
+    // trusted blindly across a gap. Zero until the first depreciation run.
+    accumulatedDepreciationInPaisa: integer("accumulated_depreciation_in_paisa").notNull().default(0),
+    disposedAt: timestamp("disposed_at", { withTimezone: true }),
+    disposalVoucherId: uuid("disposal_voucher_id").references(() => accountingVouchers.id, {
+      onDelete: "set null",
+    }),
+    disposalProceedsInPaisa: integer("disposal_proceeds_in_paisa"),
+    notes: text("notes"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("fixed_assets_restaurant_id_idx").on(table.restaurantId),
+    uniqueIndex("fixed_assets_chart_of_accounts_id_unique").on(table.chartOfAccountsId),
+    check(
+      "fixed_assets_life_and_values_valid",
+      sql`${table.usefulLifeMonths} > 0 AND ${table.costInPaisa} >= 0 AND ${table.salvageValueInPaisa} >= 0 AND ${table.salvageValueInPaisa} <= ${table.costInPaisa}`,
+    ),
+  ],
+);
+
+// One row per asset per depreciation run that actually charged something —
+// the audit trail AND the idempotency mechanism (the unique index below):
+// a given asset can never be charged depreciation through the same
+// periodEnd date twice, so re-running "Run Depreciation for <month>" after
+// it already ran is safe and simply finds nothing left to do for an asset
+// already caught up to that date.
+export const fixedAssetDepreciationEntries = pgTable(
+  "fixed_asset_depreciation_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    restaurantId: uuid("restaurant_id")
+      .notNull()
+      .references(() => restaurants.id, { onDelete: "cascade" }),
+    fixedAssetId: uuid("fixed_asset_id")
+      .notNull()
+      .references(() => fixedAssets.id, { onDelete: "cascade" }),
+    voucherId: uuid("voucher_id")
+      .notNull()
+      .references(() => accountingVouchers.id, { onDelete: "restrict" }),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+    amountInPaisa: integer("amount_in_paisa").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("fixed_asset_depreciation_entries_restaurant_id_idx").on(table.restaurantId),
+    index("fixed_asset_depreciation_entries_fixed_asset_id_idx").on(table.fixedAssetId),
+    index("fixed_asset_depreciation_entries_voucher_id_idx").on(table.voucherId),
+    uniqueIndex("fixed_asset_depreciation_entries_asset_period_end_unique").on(
+      table.fixedAssetId,
+      table.periodEnd,
+    ),
+    check("fixed_asset_depreciation_entries_amount_positive", sql`${table.amountInPaisa} > 0`),
+  ],
+);
+
+export const fixedAssetsRelations = relations(fixedAssets, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [fixedAssets.restaurantId],
+    references: [restaurants.id],
+  }),
+  chartOfAccount: one(chartOfAccounts, {
+    fields: [fixedAssets.chartOfAccountsId],
+    references: [chartOfAccounts.id],
+  }),
+  disposalVoucher: one(accountingVouchers, {
+    fields: [fixedAssets.disposalVoucherId],
+    references: [accountingVouchers.id],
+  }),
+  depreciationEntries: many(fixedAssetDepreciationEntries),
+}));
+
+export const fixedAssetDepreciationEntriesRelations = relations(fixedAssetDepreciationEntries, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [fixedAssetDepreciationEntries.restaurantId],
+    references: [restaurants.id],
+  }),
+  fixedAsset: one(fixedAssets, {
+    fields: [fixedAssetDepreciationEntries.fixedAssetId],
+    references: [fixedAssets.id],
+  }),
+  voucher: one(accountingVouchers, {
+    fields: [fixedAssetDepreciationEntries.voucherId],
+    references: [accountingVouchers.id],
   }),
 }));

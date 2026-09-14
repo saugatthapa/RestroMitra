@@ -41,6 +41,8 @@ const VOUCHER_TYPE_PREFIXES: Record<AccountingVoucherType, string> = {
   contra: "CV",
   payroll: "PYV",
   opening_balance: "OBV",
+  fixed_asset: "FAV",
+  depreciation: "DPV",
 };
 
 export type PostVoucherLine = {

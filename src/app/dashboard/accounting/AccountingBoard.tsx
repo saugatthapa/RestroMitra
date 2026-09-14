@@ -49,7 +49,9 @@ type VoucherType =
   | "refund"
   | "contra"
   | "payroll"
-  | "opening_balance";
+  | "opening_balance"
+  | "fixed_asset"
+  | "depreciation";
 
 type Voucher = {
   id: string;
@@ -100,6 +102,7 @@ const ALL_TABS = [
   "Overview",
   "Chart of Accounts",
   "Bank Accounts",
+  "Fixed Assets",
   "Journal Vouchers",
   "Day Book",
   "Ledger Accounts",
@@ -123,6 +126,8 @@ const VOUCHER_TYPE_LABELS: Record<VoucherType, string> = {
   contra: "Contra",
   payroll: "Payroll",
   opening_balance: "Opening Balance",
+  fixed_asset: "Fixed Asset",
+  depreciation: "Depreciation",
 };
 
 const STATUS_BADGE: Record<Voucher["status"], string> = {
@@ -167,6 +172,7 @@ export function AccountingBoard({ slug, canReopenPeriod }: { slug: string; canRe
       {tab === "Overview" && <OverviewTab slug={slug} />}
       {tab === "Chart of Accounts" && <ChartOfAccountsTab slug={slug} />}
       {tab === "Bank Accounts" && <BankAccountsTab slug={slug} />}
+      {tab === "Fixed Assets" && <FixedAssetsTab slug={slug} />}
       {tab === "Journal Vouchers" && <VouchersTab slug={slug} typeFilter="journal" />}
       {tab === "Day Book" && <VouchersTab slug={slug} typeFilter={null} />}
       {tab === "Ledger Accounts" && (
@@ -2743,5 +2749,617 @@ function BankReconciliationWorkspace({
         </>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fixed Assets (Phase 5, Slice 5d)
+// ---------------------------------------------------------------------------
+
+type FundingMethod = "cash" | "bank" | "credit";
+
+const FUNDING_METHOD_LABELS: Record<FundingMethod, string> = {
+  cash: "Cash",
+  bank: "Bank account",
+  credit: "On credit (Accounts Payable)",
+};
+
+const MONTH_LABELS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+type FixedAsset = {
+  id: string;
+  chartOfAccountsId: string;
+  name: string;
+  category: string | null;
+  acquisitionDate: string;
+  costInPaisa: number;
+  usefulLifeMonths: number;
+  salvageValueInPaisa: number;
+  accumulatedDepreciationInPaisa: number;
+  bookValueInPaisa: number;
+  disposedAt: string | null;
+  disposalProceedsInPaisa: number | null;
+  notes: string | null;
+  code: string;
+  accountName: string;
+  isActive: boolean;
+  createdAt: string;
+};
+
+type DepreciationEntry = {
+  id: string;
+  fixedAssetId: string;
+  voucherId: string;
+  periodStart: string;
+  periodEnd: string;
+  amountInPaisa: number;
+  createdAt: string;
+};
+
+function FixedAssetsTab({ slug }: { slug: string }) {
+  const [assets, setAssets] = useState<FixedAsset[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [disposingId, setDisposingId] = useState<string | null>(null);
+  const [historyId, setHistoryId] = useState<string | null>(null);
+  const dateSystem = useDateSystem();
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [assetsRes, bankRes] = await Promise.all([
+        apiGet<{ fixedAssets: FixedAsset[] }>(`${base(slug)}/accounting/fixed-assets`),
+        apiGet<{ bankAccounts: BankAccount[] }>(`${base(slug)}/accounting/bank-accounts`),
+      ]);
+      setAssets(assetsRes.fixedAssets);
+      setBankAccounts(bankRes.bankAccounts.filter((a) => a.isActive));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not load fixed assets.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <p className="text-sm text-neutral-500">
+        Each fixed asset here wraps its own ledger account under &quot;1900 Fixed Assets&quot;.
+        Depreciation is straight-line, for book/management purposes only — not a Nepal tax
+        depreciation computation.
+      </p>
+
+      <RunDepreciationPanel slug={slug} onRun={load} />
+
+      <div className="flex justify-end">
+        <button onClick={() => setShowAdd((v) => !v)} className="btn-secondary">
+          {showAdd ? "Cancel" : "Add fixed asset"}
+        </button>
+      </div>
+      {showAdd && (
+        <AddFixedAssetForm
+          slug={slug}
+          bankAccounts={bankAccounts}
+          onAdded={() => {
+            setShowAdd(false);
+            load();
+          }}
+        />
+      )}
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
+                <th className="px-3 py-2">Code</th>
+                <th className="px-3 py-2">Name</th>
+                <th className="px-3 py-2">Acquired</th>
+                <th className="px-3 py-2 text-right">Cost</th>
+                <th className="px-3 py-2 text-right">Accum. depreciation</th>
+                <th className="px-3 py-2 text-right">Book value</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {assets.map((a) => (
+                <Fragment key={a.id}>
+                  <tr className="border-b border-neutral-100 last:border-0">
+                    <td className="px-3 py-2 font-mono text-xs text-neutral-500">{a.code}</td>
+                    <td className="px-3 py-2 text-neutral-900">
+                      {a.name}
+                      {a.category && <span className="ml-2 text-xs text-neutral-400">· {a.category}</span>}
+                    </td>
+                    <td className="px-3 py-2 text-neutral-600">{formatDate(a.acquisitionDate, dateSystem)}</td>
+                    <td className="px-3 py-2 text-right">{formatNPR(a.costInPaisa)}</td>
+                    <td className="px-3 py-2 text-right">{formatNPR(a.accumulatedDepreciationInPaisa)}</td>
+                    <td className="px-3 py-2 text-right font-medium">{formatNPR(a.bookValueInPaisa)}</td>
+                    <td className="px-3 py-2">
+                      {a.disposedAt ? (
+                        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-500">
+                          Disposed
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                          Active
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex justify-end gap-3">
+                        <button
+                          onClick={() => setHistoryId(historyId === a.id ? null : a.id)}
+                          className="text-xs font-medium text-orange-700 hover:underline"
+                        >
+                          {historyId === a.id ? "Close" : "History"}
+                        </button>
+                        {!a.disposedAt && (
+                          <button
+                            onClick={() => setDisposingId(disposingId === a.id ? null : a.id)}
+                            className="text-xs font-medium text-orange-700 hover:underline"
+                          >
+                            {disposingId === a.id ? "Cancel" : "Dispose"}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  {historyId === a.id && (
+                    <tr className="border-b border-neutral-100 bg-neutral-50">
+                      <td colSpan={8} className="px-3 py-3">
+                        <DepreciationHistory slug={slug} fixedAssetId={a.id} />
+                      </td>
+                    </tr>
+                  )}
+                  {disposingId === a.id && (
+                    <tr className="border-b border-neutral-100 bg-neutral-50">
+                      <td colSpan={8} className="px-3 py-3">
+                        <DisposeFixedAssetForm
+                          slug={slug}
+                          asset={a}
+                          bankAccounts={bankAccounts}
+                          onDisposed={() => {
+                            setDisposingId(null);
+                            load();
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+              {assets.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-3 py-6 text-center text-sm text-neutral-400">
+                    No fixed assets yet — add the first one above.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RunDepreciationPanel({ slug, onRun }: { slug: string; onRun: () => void }) {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{
+    voucher: { voucherNumber: string } | null;
+    entries: Array<{ fixedAssetName: string; amountInPaisa: number }>;
+    totalInPaisa: number;
+  } | null>(null);
+
+  async function run() {
+    setRunning(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await apiPost<{
+        voucher: { voucherNumber: string } | null;
+        entries: Array<{ fixedAssetName: string; amountInPaisa: number }>;
+        totalInPaisa: number;
+      }>(`${base(slug)}/accounting/fixed-assets/run-depreciation`, { year, month });
+      setResult(res);
+      onRun();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not run depreciation.");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+      <p className="text-sm font-medium text-neutral-900">Run Depreciation</p>
+      <p className="mt-1 text-xs text-neutral-500">
+        Charges every active asset&apos;s straight-line depreciation through the end of the chosen
+        month. Safe to run more than once — an asset already caught up through that date is simply
+        skipped.
+      </p>
+      {error && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Month</span>
+          <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="input !w-auto">
+            {MONTH_LABELS.map((label, i) => (
+              <option key={label} value={i + 1}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Year</span>
+          <input
+            type="number"
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            className="input !w-24"
+          />
+        </label>
+        <button disabled={running} onClick={run} className="btn-primary">
+          {running ? "Running…" : `Run Depreciation for ${MONTH_LABELS[month - 1]} ${year}`}
+        </button>
+      </div>
+      {result && (
+        <div className="mt-3 rounded-lg bg-neutral-50 px-3 py-2 text-sm">
+          {result.voucher ? (
+            <>
+              <p className="font-medium text-neutral-900">
+                Posted {result.voucher.voucherNumber} — {formatNPR(result.totalInPaisa)} across{" "}
+                {result.entries.length} asset{result.entries.length === 1 ? "" : "s"}.
+              </p>
+              <ul className="mt-1 space-y-0.5 text-xs text-neutral-500">
+                {result.entries.map((e, i) => (
+                  <li key={i}>
+                    {e.fixedAssetName}: {formatNPR(e.amountInPaisa)}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="text-neutral-500">Nothing to depreciate for this period.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DepreciationHistory({ slug, fixedAssetId }: { slug: string; fixedAssetId: string }) {
+  const [entries, setEntries] = useState<DepreciationEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGet<{ depreciationEntries: DepreciationEntry[] }>(`${base(slug)}/accounting/fixed-assets/${fixedAssetId}`)
+      .then((res) => setEntries(res.depreciationEntries))
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load depreciation history."));
+  }, [slug, fixedAssetId]);
+
+  if (error) return <p className="text-sm text-red-700">{error}</p>;
+  if (!entries) return <p className="text-sm text-neutral-500">Loading…</p>;
+  if (entries.length === 0) return <p className="text-sm text-neutral-400">No depreciation posted yet.</p>;
+
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
+          <th className="py-1">Period</th>
+          <th className="py-1 text-right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {entries.map((e) => (
+          <tr key={e.id} className="border-t border-neutral-100">
+            <td className="py-1 text-neutral-600">
+              {e.periodStart} – {e.periodEnd}
+            </td>
+            <td className="py-1 text-right">{formatNPR(e.amountInPaisa)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function AddFixedAssetForm({
+  slug,
+  bankAccounts,
+  onAdded,
+}: {
+  slug: string;
+  bankAccounts: BankAccount[];
+  onAdded: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
+  const [acquisitionDate, setAcquisitionDate] = useState(todayIso());
+  const [cost, setCost] = useState("");
+  const [usefulLifeMonths, setUsefulLifeMonths] = useState("");
+  const [salvageValue, setSalvageValue] = useState("0");
+  const [fundingMethod, setFundingMethod] = useState<FundingMethod>("cash");
+  const [bankAccountId, setBankAccountId] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const needsBankAccountChoice = fundingMethod === "bank" && bankAccounts.length > 1;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost(`${base(slug)}/accounting/fixed-assets`, {
+        name,
+        category: category || undefined,
+        acquisitionDate,
+        cost: Number(cost),
+        usefulLifeMonths: Number(usefulLifeMonths),
+        salvageValue: Number(salvageValue || 0),
+        fundingMethod,
+        bankAccountId: needsBankAccountChoice && bankAccountId ? bankAccountId : undefined,
+        notes: notes || undefined,
+      });
+      onAdded();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not add this fixed asset.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-2xl border border-neutral-200 bg-white p-4">
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Name</span>
+          <input required value={name} onChange={(e) => setName(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Category (optional)</span>
+          <input
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="input"
+            placeholder="e.g. Kitchen Equipment"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Acquisition date</span>
+          <input
+            required
+            type="date"
+            value={acquisitionDate}
+            onChange={(e) => setAcquisitionDate(e.target.value)}
+            className="input"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Cost (Rs)</span>
+          <input
+            required
+            type="number"
+            min={0.01}
+            step="0.01"
+            value={cost}
+            onChange={(e) => setCost(e.target.value)}
+            className="input"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Useful life (months)</span>
+          <input
+            required
+            type="number"
+            min={1}
+            step="1"
+            value={usefulLifeMonths}
+            onChange={(e) => setUsefulLifeMonths(e.target.value)}
+            className="input"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Salvage value (Rs, optional)</span>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={salvageValue}
+            onChange={(e) => setSalvageValue(e.target.value)}
+            className="input"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Funded by</span>
+          <select
+            value={fundingMethod}
+            onChange={(e) => {
+              setFundingMethod(e.target.value as FundingMethod);
+              setBankAccountId("");
+            }}
+            className="input"
+          >
+            {(Object.keys(FUNDING_METHOD_LABELS) as FundingMethod[]).map((m) => (
+              <option key={m} value={m}>
+                {FUNDING_METHOD_LABELS[m]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {needsBankAccountChoice && (
+          <label className="text-sm">
+            <span className="mb-1 block text-neutral-600">Bank account</span>
+            <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className="input">
+              <option value="">Choose bank account…</option>
+              {bankAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.bankName} ({a.code})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="text-sm sm:col-span-2 lg:col-span-3">
+          <span className="mb-1 block text-neutral-600">Notes (optional)</span>
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} className="input" />
+        </label>
+      </div>
+      <button disabled={saving || (needsBankAccountChoice && !bankAccountId)} className="btn-primary mt-3">
+        {saving ? "Adding…" : "Add fixed asset"}
+      </button>
+    </form>
+  );
+}
+
+function DisposeFixedAssetForm({
+  slug,
+  asset,
+  bankAccounts,
+  onDisposed,
+}: {
+  slug: string;
+  asset: FixedAsset;
+  bankAccounts: BankAccount[];
+  onDisposed: () => void;
+}) {
+  const [disposalDate, setDisposalDate] = useState(todayIso());
+  const [proceeds, setProceeds] = useState("0");
+  const [proceedsMethod, setProceedsMethod] = useState<"cash" | "bank">("cash");
+  const [bankAccountId, setBankAccountId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<number | null>(null);
+  const hasProceeds = Number(proceeds || 0) > 0;
+  const needsBankAccountChoice = hasProceeds && proceedsMethod === "bank" && bankAccounts.length > 1;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await apiPost<{ gainOrLossInPaisa: number }>(
+        `${base(slug)}/accounting/fixed-assets/${asset.id}/dispose`,
+        {
+          disposalDate,
+          proceeds: Number(proceeds || 0),
+          proceedsMethod: hasProceeds ? proceedsMethod : undefined,
+          bankAccountId: needsBankAccountChoice && bankAccountId ? bankAccountId : undefined,
+        },
+      );
+      setResult(res.gainOrLossInPaisa);
+      onDisposed();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not dispose of this asset.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <p className="text-sm text-neutral-600">
+        Book value today: <span className="font-medium">{formatNPR(asset.bookValueInPaisa)}</span>
+      </p>
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {result !== null && (
+        <p className={`rounded-lg px-3 py-2 text-sm ${result === 0 ? "bg-neutral-100 text-neutral-600" : result > 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+          {result === 0
+            ? "No gain or loss — proceeds matched book value exactly."
+            : result > 0
+              ? `Gain of ${formatNPR(result)} recorded.`
+              : `Loss of ${formatNPR(-result)} recorded.`}
+        </p>
+      )}
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Disposal date</span>
+          <input
+            required
+            type="date"
+            value={disposalDate}
+            onChange={(e) => setDisposalDate(e.target.value)}
+            className="input"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Proceeds received (Rs, optional)</span>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={proceeds}
+            onChange={(e) => setProceeds(e.target.value)}
+            className="input"
+          />
+        </label>
+        {hasProceeds && (
+          <label className="text-sm">
+            <span className="mb-1 block text-neutral-600">Received into</span>
+            <select
+              value={proceedsMethod}
+              onChange={(e) => {
+                setProceedsMethod(e.target.value as "cash" | "bank");
+                setBankAccountId("");
+              }}
+              className="input"
+            >
+              <option value="cash">Cash</option>
+              <option value="bank">Bank account</option>
+            </select>
+          </label>
+        )}
+        {needsBankAccountChoice && (
+          <label className="text-sm">
+            <span className="mb-1 block text-neutral-600">Bank account</span>
+            <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className="input">
+              <option value="">Choose bank account…</option>
+              {bankAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.bankName} ({a.code})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <button disabled={saving || (needsBankAccountChoice && !bankAccountId)} className="btn-primary">
+          {saving ? "Disposing…" : "Dispose"}
+        </button>
+      </div>
+      <p className="text-xs text-neutral-400">
+        Removes the asset&apos;s full cost and its accumulated depreciation from the books; any
+        difference between proceeds and book value posts as a gain or loss.
+      </p>
+    </form>
   );
 }

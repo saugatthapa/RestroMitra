@@ -13,6 +13,8 @@ const VOUCHER_TYPES = [
   "contra",
   "payroll",
   "opening_balance",
+  "fixed_asset",
+  "depreciation",
 ] as const;
 
 export const createAccountSchema = z.object({
@@ -135,3 +137,41 @@ export const updateBankReconciliationSchema = z
   .refine((data) => Object.keys(data).length > 0, {
     message: "Provide at least one field to update.",
   });
+
+// ---------------------------------------------------------------------------
+// Phase 5, Slice 5d — Fixed Assets + book-purposes straight-line
+// depreciation.
+// ---------------------------------------------------------------------------
+
+const paisaAmount = (label: string) =>
+  z
+    .number()
+    .nonnegative(`${label} can't be negative.`)
+    .max(100_000_000, `${label} is unreasonably large.`)
+    .transform((rupees) => rupeesToPaisa(rupees));
+
+const FUNDING_METHODS = ["cash", "bank", "credit"] as const;
+
+export const createFixedAssetSchema = z.object({
+  name: z.string().trim().min(1, "Enter the asset's name.").max(200),
+  category: z.string().trim().max(100).optional().or(z.literal("")),
+  acquisitionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD."),
+  cost: rupeeAmount,
+  usefulLifeMonths: z.number().int().positive("Useful life must be a positive number of months.").max(1200),
+  salvageValue: paisaAmount("Salvage value").optional().default(0),
+  fundingMethod: z.enum(FUNDING_METHODS),
+  bankAccountId: z.string().uuid().optional(),
+  notes: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
+export const runDepreciationSchema = z.object({
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+});
+
+export const disposeFixedAssetSchema = z.object({
+  disposalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD."),
+  proceeds: paisaAmount("Proceeds").optional().default(0),
+  proceedsMethod: z.enum(["cash", "bank"]).optional().default("cash"),
+  bankAccountId: z.string().uuid().optional(),
+});

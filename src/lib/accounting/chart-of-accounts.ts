@@ -76,8 +76,19 @@ const DEFAULT_CHART_OF_ACCOUNTS: SeedAccount[] = [
   // Contra-income (decision confirmed in ACCOUNTING_MODULE_PLAN.md).
   { code: "4900", name: "Discounts & Allowances", type: "income", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.DISCOUNTS_AND_ALLOWANCES] },
   { code: "4910", name: "Sales Returns & Refunds", type: "income", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.SALES_RETURNS_AND_REFUNDS] },
+  // Phase 5, Slice 5d — the balancing "plug" on a fixed-asset disposal, same
+  // contra-income treatment as 4900/4910 above (type income, but a loss
+  // posts a DEBIT here, reducing it — the account can carry either a net
+  // credit balance from gains or a net debit balance from losses over
+  // time). See fixed-assets.ts's disposeFixedAsset for the full posting.
+  { code: "4920", name: "Gain/Loss on Disposal of Fixed Assets", type: "income", normalBalance: "credit" },
   { code: "5000", name: "Cost of Goods Sold", type: "expense", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.COST_OF_GOODS_SOLD] },
   { code: "5100", name: "Salary Expense", type: "expense", normalBalance: "debit", mappingKeys: [MAPPING_KEYS.SALARY_EXPENSE] },
+  // Phase 5, Slice 5d — fixed at 5150 (NOT in the 5200+ block
+  // resolveOrProvisionExpenseCategoryAccount auto-allocates for per-category
+  // expense accounts) so a growing restaurant's own expense categories can
+  // never collide with this seeded account's code.
+  { code: "5150", name: "Depreciation Expense", type: "expense", normalBalance: "debit" },
 ];
 
 export type SeedChartOfAccountsResult = {
