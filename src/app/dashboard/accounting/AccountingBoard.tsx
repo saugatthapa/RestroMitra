@@ -1186,6 +1186,7 @@ const REPORT_TABS = [
   "Balance Sheet",
   "Cash Flow",
   "Cash Book",
+  "Journal",
   "AR/AP Aging",
   "VAT Return",
   "Tax Depreciation",
@@ -1242,6 +1243,7 @@ function ReportsTab({ slug, onDrillDown }: { slug: string; onDrillDown: (account
       {reportTab === "Balance Sheet" && <BalanceSheetReport slug={slug} onDrillDown={onDrillDown} />}
       {reportTab === "Cash Flow" && <CashFlowReport slug={slug} />}
       {reportTab === "Cash Book" && <CashBookReport slug={slug} />}
+      {reportTab === "Journal" && <JournalReportTab slug={slug} />}
       {reportTab === "AR/AP Aging" && <AgingReportTab slug={slug} />}
       {reportTab === "VAT Return" && <VatReturnReport slug={slug} />}
       {reportTab === "Tax Depreciation" && <TaxDepreciationReportTab slug={slug} />}
@@ -2278,6 +2280,210 @@ function BranchProfitabilityReport({ slug }: { slug: string }) {
             </table>
           </div>
         ))
+      )}
+    </div>
+  );
+}
+
+type JournalLine = {
+  lineId: string;
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  debitInPaisa: number;
+  creditInPaisa: number;
+  description: string | null;
+};
+type JournalVoucherEntry = {
+  voucherId: string;
+  voucherNumber: string;
+  voucherType: VoucherType;
+  voucherDate: string;
+  status: Voucher["status"];
+  branchId: string;
+  branchName: string;
+  reference: string | null;
+  narration: string | null;
+  reversalOfVoucherId: string | null;
+  totalDebitInPaisa: number;
+  totalCreditInPaisa: number;
+  lines: JournalLine[];
+};
+type JournalReportData = {
+  fromDate: string;
+  toDate: string;
+  branchId: string | null;
+  voucherType: string | null;
+  vouchers: JournalVoucherEntry[];
+  voucherCount: number;
+  totalDebitInPaisa: number;
+  totalCreditInPaisa: number;
+};
+
+/**
+ * Phase 7, Slice 7c — the accounting audit/journal report: every posted
+ * voucher in a date range with its full debit/credit lines, distinct from
+ * the Journal Vouchers/Day Book tabs' own browsing list (which caps at the
+ * 200 most recent vouchers with no date-range or branch scoping) — this is
+ * the bounded, printable "give me the complete journal for this period"
+ * view an auditor or accountant actually wants. Lines come back already
+ * loaded with the report (no per-row lazy fetch, unlike VoucherRow above),
+ * since the report's whole point is a complete listing, not a browsing UI.
+ */
+function JournalReportTab({ slug }: { slug: string }) {
+  const dateSystem = useDateSystem();
+  const [fromDate, setFromDate] = useState(firstOfMonthIso());
+  const [toDate, setToDate] = useState(todayIso());
+  const [voucherType, setVoucherType] = useState<VoucherType | "">("");
+  const [data, setData] = useState<JournalReportData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { branches, activeBranchId } = useActiveBranch();
+
+  useEffect(() => {
+    setLoading(true);
+    const qs = new URLSearchParams({ fromDate, toDate });
+    if (voucherType) qs.set("voucherType", voucherType);
+    if (activeBranchId) qs.set("branchId", activeBranchId);
+    apiGet<JournalReportData>(`${base(slug)}/accounting/reports/journal?${qs.toString()}`)
+      .then((res) => {
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load the journal report."))
+      .finally(() => setLoading(false));
+  }, [slug, fromDate, toDate, voucherType, activeBranchId]);
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="grid max-w-2xl gap-3 sm:grid-cols-3">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">From</span>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">To</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">Voucher type</span>
+          <select
+            className="input"
+            value={voucherType}
+            onChange={(e) => setVoucherType(e.target.value as VoucherType | "")}
+          >
+            <option value="">All types</option>
+            {Object.entries(VOUCHER_TYPE_LABELS).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <BranchScopeNote branches={branches} activeBranchId={activeBranchId} />
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : (
+        data && (
+          <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">Number</th>
+                  <th className="px-3 py-2">Type</th>
+                  <th className="px-3 py-2">Narration</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2 text-right">Debit</th>
+                  <th className="px-3 py-2 text-right">Credit</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {data.vouchers.map((v) => {
+                  const isExpanded = expandedId === v.voucherId;
+                  return (
+                    <Fragment key={v.voucherId}>
+                      <tr
+                        className="cursor-pointer border-b border-neutral-100 hover:bg-neutral-50"
+                        onClick={() => setExpandedId(isExpanded ? null : v.voucherId)}
+                      >
+                        <td className="px-3 py-2 text-neutral-600">{formatDate(v.voucherDate, dateSystem)}</td>
+                        <td className="px-3 py-2 font-mono text-xs text-neutral-500">{v.voucherNumber}</td>
+                        <td className="px-3 py-2 text-neutral-600">{VOUCHER_TYPE_LABELS[v.voucherType]}</td>
+                        <td className="px-3 py-2 text-neutral-900">{v.narration || "—"}</td>
+                        <td className="px-3 py-2">
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[v.status]}`}>
+                            {v.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right">{formatNPR(v.totalDebitInPaisa)}</td>
+                        <td className="px-3 py-2 text-right">{formatNPR(v.totalCreditInPaisa)}</td>
+                        <td className="px-3 py-2 text-right text-xs text-neutral-400">{isExpanded ? "▲" : "▼"}</td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-b border-neutral-100 bg-neutral-50">
+                          <td colSpan={8} className="px-3 py-3">
+                            {branches.length > 1 && (
+                              <p className="mb-2 text-xs text-neutral-500">Branch: {v.branchName}</p>
+                            )}
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
+                                  <th className="py-1">Account</th>
+                                  <th className="py-1">Description</th>
+                                  <th className="py-1 text-right">Debit</th>
+                                  <th className="py-1 text-right">Credit</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {v.lines.map((l) => (
+                                  <tr key={l.lineId}>
+                                    <td className="py-1">
+                                      {l.accountCode} — {l.accountName}
+                                    </td>
+                                    <td className="py-1 text-neutral-500">{l.description || "—"}</td>
+                                    <td className="py-1 text-right">
+                                      {l.debitInPaisa > 0 ? formatNPR(l.debitInPaisa) : "—"}
+                                    </td>
+                                    <td className="py-1 text-right">
+                                      {l.creditInPaisa > 0 ? formatNPR(l.creditInPaisa) : "—"}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+                {data.vouchers.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-6 text-center text-sm text-neutral-400">
+                      No vouchers posted in this period.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-neutral-300 font-semibold text-neutral-900">
+                  <td className="px-3 py-2" colSpan={5}>
+                    {data.voucherCount} voucher{data.voucherCount === 1 ? "" : "s"}
+                  </td>
+                  <td className="px-3 py-2 text-right">{formatNPR(data.totalDebitInPaisa)}</td>
+                  <td className="px-3 py-2 text-right">{formatNPR(data.totalCreditInPaisa)}</td>
+                  <td className="px-3 py-2" />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )
       )}
     </div>
   );
