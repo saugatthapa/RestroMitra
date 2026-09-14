@@ -84,6 +84,7 @@ export type CashFlowSection = { lines: CashFlowLine[]; totalInPaisa: number };
 export type CashFlowStatement = {
   fromDate: string;
   toDate: string;
+  branchId: string | null;
   beginningCashInPaisa: number;
   endingCashInPaisa: number;
   operating: CashFlowSection;
@@ -175,17 +176,19 @@ export async function getCashFlowStatement(params: {
   restaurantId: string;
   fromDate: string;
   toDate: string;
+  /** Phase 7, Slice 7b — see balances.ts' getAccountBalances comment on branchId. Cash-account RESOLUTION (which accounts count as cash) stays restaurant-wide; only the voucher activity read from them is branch-scoped. */
+  branchId?: string;
 }): Promise<CashFlowStatement> {
-  const { restaurantId, fromDate, toDate } = params;
+  const { restaurantId, fromDate, toDate, branchId } = params;
 
   const [cashAccountIds, loanPayableAccountIds, interestExpenseAccountId, beginningBalances, endingBalances, pnl] =
     await Promise.all([
       resolveCashAccountIds(restaurantId),
       resolveLoanPayableAccountIds(restaurantId),
       resolveAccountId(restaurantId, INTEREST_EXPENSE_CODE),
-      getAccountBalances({ restaurantId, toDate: subtractOneDay(fromDate) }),
-      getAccountBalances({ restaurantId, toDate }),
-      getProfitAndLoss({ restaurantId, fromDate, toDate }),
+      getAccountBalances({ restaurantId, toDate: subtractOneDay(fromDate), branchId }),
+      getAccountBalances({ restaurantId, toDate, branchId }),
+      getProfitAndLoss({ restaurantId, fromDate, toDate, branchId }),
     ]);
 
   const beginningCashInPaisa = beginningBalances.accounts
@@ -214,6 +217,7 @@ export async function getCashFlowStatement(params: {
               gte(accountingVouchers.voucherDate, fromDate),
               lte(accountingVouchers.voucherDate, toDate),
               inArray(accountingVoucherLines.accountId, [...cashAccountIds]),
+              branchId ? eq(accountingVouchers.branchId, branchId) : undefined,
             ),
           );
 
@@ -253,6 +257,7 @@ export async function getCashFlowStatement(params: {
         eq(accountingVouchers.voucherType, "loan"),
         gte(accountingVouchers.voucherDate, fromDate),
         lte(accountingVouchers.voucherDate, toDate),
+        branchId ? eq(accountingVouchers.branchId, branchId) : undefined,
       ),
     );
 
@@ -323,6 +328,7 @@ export async function getCashFlowStatement(params: {
   return {
     fromDate,
     toDate,
+    branchId: branchId ?? null,
     beginningCashInPaisa,
     endingCashInPaisa,
     operating: { lines: operatingLines, totalInPaisa: operatingInPaisa },

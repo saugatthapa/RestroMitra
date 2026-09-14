@@ -1189,6 +1189,7 @@ const REPORT_TABS = [
   "AR/AP Aging",
   "VAT Return",
   "Tax Depreciation",
+  "Branch Profitability",
 ] as const;
 type ReportTab = (typeof REPORT_TABS)[number];
 
@@ -1198,6 +1199,21 @@ function todayIso() {
 function firstOfMonthIso() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/**
+ * Phase 7, Slice 7b — every report below reads the header's branch switcher
+ * (`useActiveBranch`, same context ReportsBoard/PeriodsTab already use) and
+ * appends `&branchId=` to its own fetch whenever a specific branch is
+ * selected, so switching branches at the top of the dashboard scopes these
+ * reports the exact same way it already scopes the Reports dashboard. This
+ * note renders under a report's date controls to make the current scope
+ * visible without a second, report-local picker.
+ */
+function BranchScopeNote({ branches, activeBranchId }: { branches: { id: string; name: string }[]; activeBranchId: string | null }) {
+  if (branches.length <= 1) return null;
+  const label = activeBranchId ? (branches.find((b) => b.id === activeBranchId)?.name ?? "—") : "All branches";
+  return <p className="text-xs text-neutral-400">Scope: {label} (switch branches from the header)</p>;
 }
 
 function ReportsTab({ slug, onDrillDown }: { slug: string; onDrillDown: (accountId: string) => void }) {
@@ -1229,6 +1245,7 @@ function ReportsTab({ slug, onDrillDown }: { slug: string; onDrillDown: (account
       {reportTab === "AR/AP Aging" && <AgingReportTab slug={slug} />}
       {reportTab === "VAT Return" && <VatReturnReport slug={slug} />}
       {reportTab === "Tax Depreciation" && <TaxDepreciationReportTab slug={slug} />}
+      {reportTab === "Branch Profitability" && <BranchProfitabilityReport slug={slug} />}
     </div>
   );
 }
@@ -1246,17 +1263,20 @@ function TrialBalanceReport({ slug, onDrillDown }: { slug: string; onDrillDown: 
   const [data, setData] = useState<TrialBalanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { branches, activeBranchId } = useActiveBranch();
 
   useEffect(() => {
     setLoading(true);
-    apiGet<TrialBalanceData>(`${base(slug)}/accounting/reports/trial-balance?asOfDate=${asOfDate}`)
+    const qs = new URLSearchParams({ asOfDate });
+    if (activeBranchId) qs.set("branchId", activeBranchId);
+    apiGet<TrialBalanceData>(`${base(slug)}/accounting/reports/trial-balance?${qs.toString()}`)
       .then((res) => {
         setData(res);
         setError(null);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load the Trial Balance."))
       .finally(() => setLoading(false));
-  }, [slug, asOfDate]);
+  }, [slug, asOfDate, activeBranchId]);
 
   return (
     <div className="space-y-4">
@@ -1265,6 +1285,7 @@ function TrialBalanceReport({ slug, onDrillDown }: { slug: string; onDrillDown: 
         <span className="mb-1 block text-neutral-600">As of</span>
         <input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="input" />
       </label>
+      <BranchScopeNote branches={branches} activeBranchId={activeBranchId} />
 
       {loading ? (
         <p className="text-sm text-neutral-500">Loading…</p>
@@ -1335,19 +1356,20 @@ function ProfitAndLossReport({ slug, onDrillDown }: { slug: string; onDrillDown:
   const [data, setData] = useState<ProfitAndLossData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { branches, activeBranchId } = useActiveBranch();
 
   useEffect(() => {
     setLoading(true);
-    apiGet<ProfitAndLossData>(
-      `${base(slug)}/accounting/reports/profit-and-loss?fromDate=${fromDate}&toDate=${toDate}`,
-    )
+    const qs = new URLSearchParams({ fromDate, toDate });
+    if (activeBranchId) qs.set("branchId", activeBranchId);
+    apiGet<ProfitAndLossData>(`${base(slug)}/accounting/reports/profit-and-loss?${qs.toString()}`)
       .then((res) => {
         setData(res);
         setError(null);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load Profit & Loss."))
       .finally(() => setLoading(false));
-  }, [slug, fromDate, toDate]);
+  }, [slug, fromDate, toDate, activeBranchId]);
 
   function Section({ title, lines, total }: { title: string; lines: StatementLine[]; total: number }) {
     return (
@@ -1398,6 +1420,7 @@ function ProfitAndLossReport({ slug, onDrillDown }: { slug: string; onDrillDown:
           <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
         </label>
       </div>
+      <BranchScopeNote branches={branches} activeBranchId={activeBranchId} />
 
       {loading ? (
         <p className="text-sm text-neutral-500">Loading…</p>
@@ -1428,17 +1451,20 @@ function BalanceSheetReport({ slug, onDrillDown }: { slug: string; onDrillDown: 
   const [data, setData] = useState<BalanceSheetData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { branches, activeBranchId } = useActiveBranch();
 
   useEffect(() => {
     setLoading(true);
-    apiGet<BalanceSheetData>(`${base(slug)}/accounting/reports/balance-sheet?asOfDate=${asOfDate}`)
+    const qs = new URLSearchParams({ asOfDate });
+    if (activeBranchId) qs.set("branchId", activeBranchId);
+    apiGet<BalanceSheetData>(`${base(slug)}/accounting/reports/balance-sheet?${qs.toString()}`)
       .then((res) => {
         setData(res);
         setError(null);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load the Balance Sheet."))
       .finally(() => setLoading(false));
-  }, [slug, asOfDate]);
+  }, [slug, asOfDate, activeBranchId]);
 
   function Section({ title, lines, total }: { title: string; lines: StatementLine[]; total: number }) {
     return (
@@ -1483,6 +1509,7 @@ function BalanceSheetReport({ slug, onDrillDown }: { slug: string; onDrillDown: 
         <span className="mb-1 block text-neutral-600">As of</span>
         <input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="input" />
       </label>
+      <BranchScopeNote branches={branches} activeBranchId={activeBranchId} />
 
       {loading ? (
         <p className="text-sm text-neutral-500">Loading…</p>
@@ -1575,17 +1602,20 @@ function CashFlowReport({ slug }: { slug: string }) {
   const [data, setData] = useState<CashFlowData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { branches, activeBranchId } = useActiveBranch();
 
   useEffect(() => {
     setLoading(true);
-    apiGet<CashFlowData>(`${base(slug)}/accounting/reports/cash-flow?fromDate=${fromDate}&toDate=${toDate}`)
+    const qs = new URLSearchParams({ fromDate, toDate });
+    if (activeBranchId) qs.set("branchId", activeBranchId);
+    apiGet<CashFlowData>(`${base(slug)}/accounting/reports/cash-flow?${qs.toString()}`)
       .then((res) => {
         setData(res);
         setError(null);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load the Cash Flow Statement."))
       .finally(() => setLoading(false));
-  }, [slug, fromDate, toDate]);
+  }, [slug, fromDate, toDate, activeBranchId]);
 
   function Section({ title, section }: { title: string; section: CashFlowSection }) {
     return (
@@ -1631,6 +1661,7 @@ function CashFlowReport({ slug }: { slug: string }) {
           <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
         </label>
       </div>
+      <BranchScopeNote branches={branches} activeBranchId={activeBranchId} />
 
       {loading ? (
         <p className="text-sm text-neutral-500">Loading…</p>
@@ -2138,6 +2169,120 @@ function CashBookReport({ slug }: { slug: string }) {
   );
 }
 
+type BranchProfitabilityRow = {
+  branchId: string;
+  branchName: string;
+  isMain: boolean;
+  totalIncomeInPaisa: number;
+  totalExpenseInPaisa: number;
+  netIncomeInPaisa: number;
+};
+type BranchProfitabilityData = { fromDate: string | null; toDate: string | null; branches: BranchProfitabilityRow[] };
+
+/**
+ * Phase 7, Slice 7b — Profit & Loss broken out side by side, one column per
+ * branch. Unlike this module's other reports, this one deliberately does
+ * NOT read the header's branch switcher (`useActiveBranch`'s
+ * `activeBranchId`) — narrowing an already-comparative report to one
+ * branch would defeat its own purpose; a branch-restricted caller's own
+ * role grant already limits the API response to just their branch, per
+ * the route's own comment.
+ */
+function BranchProfitabilityReport({ slug }: { slug: string }) {
+  const [fromDate, setFromDate] = useState(firstOfMonthIso());
+  const [toDate, setToDate] = useState(todayIso());
+  const [data, setData] = useState<BranchProfitabilityData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    apiGet<BranchProfitabilityData>(
+      `${base(slug)}/accounting/reports/branch-profitability?fromDate=${fromDate}&toDate=${toDate}`,
+    )
+      .then((res) => {
+        setData(res);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load branch profitability."))
+      .finally(() => setLoading(false));
+  }, [slug, fromDate, toDate]);
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="grid max-w-md gap-3 sm:grid-cols-2">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">From</span>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">To</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
+        </label>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : (
+        data &&
+        (data.branches.length <= 1 ? (
+          <p className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-6 text-center text-sm text-neutral-500">
+            This restaurant has only one branch — branch profitability compares two or more. Add a branch from the
+            Branches screen to use this report.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
+                  <th className="px-3 py-2">Branch</th>
+                  <th className="px-3 py-2 text-right">Income</th>
+                  <th className="px-3 py-2 text-right">Expenses</th>
+                  <th className="px-3 py-2 text-right">Net Income</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.branches.map((b) => (
+                  <tr key={b.branchId} className="border-b border-neutral-100 last:border-0">
+                    <td className="px-3 py-2">
+                      {b.branchName}
+                      {b.isMain && <span className="ml-1 text-xs text-neutral-400">(main)</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right">{formatNPR(b.totalIncomeInPaisa)}</td>
+                    <td className="px-3 py-2 text-right">{formatNPR(b.totalExpenseInPaisa)}</td>
+                    <td
+                      className={`px-3 py-2 text-right font-medium ${
+                        b.netIncomeInPaisa >= 0 ? "text-green-700" : "text-red-700"
+                      }`}
+                    >
+                      {formatNPR(b.netIncomeInPaisa)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-neutral-300 font-semibold text-neutral-900">
+                  <td className="px-3 py-2">Total</td>
+                  <td className="px-3 py-2 text-right">
+                    {formatNPR(data.branches.reduce((s, b) => s + b.totalIncomeInPaisa, 0))}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {formatNPR(data.branches.reduce((s, b) => s + b.totalExpenseInPaisa, 0))}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {formatNPR(data.branches.reduce((s, b) => s + b.netIncomeInPaisa, 0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 const AGING_SIDES = ["Payable", "Receivable"] as const;
 type AgingSide = (typeof AGING_SIDES)[number];
 
@@ -2156,11 +2301,14 @@ function AgingReportTab({ slug }: { slug: string }) {
   const [notSetUp, setNotSetUp] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { branches, activeBranchId } = useActiveBranch();
 
   useEffect(() => {
     setLoading(true);
     const endpoint = side === "Payable" ? "ap-aging" : "ar-aging";
-    apiGet<{ report: AgingReportData | null }>(`${base(slug)}/accounting/reports/${endpoint}?asOfDate=${asOfDate}`)
+    const qs = new URLSearchParams({ asOfDate });
+    if (activeBranchId) qs.set("branchId", activeBranchId);
+    apiGet<{ report: AgingReportData | null }>(`${base(slug)}/accounting/reports/${endpoint}?${qs.toString()}`)
       .then((res) => {
         setData(res.report);
         setNotSetUp(res.report === null);
@@ -2168,7 +2316,7 @@ function AgingReportTab({ slug }: { slug: string }) {
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load the aging report."))
       .finally(() => setLoading(false));
-  }, [slug, side, asOfDate]);
+  }, [slug, side, asOfDate, activeBranchId]);
 
   const partyLabel = side === "Payable" ? "Supplier" : "Customer";
 
@@ -2197,6 +2345,14 @@ function AgingReportTab({ slug }: { slug: string }) {
           <input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="input" />
         </label>
       </div>
+      <BranchScopeNote branches={branches} activeBranchId={activeBranchId} />
+      {activeBranchId && branches.length > 1 && (
+        <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
+          Scoped to charges/payments recorded AT this branch only — a party who ran up a balance here but paid it
+          off at a different branch will still show as outstanding in this view. Switch to &quot;All branches&quot;
+          for each party&apos;s true consolidated balance.
+        </p>
+      )}
 
       {loading ? (
         <p className="text-sm text-neutral-500">Loading…</p>

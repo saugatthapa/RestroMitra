@@ -45,6 +45,20 @@ export async function getAccountBalances(params: {
   fromDate?: string;
   /** Inclusive. Omit for "as of now". Financial statements (Phase 3) pass this. */
   toDate?: string;
+  /**
+   * Phase 7, Slice 7b — optionally scope every figure to one branch. Filters
+   * the VOUCHER (not the account) by branchId, per this module's own
+   * top-of-file schema comment on `accounting_vouchers.branchId`: "branch
+   * reporting always works off the transaction, never depends on the
+   * account being split per branch." So `accounts` below still lists every
+   * account in the restaurant's chart (including restaurant-wide ones like
+   * Sales Revenue or Accounts Payable) — branch scoping only narrows WHICH
+   * VOUCHERS contribute to each account's balance, exactly mirroring how
+   * every other branch-scoped report in this codebase (Reports dashboard's
+   * `getReportSummary`) already treats branch filtering as a transaction-
+   * level narrowing, not an account-level one.
+   */
+  branchId?: string;
 }): Promise<{
   accounts: AccountBalance[];
   totalsByType: Record<AccountBalance["type"], number>;
@@ -54,9 +68,10 @@ export async function getAccountBalances(params: {
     .from(chartOfAccounts)
     .where(eq(chartOfAccounts.restaurantId, params.restaurantId));
 
-  const dateConditions = [
+  const conditions = [
     params.fromDate ? gte(accountingVouchers.voucherDate, params.fromDate) : undefined,
     params.toDate ? lte(accountingVouchers.voucherDate, params.toDate) : undefined,
+    params.branchId ? eq(accountingVouchers.branchId, params.branchId) : undefined,
   ].filter((c): c is NonNullable<typeof c> => c !== undefined);
 
   const lines = await db
@@ -67,7 +82,7 @@ export async function getAccountBalances(params: {
     })
     .from(accountingVoucherLines)
     .innerJoin(accountingVouchers, eq(accountingVouchers.id, accountingVoucherLines.voucherId))
-    .where(and(eq(accountingVouchers.restaurantId, params.restaurantId), ...dateConditions));
+    .where(and(eq(accountingVouchers.restaurantId, params.restaurantId), ...conditions));
 
   const totalsByAccount = new Map<string, { debit: number; credit: number }>();
   for (const line of lines) {

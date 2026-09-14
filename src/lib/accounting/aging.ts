@@ -52,6 +52,7 @@ export type AgingRow = {
 
 export type AgingReport = {
   asOfDate: string;
+  branchId: string | null;
   controlAccountId: string;
   rows: AgingRow[];
   totalOutstandingInPaisa: number;
@@ -147,6 +148,22 @@ async function computeAging(params: {
   partyTable: "supplier" | "customer";
   timezone: string;
   asOfDate?: string;
+  /**
+   * Phase 7, Slice 7b. Unlike the other reports this module's branchId
+   * threading touched, this ISN'T a clean "narrow which vouchers count"
+   * filter — the FIFO reconstruction below replays a party's full charge/
+   * payment history in order, and a party isn't necessarily tied to one
+   * branch (a customer could run a tab at Branch A and pay it off at
+   * Branch B). Filtering to one branch's own lines means a payment made at
+   * a DIFFERENT branch won't appear here to offset a charge recorded at
+   * this one — so a branch-filtered aging report can show a party as more
+   * "outstanding" at this branch than they actually are company-wide. This
+   * is a genuine, documented limitation (surfaced in the UI too), not a
+   * silent bug — it's still useful for "what does this branch's own
+   * activity with this party look like," just not a claim about their
+   * true consolidated balance.
+   */
+  branchId?: string;
 }): Promise<AgingReport> {
   const asOfDate = params.asOfDate ?? restaurantDate(params.timezone);
   const partyColumn =
@@ -167,6 +184,7 @@ async function computeAging(params: {
         eq(accountingVouchers.restaurantId, params.restaurantId),
         eq(accountingVoucherLines.accountId, params.controlAccountId),
         isNotNull(partyColumn),
+        params.branchId ? eq(accountingVouchers.branchId, params.branchId) : undefined,
         // lte would exclude same-day lines dated exactly asOfDate if voucherDate
         // ever carried a time component — it doesn't (date-only column) — so a
         // plain string comparison is safe and matches postVoucher's own
@@ -228,7 +246,13 @@ async function computeAging(params: {
 
   resultRows.sort((a, b) => b.outstandingInPaisa - a.outstandingInPaisa);
 
-  return { asOfDate, controlAccountId: params.controlAccountId, rows: resultRows, totalOutstandingInPaisa: totalOutstanding };
+  return {
+    asOfDate,
+    branchId: params.branchId ?? null,
+    controlAccountId: params.controlAccountId,
+    rows: resultRows,
+    totalOutstandingInPaisa: totalOutstanding,
+  };
 }
 
 /**
@@ -244,6 +268,7 @@ export async function getAccountsPayableAging(
   restaurantId: string,
   timezone: string,
   asOfDate?: string,
+  branchId?: string,
 ): Promise<AgingReport | null> {
   const accountId = await resolveControlAccountId(restaurantId, MAPPING_KEYS.ACCOUNTS_PAYABLE);
   if (!accountId) return null;
@@ -255,6 +280,7 @@ export async function getAccountsPayableAging(
     partyTable: "supplier",
     timezone,
     asOfDate,
+    branchId,
   });
 
   if (report.rows.length === 0) return report;
@@ -272,6 +298,7 @@ export async function getAccountsReceivableAging(
   restaurantId: string,
   timezone: string,
   asOfDate?: string,
+  branchId?: string,
 ): Promise<AgingReport | null> {
   const accountId = await resolveControlAccountId(restaurantId, MAPPING_KEYS.ACCOUNTS_RECEIVABLE);
   if (!accountId) return null;
@@ -283,6 +310,7 @@ export async function getAccountsReceivableAging(
     partyTable: "customer",
     timezone,
     asOfDate,
+    branchId,
   });
 
   if (report.rows.length === 0) return report;

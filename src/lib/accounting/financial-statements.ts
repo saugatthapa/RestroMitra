@@ -1,4 +1,7 @@
 import "server-only";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { branches } from "@/db/schema";
 import { getAccountBalances, type AccountBalance } from "./balances";
 
 /**
@@ -27,6 +30,7 @@ export type TrialBalanceRow = {
 
 export type TrialBalance = {
   asOfDate: string | null;
+  branchId: string | null;
   rows: TrialBalanceRow[];
   totalDebitInPaisa: number;
   totalCreditInPaisa: number;
@@ -54,10 +58,13 @@ export type TrialBalance = {
 export async function getTrialBalance(params: {
   restaurantId: string;
   asOfDate?: string;
+  /** Phase 7, Slice 7b — see getAccountBalances' own comment on branchId. */
+  branchId?: string;
 }): Promise<TrialBalance> {
   const { accounts } = await getAccountBalances({
     restaurantId: params.restaurantId,
     toDate: params.asOfDate,
+    branchId: params.branchId,
   });
 
   const rows: TrialBalanceRow[] = accounts
@@ -82,6 +89,7 @@ export async function getTrialBalance(params: {
 
   return {
     asOfDate: params.asOfDate ?? null,
+    branchId: params.branchId ?? null,
     rows,
     totalDebitInPaisa,
     totalCreditInPaisa,
@@ -94,6 +102,7 @@ export type ProfitAndLossLine = { accountId: string; code: string; name: string;
 export type ProfitAndLoss = {
   fromDate: string | null;
   toDate: string | null;
+  branchId: string | null;
   income: ProfitAndLossLine[];
   expenses: ProfitAndLossLine[];
   totalIncomeInPaisa: number;
@@ -111,11 +120,14 @@ export async function getProfitAndLoss(params: {
   restaurantId: string;
   fromDate?: string;
   toDate?: string;
+  /** Phase 7, Slice 7b — see getAccountBalances' own comment on branchId. */
+  branchId?: string;
 }): Promise<ProfitAndLoss> {
   const { accounts } = await getAccountBalances({
     restaurantId: params.restaurantId,
     fromDate: params.fromDate,
     toDate: params.toDate,
+    branchId: params.branchId,
   });
 
   const toLine = (a: AccountBalance): ProfitAndLossLine => ({
@@ -134,6 +146,7 @@ export async function getProfitAndLoss(params: {
   return {
     fromDate: params.fromDate ?? null,
     toDate: params.toDate ?? null,
+    branchId: params.branchId ?? null,
     income,
     expenses,
     totalIncomeInPaisa,
@@ -146,6 +159,7 @@ export type BalanceSheetLine = { accountId: string; code: string; name: string; 
 
 export type BalanceSheet = {
   asOfDate: string | null;
+  branchId: string | null;
   assets: BalanceSheetLine[];
   liabilities: BalanceSheetLine[];
   equity: BalanceSheetLine[];
@@ -170,10 +184,12 @@ export type BalanceSheet = {
 export async function getBalanceSheet(params: {
   restaurantId: string;
   asOfDate?: string;
+  /** Phase 7, Slice 7b — see getAccountBalances' own comment on branchId. */
+  branchId?: string;
 }): Promise<BalanceSheet> {
   const [{ accounts }, pnl] = await Promise.all([
-    getAccountBalances({ restaurantId: params.restaurantId, toDate: params.asOfDate }),
-    getProfitAndLoss({ restaurantId: params.restaurantId, toDate: params.asOfDate }),
+    getAccountBalances({ restaurantId: params.restaurantId, toDate: params.asOfDate, branchId: params.branchId }),
+    getProfitAndLoss({ restaurantId: params.restaurantId, toDate: params.asOfDate, branchId: params.branchId }),
   ]);
 
   const toLine = (a: AccountBalance): BalanceSheetLine => ({
@@ -194,6 +210,7 @@ export async function getBalanceSheet(params: {
 
   return {
     asOfDate: params.asOfDate ?? null,
+    branchId: params.branchId ?? null,
     assets,
     liabilities,
     equity,
@@ -202,5 +219,75 @@ export async function getBalanceSheet(params: {
     totalLiabilitiesInPaisa,
     totalEquityInPaisa,
     isBalanced: totalAssetsInPaisa === totalLiabilitiesInPaisa + totalEquityInPaisa,
+  };
+}
+
+export type BranchProfitabilityRow = {
+  branchId: string;
+  branchName: string;
+  isMain: boolean;
+  totalIncomeInPaisa: number;
+  totalExpenseInPaisa: number;
+  netIncomeInPaisa: number;
+};
+
+export type BranchProfitability = {
+  fromDate: string | null;
+  toDate: string | null;
+  branches: BranchProfitabilityRow[];
+};
+
+/**
+ * Phase 7, Slice 7b — one restaurant's Profit & Loss broken out side by
+ * side, one column per branch. Simply runs `getProfitAndLoss` once per
+ * branch (branches are few per restaurant — the same "small row counts,
+ * simple aggregation" trade-off this module's balances.ts already
+ * documents) rather than a new SQL GROUP BY. `restrictToBranchIds`, when
+ * given, limits the result to exactly those branches — the route passes
+ * this for a caller whose own role grant is locked to one branch (per
+ * `resolveRestaurantContext`'s `branchId`), so a branch-restricted staff
+ * member's request for this report can never return another branch's
+ * figures alongside their own; omit it for an unrestricted caller to see
+ * every active branch.
+ */
+export async function getBranchProfitability(params: {
+  restaurantId: string;
+  fromDate?: string;
+  toDate?: string;
+  restrictToBranchIds?: string[];
+}): Promise<BranchProfitability> {
+  const branchRows = await db
+    .select({ id: branches.id, name: branches.name, isMain: branches.isMain })
+    .from(branches)
+    .where(eq(branches.restaurantId, params.restaurantId));
+
+  const restrict = params.restrictToBranchIds ? new Set(params.restrictToBranchIds) : null;
+  const includedBranches = restrict ? branchRows.filter((b) => restrict.has(b.id)) : branchRows;
+
+  const rows = await Promise.all(
+    includedBranches.map(async (b): Promise<BranchProfitabilityRow> => {
+      const pnl = await getProfitAndLoss({
+        restaurantId: params.restaurantId,
+        fromDate: params.fromDate,
+        toDate: params.toDate,
+        branchId: b.id,
+      });
+      return {
+        branchId: b.id,
+        branchName: b.name,
+        isMain: b.isMain,
+        totalIncomeInPaisa: pnl.totalIncomeInPaisa,
+        totalExpenseInPaisa: pnl.totalExpenseInPaisa,
+        netIncomeInPaisa: pnl.netIncomeInPaisa,
+      };
+    }),
+  );
+
+  rows.sort((a, b) => (b.isMain ? 1 : 0) - (a.isMain ? 1 : 0) || a.branchName.localeCompare(b.branchName));
+
+  return {
+    fromDate: params.fromDate ?? null,
+    toDate: params.toDate ?? null,
+    branches: rows,
   };
 }

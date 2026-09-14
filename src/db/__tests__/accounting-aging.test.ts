@@ -25,6 +25,7 @@ describe.skipIf(!hasDb)("Accounting — AR/AP aging (integration)", () => {
 
   let restaurantId: string;
   let branchId: string;
+  let branch2Id: string;
   let userId: string;
   let cashAccountId: string;
   let apAccountId: string;
@@ -54,6 +55,12 @@ describe.skipIf(!hasDb)("Accounting — AR/AP aging (integration)", () => {
       .values({ restaurantId, name: "Main", isMain: true })
       .returning({ id: schema.branches.id });
     branchId = branch.id;
+
+    const [branch2] = await db
+      .insert(schema.branches)
+      .values({ restaurantId, name: "TEST Branch 2", isMain: false })
+      .returning({ id: schema.branches.id });
+    branch2Id = branch2.id;
 
     const [user] = await db
       .insert(schema.users)
@@ -262,5 +269,56 @@ describe.skipIf(!hasDb)("Accounting — AR/AP aging (integration)", () => {
     expect(rowCustomer!.outstandingInPaisa).toBe(400_00);
     // 2025-03-15 -> 17 days before 2025-04-01 -> days1to30.
     expect(rowCustomer!.buckets.days1to30).toBe(400_00);
+  });
+
+  // -------------------------------------------------------------------
+  // Phase 7, Slice 7b — branch-scoped aging. Posts fresh vouchers dated
+  // AFTER every asOfDate used above (May, not April) so this can never
+  // perturb the fixture's already-passing bucket/FIFO assertions.
+  // -------------------------------------------------------------------
+
+  it("a branch-scoped AP aging report only reflects charges/payments recorded at that branch", async () => {
+    // A fresh supplier so this test's totals aren't tangled up with
+    // Supplier A/B's own FIFO lots from the shared fixture above.
+    const [supplierC] = await db
+      .insert(schema.suppliers)
+      .values({ restaurantId, name: "TEST Supplier C (branch-scoped)" })
+      .returning({ id: schema.suppliers.id });
+
+    const post = (branch: string, voucherDate: string, lines: Parameters<typeof postVoucherLib.postVoucher>[1]["lines"]) =>
+      db.transaction((tx) =>
+        postVoucherLib.postVoucher(tx, {
+          restaurantId,
+          branchId: branch,
+          voucherType: "journal",
+          voucherDate,
+          createdByUserId: userId,
+          lines,
+        }),
+      );
+
+    // Charge 500 at the Main branch (May 1).
+    await post(branchId, "2025-05-01", [
+      { accountId: apAccountId, creditInPaisa: 500_00, supplierId: supplierC.id },
+      { accountId: cashAccountId, debitInPaisa: 500_00 },
+    ]);
+    // Charge 300 at Branch 2 (May 2).
+    await post(branch2Id, "2025-05-02", [
+      { accountId: apAccountId, creditInPaisa: 300_00, supplierId: supplierC.id },
+      { accountId: cashAccountId, debitInPaisa: 300_00 },
+    ]);
+
+    const unfiltered = await agingLib.getAccountsPayableAging(restaurantId, TIMEZONE, "2025-05-10");
+    const rowUnfiltered = unfiltered!.rows.find((r) => r.partyId === supplierC.id);
+    expect(rowUnfiltered!.outstandingInPaisa).toBe(800_00);
+
+    const mainOnly = await agingLib.getAccountsPayableAging(restaurantId, TIMEZONE, "2025-05-10", branchId);
+    const rowMain = mainOnly!.rows.find((r) => r.partyId === supplierC.id);
+    expect(rowMain!.outstandingInPaisa).toBe(500_00);
+    expect(mainOnly!.branchId).toBe(branchId);
+
+    const branch2Only = await agingLib.getAccountsPayableAging(restaurantId, TIMEZONE, "2025-05-10", branch2Id);
+    const rowBranch2 = branch2Only!.rows.find((r) => r.partyId === supplierC.id);
+    expect(rowBranch2!.outstandingInPaisa).toBe(300_00);
   });
 });

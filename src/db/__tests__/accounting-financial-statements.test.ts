@@ -21,6 +21,7 @@ describe.skipIf(!hasDb)("Accounting — financial statements (integration)", () 
 
   let restaurantId: string;
   let branchId: string;
+  let branch2Id: string;
   let userId: string;
   let cashAccountId: string; // asset, debit-normal
   let capitalAccountId: string; // equity, credit-normal
@@ -47,6 +48,12 @@ describe.skipIf(!hasDb)("Accounting — financial statements (integration)", () 
       .returning({ id: schema.branches.id });
     branchId = branch.id;
 
+    const [branch2] = await db
+      .insert(schema.branches)
+      .values({ restaurantId, name: "TEST Branch 2", isMain: false })
+      .returning({ id: schema.branches.id });
+    branch2Id = branch2.id;
+
     const [user] = await db
       .insert(schema.users)
       .values({ fullName: "TEST Accountant 3", phone: `975${suffix}`, passwordHash: "x" })
@@ -67,11 +74,15 @@ describe.skipIf(!hasDb)("Accounting — financial statements (integration)", () 
     salesAccountId = accounts.find((a) => a.code === "T4000")!.id;
     salaryExpenseAccountId = accounts.find((a) => a.code === "T5100")!.id;
 
-    const post = (voucherDate: string, lines: Parameters<typeof postVoucherLib.postVoucher>[1]["lines"]) =>
+    const post = (
+      voucherDate: string,
+      lines: Parameters<typeof postVoucherLib.postVoucher>[1]["lines"],
+      postBranchId: string = branchId,
+    ) =>
       db.transaction((tx) =>
         postVoucherLib.postVoucher(tx, {
           restaurantId,
-          branchId,
+          branchId: postBranchId,
           voucherType: "journal",
           voucherDate,
           createdByUserId: userId,
@@ -163,5 +174,78 @@ describe.skipIf(!hasDb)("Accounting — financial statements (integration)", () 
     expect(bs.currentPeriodEarningsInPaisa).toBe(600_00);
     expect(bs.totalEquityInPaisa).toBe(1600_00);
     expect(bs.isBalanced).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------
+  // Phase 7, Slice 7b — branch-scoped reports. Posts one more voucher, on
+  // Branch 2, AFTER every assertion above that depends on the original
+  // fixture's exact restaurant-wide totals — deliberately sequenced last
+  // in this file so it never perturbs those already-passing figures.
+  // ---------------------------------------------------------------------
+
+  it("a branch-scoped Profit & Loss excludes another branch's own sale, while the unfiltered report includes both", async () => {
+    await db.transaction((tx) =>
+      postVoucherLib.postVoucher(tx, {
+        restaurantId,
+        branchId: branch2Id,
+        voucherType: "journal",
+        voucherDate: "2025-03-05",
+        createdByUserId: userId,
+        lines: [
+          { accountId: cashAccountId, debitInPaisa: 150_00 },
+          { accountId: salesAccountId, creditInPaisa: 150_00 },
+        ],
+      }),
+    );
+
+    const branch1Pnl = await statementsLib.getProfitAndLoss({
+      restaurantId,
+      fromDate: "2025-03-01",
+      toDate: "2025-03-31",
+      branchId,
+    });
+    expect(branch1Pnl.totalIncomeInPaisa).toBe(0);
+    expect(branch1Pnl.branchId).toBe(branchId);
+
+    const branch2Pnl = await statementsLib.getProfitAndLoss({
+      restaurantId,
+      fromDate: "2025-03-01",
+      toDate: "2025-03-31",
+      branchId: branch2Id,
+    });
+    expect(branch2Pnl.totalIncomeInPaisa).toBe(150_00);
+
+    const unfilteredPnl = await statementsLib.getProfitAndLoss({
+      restaurantId,
+      fromDate: "2025-03-01",
+      toDate: "2025-03-31",
+    });
+    expect(unfilteredPnl.totalIncomeInPaisa).toBe(150_00);
+    expect(unfilteredPnl.branchId).toBeNull();
+  });
+
+  it("getBranchProfitability breaks March's P&L out per branch, summing to the unfiltered total", async () => {
+    const report = await statementsLib.getBranchProfitability({
+      restaurantId,
+      fromDate: "2025-03-01",
+      toDate: "2025-03-31",
+    });
+
+    expect(report.branches).toHaveLength(2);
+    const main = report.branches.find((b) => b.branchId === branchId)!;
+    const branch2 = report.branches.find((b) => b.branchId === branch2Id)!;
+    expect(main.totalIncomeInPaisa).toBe(0);
+    expect(branch2.totalIncomeInPaisa).toBe(150_00);
+    expect(main.isMain).toBe(true);
+    expect(branch2.isMain).toBe(false);
+
+    const restricted = await statementsLib.getBranchProfitability({
+      restaurantId,
+      fromDate: "2025-03-01",
+      toDate: "2025-03-31",
+      restrictToBranchIds: [branch2Id],
+    });
+    expect(restricted.branches).toHaveLength(1);
+    expect(restricted.branches[0].branchId).toBe(branch2Id);
   });
 });

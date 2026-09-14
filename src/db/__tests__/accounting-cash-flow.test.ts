@@ -24,6 +24,7 @@ describe.skipIf(!hasDb)("Accounting — cash flow statement (integration)", () =
 
   let restaurantId: string;
   let branchId: string;
+  let branch2Id: string;
   let userId: string;
   let cashAccountId: string;
   let salesRevenueAccountId: string;
@@ -52,6 +53,12 @@ describe.skipIf(!hasDb)("Accounting — cash flow statement (integration)", () =
       .values({ restaurantId, name: "Main", isMain: true })
       .returning({ id: schema.branches.id });
     branchId = branch.id;
+
+    const [branch2] = await db
+      .insert(schema.branches)
+      .values({ restaurantId, name: "TEST Branch 2", isMain: false })
+      .returning({ id: schema.branches.id });
+    branch2Id = branch2.id;
 
     const [user] = await db
       .insert(schema.users)
@@ -242,5 +249,50 @@ describe.skipIf(!hasDb)("Accounting — cash flow statement (integration)", () =
     expect(statement.financing.totalInPaisa).toBe(30_000_00);
     expect(statement.operating.totalInPaisa).toBe(0);
     expect(statement.isReconciled).toBe(true);
+  });
+
+  it("Phase 7, Slice 7b — a branch-scoped statement only reflects that branch's own cash activity, and still reconciles", async () => {
+    // A cash sale at Branch 2 only (August).
+    await db.transaction((tx) =>
+      postVoucherLib.postVoucher(tx, {
+        restaurantId,
+        branchId: branch2Id,
+        voucherType: "sales",
+        voucherDate: "2026-08-10",
+        createdByUserId: userId,
+        lines: [
+          { accountId: cashAccountId, debitInPaisa: 25_000_00 },
+          { accountId: salesRevenueAccountId, creditInPaisa: 25_000_00 },
+        ],
+      }),
+    );
+
+    const mainOnly = await cashFlowLib.getCashFlowStatement({
+      restaurantId,
+      fromDate: "2026-08-01",
+      toDate: "2026-08-31",
+      branchId,
+    });
+    expect(mainOnly.operating.totalInPaisa).toBe(0);
+    expect(mainOnly.netChangeInCashInPaisa).toBe(0);
+    expect(mainOnly.isReconciled).toBe(true);
+    expect(mainOnly.branchId).toBe(branchId);
+
+    const branch2Only = await cashFlowLib.getCashFlowStatement({
+      restaurantId,
+      fromDate: "2026-08-01",
+      toDate: "2026-08-31",
+      branchId: branch2Id,
+    });
+    expect(branch2Only.operating.totalInPaisa).toBe(25_000_00);
+    expect(branch2Only.isReconciled).toBe(true);
+
+    const unfiltered = await cashFlowLib.getCashFlowStatement({
+      restaurantId,
+      fromDate: "2026-08-01",
+      toDate: "2026-08-31",
+    });
+    expect(unfiltered.operating.totalInPaisa).toBe(25_000_00);
+    expect(unfiltered.branchId).toBeNull();
   });
 });
