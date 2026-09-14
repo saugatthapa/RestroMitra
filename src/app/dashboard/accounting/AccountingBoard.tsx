@@ -1193,6 +1193,7 @@ const REPORT_TABS = [
   "Tax Depreciation",
   "Branch Profitability",
   "Health Check",
+  "Tally Export",
 ] as const;
 type ReportTab = (typeof REPORT_TABS)[number];
 
@@ -1252,6 +1253,7 @@ function ReportsTab({ slug, onDrillDown }: { slug: string; onDrillDown: (account
       {reportTab === "Tax Depreciation" && <TaxDepreciationReportTab slug={slug} />}
       {reportTab === "Branch Profitability" && <BranchProfitabilityReport slug={slug} />}
       {reportTab === "Health Check" && <AccountingHealthCheckTab slug={slug} />}
+      {reportTab === "Tally Export" && <TallyExportTab slug={slug} />}
     </div>
   );
 }
@@ -2562,6 +2564,107 @@ function AccountingHealthCheckTab({ slug }: { slug: string }) {
                 )}
               </div>
             ))}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+type TallyExportPreview = {
+  fromDate: string;
+  toDate: string;
+  voucherCount: number;
+  skippedVoucherNumbers: string[];
+};
+
+/**
+ * Phase 7, Slice 7f — Tally-compatible export. The permanent caveat below
+ * is not a placeholder to remove later — see tally-export.ts's own
+ * top-of-file comment for why this can't be verified against a real Tally
+ * import in this environment. The download itself is a plain
+ * `<a download>` link against the route (same convention as this
+ * dashboard's other CSV exports), not a fetch — the JSON preview above it
+ * is a separate, lightweight call so the user knows what they're about to
+ * download before they do.
+ */
+function TallyExportTab({ slug }: { slug: string }) {
+  const [fromDate, setFromDate] = useState(firstOfMonthIso());
+  const [toDate, setToDate] = useState(todayIso());
+  const [preview, setPreview] = useState<TallyExportPreview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { branches, activeBranchId } = useActiveBranch();
+
+  useEffect(() => {
+    setLoading(true);
+    const qs = new URLSearchParams({ fromDate, toDate, format: "json" });
+    if (activeBranchId) qs.set("branchId", activeBranchId);
+    apiGet<TallyExportPreview>(`${base(slug)}/accounting/reports/tally-export?${qs.toString()}`)
+      .then((res) => {
+        setPreview(res);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not prepare the Tally export."))
+      .finally(() => setLoading(false));
+  }, [slug, fromDate, toDate, activeBranchId]);
+
+  const downloadQs = new URLSearchParams({ fromDate, toDate });
+  if (activeBranchId) downloadQs.set("branchId", activeBranchId);
+  const downloadHref = `${base(slug)}/accounting/reports/tally-export?${downloadQs.toString()}`;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p className="font-medium">Not verified against a real Tally import</p>
+        <p className="mt-1 text-amber-800">
+          This file is generated to Tally&apos;s own documented XML import format, but there is no licensed Tally
+          install available to actually test an import against. Ledger names in this export must match an existing
+          ledger in your Tally company exactly — Tally will not create missing ledgers automatically. Test with a
+          small date range against a company you can afford to get wrong before relying on this for a real books
+          migration.
+        </p>
+      </div>
+
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="grid max-w-md gap-3 sm:grid-cols-2">
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">From</span>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">To</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
+        </label>
+      </div>
+      <BranchScopeNote branches={branches} activeBranchId={activeBranchId} />
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Preparing…</p>
+      ) : (
+        preview && (
+          <div className="space-y-3">
+            <p className="text-sm text-neutral-700">
+              {preview.voucherCount === 0
+                ? "No vouchers in this date range."
+                : `${preview.voucherCount} voucher${preview.voucherCount === 1 ? "" : "s"} ready to export, ${preview.fromDate} to ${preview.toDate}.`}
+            </p>
+            {preview.skippedVoucherNumbers.length > 0 && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Skipped (not exported — needs investigation, see the Health Check tab):{" "}
+                {preview.skippedVoucherNumbers.join(", ")}
+              </p>
+            )}
+            {preview.voucherCount > 0 && (
+              <a
+                href={downloadHref}
+                download={`tally-export-${preview.fromDate}-to-${preview.toDate}.xml`}
+                className="btn-secondary inline-block text-xs"
+              >
+                Download Tally XML
+              </a>
+            )}
           </div>
         )
       )}
