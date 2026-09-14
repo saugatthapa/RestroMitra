@@ -1185,6 +1185,7 @@ const REPORT_TABS = [
   "Profit & Loss",
   "Balance Sheet",
   "Cash Flow",
+  "Cash Book",
   "AR/AP Aging",
   "VAT Return",
   "Tax Depreciation",
@@ -1224,6 +1225,7 @@ function ReportsTab({ slug, onDrillDown }: { slug: string; onDrillDown: (account
       {reportTab === "Profit & Loss" && <ProfitAndLossReport slug={slug} onDrillDown={onDrillDown} />}
       {reportTab === "Balance Sheet" && <BalanceSheetReport slug={slug} onDrillDown={onDrillDown} />}
       {reportTab === "Cash Flow" && <CashFlowReport slug={slug} />}
+      {reportTab === "Cash Book" && <CashBookReport slug={slug} />}
       {reportTab === "AR/AP Aging" && <AgingReportTab slug={slug} />}
       {reportTab === "VAT Return" && <VatReturnReport slug={slug} />}
       {reportTab === "Tax Depreciation" && <TaxDepreciationReportTab slug={slug} />}
@@ -1969,6 +1971,166 @@ function TaxDepreciationReportTab({ slug }: { slug: string }) {
                 No fixed assets classified into a tax pool yet.
               </p>
             )}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+type CashBookAccountOption = { accountId: string; code: string; name: string; isActive: boolean };
+type CashBookLine = {
+  lineId: string;
+  voucherId: string;
+  voucherNumber: string;
+  voucherType: string;
+  voucherDate: string;
+  narration: string | null;
+  description: string | null;
+  debitInPaisa: number;
+  creditInPaisa: number;
+  runningBalanceInPaisa: number;
+};
+type CashBookData = {
+  account: { accountId: string; code: string; name: string };
+  fromDate: string;
+  toDate: string;
+  openingBalanceInPaisa: number;
+  closingBalanceInPaisa: number;
+  totalDebitInPaisa: number;
+  totalCreditInPaisa: number;
+  lines: CashBookLine[];
+};
+type CashBookResponse = { accounts: CashBookAccountOption[]; report: CashBookData | null };
+
+/**
+ * Phase 7, Slice 7a — Cash Book / Bank Book. One account (the picker below
+ * lists every seeded cash-like account plus any real bank account this
+ * restaurant has added), one date range, an opening balance carried from
+ * before that range, every transaction inside it with a running balance,
+ * and a closing balance — the classic bookkeeper's report. Not new math:
+ * see cash-book.ts's own top-of-file comment for why this reuses the exact
+ * same running-balance logic as the generic Ledger Accounts screen: this
+ * report can never disagree with that screen about the same account's
+ * history, it's just framed to a date range with an opening balance.
+ */
+function CashBookReport({ slug }: { slug: string }) {
+  const [fromDate, setFromDate] = useState(firstOfMonthIso());
+  const [toDate, setToDate] = useState(todayIso());
+  const [accountId, setAccountId] = useState<string | null>(null);
+  const [data, setData] = useState<CashBookResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    const qs = new URLSearchParams({ fromDate, toDate });
+    if (accountId) qs.set("accountId", accountId);
+    apiGet<CashBookResponse>(`${base(slug)}/accounting/reports/cash-book?${qs.toString()}`)
+      .then((res) => {
+        setData(res);
+        setAccountId((prev) => prev ?? res.report?.account.accountId ?? null);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load the Cash Book."))
+      .finally(() => setLoading(false));
+  }, [slug, fromDate, toDate, accountId]);
+
+  const report = data?.report ?? null;
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="grid max-w-lg gap-3 sm:grid-cols-3">
+        <label className="text-sm sm:col-span-1">
+          <span className="mb-1 block text-neutral-600">Account</span>
+          <select
+            className="input"
+            value={accountId ?? ""}
+            onChange={(e) => setAccountId(e.target.value || null)}
+          >
+            {(data?.accounts ?? []).map((a) => (
+              <option key={a.accountId} value={a.accountId}>
+                {a.code} — {a.name}
+                {a.isActive ? "" : " (inactive)"}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">From</span>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-neutral-600">To</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
+        </label>
+      </div>
+
+      {data && data.accounts.length === 0 && (
+        <p className="rounded-lg bg-neutral-50 px-3 py-2 text-sm text-neutral-500">
+          No cash or bank account exists yet for this restaurant — seed the chart of accounts from the Overview tab
+          first.
+        </p>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-neutral-500">Loading…</p>
+      ) : (
+        report && (
+          <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">Voucher</th>
+                  <th className="px-3 py-2">Narration</th>
+                  <th className="px-3 py-2 text-right">Debit</th>
+                  <th className="px-3 py-2 text-right">Credit</th>
+                  <th className="px-3 py-2 text-right">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-neutral-100 bg-neutral-50 font-medium text-neutral-700">
+                  <td className="px-3 py-2" colSpan={5}>
+                    Opening balance
+                  </td>
+                  <td className="px-3 py-2 text-right">{formatNPR(report.openingBalanceInPaisa)}</td>
+                </tr>
+                {report.lines.map((l) => (
+                  <tr key={l.lineId} className="border-b border-neutral-100 last:border-0">
+                    <td className="px-3 py-2 text-neutral-500">{l.voucherDate}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-neutral-500">{l.voucherNumber}</td>
+                    <td className="px-3 py-2 text-neutral-600">{l.description || l.narration || "—"}</td>
+                    <td className="px-3 py-2 text-right">
+                      {l.debitInPaisa > 0 ? formatNPR(l.debitInPaisa) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {l.creditInPaisa > 0 ? formatNPR(l.creditInPaisa) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right">{formatNPR(l.runningBalanceInPaisa)}</td>
+                  </tr>
+                ))}
+                {report.lines.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-6 text-center text-sm text-neutral-400">
+                      No activity in this period.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-neutral-300 font-semibold text-neutral-900">
+                  <td className="px-3 py-2" colSpan={3}>
+                    Closing balance
+                  </td>
+                  <td className="px-3 py-2 text-right">{formatNPR(report.totalDebitInPaisa)}</td>
+                  <td className="px-3 py-2 text-right">{formatNPR(report.totalCreditInPaisa)}</td>
+                  <td className="px-3 py-2 text-right">{formatNPR(report.closingBalanceInPaisa)}</td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         )
       )}
